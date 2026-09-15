@@ -617,7 +617,14 @@ struct AnnotationEditorView: View {
                 pushUndo()
                 annotations.append(draft)
                 selectedID = draft.id
-                if case .counter = draft.kind { counterValue += 1 }
+                if case .callout(_, _, let labelOrigin, _, _) = draft.kind {
+                    counterValue += 1
+                    editingTextID = draft.id
+                    inlineText = ""
+                    inlineFontSize = textFontSize(of: draft)
+                    inlineOriginView = viewPoint(labelOrigin)
+                    return
+                }
             }
         case .erasing:
             lastErasePoint = nil
@@ -644,7 +651,18 @@ struct AnnotationEditorView: View {
         case .pen:
             return Annotation(kind: .pen(points: [start, current]), color: color, lineWidth: lineWidth)
         case .counter:
-            return Annotation(kind: .counter(center: current, value: counterValue, leader: nil), color: color, lineWidth: lineWidth)
+            let labelOrigin = CGPoint(x: start.x + 26, y: start.y - 58)
+            return Annotation(
+                kind: .callout(
+                    center: start,
+                    value: counterValue,
+                    labelOrigin: labelOrigin,
+                    string: "",
+                    fontSize: max(14, lineWidth * 3)
+                ),
+                color: color,
+                lineWidth: lineWidth
+            )
         case .text:
             return Annotation(
                 kind: .text(origin: start, string: "", fontSize: fontSize),
@@ -761,21 +779,40 @@ struct AnnotationEditorView: View {
 
     /// 进入文字内联编辑。
     private func startTextEditing(id: UUID) {
-        guard let annotation = annotations.first(where: { $0.id == id }),
-            case .text(let origin, let string, let size) = annotation.kind
-        else { return }
-        selectedID = id
-        editingTextID = id
-        inlineText = string
-        inlineFontSize = size
-        inlineOriginView = viewPoint(origin)
+        guard let annotation = annotations.first(where: { $0.id == id }) else { return }
+        switch annotation.kind {
+        case .text(let origin, let string, let size):
+            selectedID = id
+            editingTextID = id
+            inlineText = string
+            inlineFontSize = size
+            inlineOriginView = viewPoint(origin)
+        case .callout(_, _, let labelOrigin, let string, let size):
+            selectedID = id
+            editingTextID = id
+            inlineText = string
+            inlineFontSize = size
+            inlineOriginView = viewPoint(labelOrigin)
+        default:
+            break
+        }
+    }
+
+    private func textFontSize(of annotation: Annotation) -> CGFloat {
+        switch annotation.kind {
+        case .text(_, _, let size): return size
+        case .callout(_, _, _, _, let size): return size
+        default: return 22
+        }
     }
 
     /// 提交内联文字：空文本视为取消并删除该对象。
     private func commitInlineText() {
         guard let id = editingTextID else { return }
         let trimmed = inlineText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
+        let isCallout = annotations.first { $0.id == id }
+            .map { if case .callout = $0.kind { return true } else { return false } } ?? false
+        if trimmed.isEmpty, !isCallout {
             annotations.removeAll { $0.id == id }
         } else if let index = annotations.firstIndex(where: { $0.id == id }) {
             pushUndo()
@@ -806,8 +843,11 @@ struct AnnotationEditorView: View {
         let point = imagePoint(from: location)
         guard let hit = topmostAnnotation(at: point) else { return }
         selectedID = hit.id
-        if case .text = hit.kind {
+        switch hit.kind {
+        case .text, .callout:
             startTextEditing(id: hit.id)
+        default:
+            break
         }
     }
 
@@ -845,6 +885,9 @@ struct AnnotationEditorView: View {
         case .counter(let center, _, let leader):
             let leaderPoint = leader ?? CGPoint(x: center.x + 48, y: center.y - 48)
             handles.append((.counterLeader, leaderPoint))
+        case .callout(let center, _, let labelOrigin, _, _):
+            handles.append((.counterLeader, labelOrigin))
+            handles.append((.arrowEnd, center))
         default:
             break
         }
@@ -1024,7 +1067,7 @@ struct AnnotationEditorView: View {
             return hypot(to.x - from.x, to.y - from.y) >= 4
         case .pen(let points):
             return points.count >= 2
-        case .text, .counter:
+        case .text, .counter, .callout:
             return true
         }
     }

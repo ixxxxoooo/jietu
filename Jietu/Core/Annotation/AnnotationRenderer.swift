@@ -148,6 +148,18 @@ enum AnnotationRenderer {
                     in: context,
                     imageHeight: imageHeight
                 )
+
+            case .callout(let center, let value, let labelOrigin, let string, let fontSize):
+                drawCallout(
+                    annotation,
+                    center: center,
+                    value: value,
+                    labelOrigin: labelOrigin,
+                    string: string,
+                    fontSize: fontSize,
+                    in: context,
+                    imageHeight: imageHeight
+                )
             }
         }
 
@@ -236,6 +248,116 @@ enum AnnotationRenderer {
             y: CGFloat(imageHeight) - topLeft.y - ascent
         )
         CTLineDraw(makeLine(string, font: font, color: color), context)
+    }
+
+    private static func drawCallout(
+        _ annotation: Annotation,
+        center: CGPoint,
+        value: Int,
+        labelOrigin: CGPoint,
+        string: String,
+        fontSize: CGFloat,
+        in context: CGContext,
+        imageHeight: Int
+    ) {
+        let color = annotation.color
+        let radius: CGFloat = 12
+        let dotCenter = contextPoint(center, imageHeight: imageHeight)
+        let labelRect = Annotation.calloutLabelRect(
+            origin: labelOrigin,
+            string: string,
+            fontSize: fontSize
+        )
+        let contextLabelRect = contextRect(labelRect, imageHeight: imageHeight)
+
+        // 箭头：从文字框边缘指向序号圆点。
+        let edge = CGPoint(
+            x: min(max(center.x, labelRect.minX), labelRect.maxX),
+            y: min(max(center.y, labelRect.minY), labelRect.maxY)
+        )
+        let start = contextPoint(edge, imageHeight: imageHeight)
+        context.setStrokeColor(color.cgColor)
+        context.setLineWidth(max(2, annotation.lineWidth * 0.6))
+        context.setLineCap(.round)
+        context.move(to: start)
+        context.addLine(to: dotCenter)
+        context.strokePath()
+
+        let angle = atan2(dotCenter.y - start.y, dotCenter.x - start.x)
+        let headLength = max(8, annotation.lineWidth * 2.4)
+        let spread = CGFloat.pi / 7
+        for offset in [CGFloat.pi - spread, CGFloat.pi + spread] {
+            context.move(to: dotCenter)
+            context.addLine(
+                to: CGPoint(
+                    x: dotCenter.x + cos(angle + offset) * headLength,
+                    y: dotCenter.y + sin(angle + offset) * headLength
+                )
+            )
+        }
+        context.strokePath()
+
+        // 文字框。
+        context.setFillColor(color.cgColor)
+        context.addPath(
+            CGPath(
+                roundedRect: contextLabelRect,
+                cornerWidth: 7,
+                cornerHeight: 7,
+                transform: nil
+            )
+        )
+        context.fillPath()
+        if !string.isEmpty {
+            drawCenteredText(
+                string,
+                in: contextLabelRect,
+                fontSize: fontSize,
+                color: .white,
+                context: context
+            )
+        }
+
+        // 序号圆点。
+        context.setFillColor(color.cgColor)
+        context.fillEllipse(
+            in: CGRect(
+                x: dotCenter.x - radius,
+                y: dotCenter.y - radius,
+                width: radius * 2,
+                height: radius * 2
+            )
+        )
+        let font = CTFontCreateWithName("Helvetica-Bold" as CFString, radius * 1.1, nil)
+        let line = makeLine("\(value)", font: font, color: .white)
+        var ascent: CGFloat = 0
+        var descent: CGFloat = 0
+        let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, nil))
+        context.textPosition = CGPoint(
+            x: dotCenter.x - width / 2,
+            y: dotCenter.y - (ascent - descent) / 2
+        )
+        CTLineDraw(line, context)
+    }
+
+    /// 在矩形内居中绘制一行文字。
+    private static func drawCenteredText(
+        _ string: String,
+        in rect: CGRect,
+        fontSize: CGFloat,
+        color: RGBAColor,
+        context: CGContext
+    ) {
+        let font = CTFontCreateWithName("Helvetica" as CFString, fontSize, nil)
+        let line = makeLine(string, font: font, color: color)
+        var ascent: CGFloat = 0
+        var descent: CGFloat = 0
+        let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, nil))
+        context.textPosition = CGPoint(
+            x: rect.midX - width / 2,
+            y: rect.midY - (ascent - descent) / 2
+        )
+        CTLineDraw(line, context)
     }
 
     private static func drawCounter(

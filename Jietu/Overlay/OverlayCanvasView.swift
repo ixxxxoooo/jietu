@@ -1164,7 +1164,7 @@ final class OverlayCanvasView: NSView {
             return hypot(to.x - from.x, to.y - from.y) >= 2
         case .pen(let points):
             return points.count >= 2
-        case .counter:
+        case .counter, .callout:
             return true
         case .text:
             return false
@@ -1232,6 +1232,9 @@ final class OverlayCanvasView: NSView {
             handles.append(
                 (.counterLeader, leader ?? CGPoint(x: center.x + 48, y: center.y - 48))
             )
+        case .callout(let center, _, let labelOrigin, _, _):
+            handles.append((.counterLeader, labelOrigin))
+            handles.append((.arrowEnd, center))
         default:
             break
         }
@@ -1295,9 +1298,19 @@ final class OverlayCanvasView: NSView {
         return annotations.last { $0.contains(cropPoint, tolerance: tolerance) }
     }
 
+    private func isTextEditable(_ annotation: Annotation) -> Bool {
+        switch annotation.kind {
+        case .text, .callout: return true
+        default: return false
+        }
+    }
+
     private func textOrigin(of annotation: Annotation) -> CGPoint {
-        if case .text(let origin, _, _) = annotation.kind { return origin }
-        return annotation.center
+        switch annotation.kind {
+        case .text(let origin, _, _): return origin
+        case .callout(_, _, let labelOrigin, _, _): return labelOrigin
+        default: return annotation.center
+        }
     }
 
     // MARK: Inline toolbar
@@ -1434,7 +1447,18 @@ final class OverlayCanvasView: NSView {
         case .arrow: return Annotation(kind: .arrow(from: start, to: current, control: nil), color: model.color, lineWidth: model.lineWidth)
         case .pen: return Annotation(kind: .pen(points: [start, current]), color: model.color, lineWidth: model.lineWidth)
         case .counter:
-            return Annotation(kind: .counter(center: start, value: inlineCounterValue, leader: nil), color: model.color, lineWidth: model.lineWidth)
+            let labelOrigin = CGPoint(x: start.x + 26, y: start.y - 58)
+            return Annotation(
+                kind: .callout(
+                    center: start,
+                    value: inlineCounterValue,
+                    labelOrigin: labelOrigin,
+                    string: "",
+                    fontSize: max(14, model.lineWidth * 3)
+                ),
+                color: model.color,
+                lineWidth: model.lineWidth
+            )
         case .text, .select, .eraser: return nil
         }
     }
@@ -1445,7 +1469,7 @@ final class OverlayCanvasView: NSView {
             return rect.width >= 3 && rect.height >= 3
         case .arrow(let from, let to, _):
             return hypot(to.x - from.x, to.y - from.y) >= 3
-        case .counter, .pen, .text:
+        case .counter, .callout, .pen, .text:
             return true
         }
     }
@@ -1487,7 +1511,7 @@ final class OverlayCanvasView: NSView {
         // 2) 命中已有标注 → 选中并移动（不区分当前工具，和编辑窗口一致）
         if let hit = inlineAnnotation(at: crop) {
             selectedID = hit.id
-            if clickCount >= 2, case .text = hit.kind {
+            if clickCount >= 2, isTextEditable(hit) {
                 beginInlineText(at: textOrigin(of: hit), editing: hit)
                 inlineEditDrag = .none
                 updateInlineSelectionLayers()
@@ -1577,7 +1601,14 @@ final class OverlayCanvasView: NSView {
                 pushUndo()
                 annotations.append(draft)
                 selectedID = draft.id
-                if case .counter = draft.kind { inlineCounterValue += 1 }
+                if case .callout(_, _, let labelOrigin, _, _) = draft.kind {
+                    inlineCounterValue += 1
+                    // 自动弹出文字框输入说明。
+                    beginInlineText(at: labelOrigin, editing: draft)
+                    updateAnnotationLayer()
+                    updateInlineSelectionLayers()
+                    return
+                }
             }
             annotationDraft = nil
             updateAnnotationLayer()
@@ -1644,8 +1675,12 @@ final class OverlayCanvasView: NSView {
 
         guard !string.isEmpty else {
             if let editingID {
-                pushUndo()
-                annotations.removeAll { $0.id == editingID }
+                let isCallout = annotations.first { $0.id == editingID }
+                    .map { if case .callout = $0.kind { return true } else { return false } } ?? false
+                if !isCallout {
+                    pushUndo()
+                    annotations.removeAll { $0.id == editingID }
+                }
             }
             updateAnnotationLayer()
             updateInlineSelectionLayers()

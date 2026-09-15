@@ -90,6 +90,8 @@ struct Annotation: Identifiable, Equatable {
         case text(origin: CGPoint, string: String, fontSize: CGFloat)
         case pixelate(CGRect, block: CGFloat)
         case counter(center: CGPoint, value: Int, leader: CGPoint?)
+        /// 标注气泡：序号圆点 + 箭头 + 可输入说明的文字框。
+        case callout(center: CGPoint, value: Int, labelOrigin: CGPoint, string: String, fontSize: CGFloat)
     }
 
     let id: UUID
@@ -121,6 +123,8 @@ extension Annotation {
     var center: CGPoint {
         switch kind {
         case .counter(let center, _, _):
+            return center
+        case .callout(let center, _, _, _, _):
             return center
         default:
             let box = localBounds
@@ -171,6 +175,15 @@ extension Annotation {
             )
             if let leader { rect = rect.union(CGRect(origin: leader, size: .zero)) }
             return rect
+        case .callout(let center, _, let labelOrigin, let string, let fontSize):
+            let radius: CGFloat = 12
+            let dot = CGRect(
+                x: center.x - radius,
+                y: center.y - radius,
+                width: radius * 2,
+                height: radius * 2
+            )
+            return dot.union(Annotation.calloutLabelRect(origin: labelOrigin, string: string, fontSize: fontSize))
         }
     }
 
@@ -215,6 +228,11 @@ extension Annotation {
                 return Annotation.distanceToSegment(local, leader, center) <= max(tolerance, lineWidth)
             }
             return false
+        case .callout(let center, _, let labelOrigin, let string, let fontSize):
+            if Annotation.distance(local, center) <= 14 { return true }
+            return Annotation.calloutLabelRect(origin: labelOrigin, string: string, fontSize: fontSize)
+                .insetBy(dx: -tolerance, dy: -tolerance)
+                .contains(local)
         }
     }
 }
@@ -262,7 +280,7 @@ extension Annotation {
             let newBox = ShapeGeometry.resizedRect(box, handle: handle, to: local, lockAspect: false)
             let ratio = box.height > 0 ? newBox.height / box.height : 1
             copy.kind = .text(origin: newBox.origin, string: string, fontSize: max(10, fontSize * ratio))
-        case .arrow, .counter:
+        case .arrow, .counter, .callout:
             break
         }
         return copy
@@ -287,6 +305,32 @@ extension Annotation {
             if handle == .counterLeader {
                 copy.kind = .counter(center: center, value: value, leader: local)
             }
+        case .callout(let center, let value, let labelOrigin, let string, let fontSize):
+            if handle == .counterLeader {
+                copy.kind = .callout(
+                    center: center,
+                    value: value,
+                    labelOrigin: local,
+                    string: string,
+                    fontSize: fontSize
+                )
+            } else if handle == .arrowEnd {
+                copy.kind = .callout(
+                    center: local,
+                    value: value,
+                    labelOrigin: labelOrigin,
+                    string: string,
+                    fontSize: fontSize
+                )
+            } else if handle == .rotate {
+                copy.kind = .callout(
+                    center: local,
+                    value: value,
+                    labelOrigin: labelOrigin,
+                    string: string,
+                    fontSize: fontSize
+                )
+            }
         default:
             break
         }
@@ -306,9 +350,21 @@ extension Annotation {
     }
 
     func withFontSize(_ size: CGFloat) -> Annotation {
-        guard case .text(let origin, let string, _) = kind else { return self }
         var copy = self
-        copy.kind = .text(origin: origin, string: string, fontSize: size)
+        switch kind {
+        case .text(let origin, let string, _):
+            copy.kind = .text(origin: origin, string: string, fontSize: size)
+        case .callout(let center, let value, let labelOrigin, let string, _):
+            copy.kind = .callout(
+                center: center,
+                value: value,
+                labelOrigin: labelOrigin,
+                string: string,
+                fontSize: size
+            )
+        default:
+            break
+        }
         return copy
     }
 
@@ -320,9 +376,21 @@ extension Annotation {
     }
 
     func withText(_ string: String) -> Annotation {
-        guard case .text(let origin, _, let fontSize) = kind else { return self }
         var copy = self
-        copy.kind = .text(origin: origin, string: string, fontSize: fontSize)
+        switch kind {
+        case .text(let origin, _, let fontSize):
+            copy.kind = .text(origin: origin, string: string, fontSize: fontSize)
+        case .callout(let center, let value, let labelOrigin, _, let fontSize):
+            copy.kind = .callout(
+                center: center,
+                value: value,
+                labelOrigin: labelOrigin,
+                string: string,
+                fontSize: fontSize
+            )
+        default:
+            break
+        }
         return copy
     }
 
@@ -354,6 +422,14 @@ extension Annotation {
             copy.kind = .text(origin: sp(origin), string: string, fontSize: size * factor)
         case .counter(let center, let value, let leader):
             copy.kind = .counter(center: sp(center), value: value, leader: leader.map(sp))
+        case .callout(let center, let value, let labelOrigin, let string, let size):
+            copy.kind = .callout(
+                center: sp(center),
+                value: value,
+                labelOrigin: sp(labelOrigin),
+                string: string,
+                fontSize: size * factor
+            )
         }
         copy.lineWidth = lineWidth * factor
         return copy
@@ -391,6 +467,14 @@ extension Annotation {
             return .text(origin: move(origin), string: string, fontSize: fontSize)
         case .counter(let center, let value, let leader):
             return .counter(center: move(center), value: value, leader: leader.map(move))
+        case .callout(let center, let value, let labelOrigin, let string, let fontSize):
+            return .callout(
+                center: move(center),
+                value: value,
+                labelOrigin: move(labelOrigin),
+                string: string,
+                fontSize: fontSize
+            )
         }
     }
 }
@@ -398,6 +482,15 @@ extension Annotation {
 // MARK: - 工具函数
 
 extension Annotation {
+    /// 标注气泡文字框的矩形（含内边距）。
+    static func calloutLabelRect(origin: CGPoint, string: String, fontSize: CGFloat) -> CGRect {
+        let size = textSize(string: string.isEmpty ? "文字" : string, fontSize: fontSize)
+        return CGRect(
+            origin: origin,
+            size: CGSize(width: size.width + 16, height: max(fontSize * 1.6, size.height + 10))
+        )
+    }
+
     static func textSize(string: String, fontSize: CGFloat) -> CGSize {
         guard !string.isEmpty, fontSize > 0 else {
             return CGSize(width: 0, height: fontSize * 1.2)
