@@ -12,6 +12,9 @@ final class InlineToolbarModel {
     var lineWidth: CGFloat = 8
     var canUndo = false
     var canRedo = false
+    /// 第二行展开状态由模型持有，便于宿主视图观察并自适应高度。
+    var showColor = false
+    var showWidth = false
 
     var onUndo: (() -> Void)?
     var onRedo: (() -> Void)?
@@ -21,8 +24,8 @@ final class InlineToolbarModel {
 
 /// 截图选区下方就地弹出的标注工具栏。
 ///
-/// 风格参考：高斯模糊深色胶囊、图标无背景框、选中项用颜色区分、
-/// 粗细为数字 + 滑杆、颜色为圆点。
+/// 默认只有一行：工具 + 撤销/重做 + 颜色 + 粗细 + ✗/✓。
+/// 颜色、粗细点开后才在第二行展开具体选项。
 ///
 /// @author ixxxxoooo
 struct InlineAnnotationToolbar: View {
@@ -46,52 +49,23 @@ struct InlineAnnotationToolbar: View {
                 iconButton("重做", symbol: "arrow.uturn.forward") { model.onRedo?() }
                     .disabled(!model.canRedo)
 
+                separator
+
+                colorButton
+                widthButton
+
                 Spacer(minLength: 12)
 
                 iconButton("取消", symbol: "xmark", tint: .red) { model.onCancel?() }
                 iconButton("确认", symbol: "checkmark", tint: .green) { model.onConfirm?() }
             }
 
-            HStack(spacing: 12) {
-                HStack(spacing: 8) {
-                    Text("\(Int(model.lineWidth))")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.white)
-                        .frame(width: 24, alignment: .trailing)
-                    Slider(value: $model.lineWidth, in: 1...24)
-                        .frame(width: 170)
-                        .tint(.white)
-                }
-
-                separator
-
-                HStack(spacing: 10) {
-                    ForEach(RGBAColor.palette, id: \.self) { swatch in
-                        Button {
-                            model.color = swatch
-                        } label: {
-                            Circle()
-                                .fill(swatch.swiftUIColor)
-                                .frame(width: 18, height: 18)
-                                .overlay(
-                                    Circle().strokeBorder(
-                                        model.color == swatch
-                                            ? Color.white : Color.white.opacity(0.2),
-                                        lineWidth: model.color == swatch ? 2 : 1
-                                    )
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-                Spacer(minLength: 0)
+            if model.showColor || model.showWidth {
+                expandedOptions
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        // 固定宽度：否则 NSHostingView 的 fittingSize 会算窄，内容被裁切。
-        .frame(width: 640)
         .background(
             ZStack {
                 VisualEffectBackground(material: .hudWindow)
@@ -103,6 +77,49 @@ struct InlineAnnotationToolbar: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
         )
+        .frame(width: 470)
+        .animation(.easeOut(duration: 0.12), value: model.showColor)
+        .animation(.easeOut(duration: 0.12), value: model.showWidth)
+    }
+
+    /// 只有点了颜色 / 粗细才出现的第二行。
+    @ViewBuilder
+    private var expandedOptions: some View {
+        HStack(spacing: 14) {
+            if model.showWidth {
+                HStack(spacing: 8) {
+                    Text("\(Int(model.lineWidth))")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .frame(width: 24, alignment: .trailing)
+                    Slider(value: $model.lineWidth, in: 1...24)
+                        .frame(width: 170)
+                        .tint(.white)
+                }
+            }
+            if model.showColor {
+                HStack(spacing: 10) {
+                    ForEach(RGBAColor.palette, id: \.self) { swatch in
+                        Button {
+                            model.color = swatch
+                        } label: {
+                            Circle()
+                                .fill(swatch.swiftUIColor)
+                                .frame(width: 20, height: 20)
+                                .overlay(
+                                    Circle().strokeBorder(
+                                        model.color == swatch
+                                            ? Color.white : Color.white.opacity(0.2),
+                                        lineWidth: model.color == swatch ? 2 : 1
+                                    )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
     }
 
     private var separator: some View {
@@ -110,6 +127,35 @@ struct InlineAnnotationToolbar: View {
             .fill(Color.white.opacity(0.14))
             .frame(width: 1, height: 20)
             .padding(.horizontal, 4)
+    }
+
+    private var colorButton: some View {
+        Button {
+            model.showColor.toggle()
+            if model.showColor { model.showWidth = false }
+        } label: {
+            Circle()
+                .fill(model.color.swiftUIColor)
+                .frame(width: 20, height: 20)
+                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1.2))
+                .frame(width: 30, height: 26)
+        }
+        .buttonStyle(.plain)
+        .help("颜色")
+    }
+
+    private var widthButton: some View {
+        Button {
+            model.showWidth.toggle()
+            if model.showWidth { model.showColor = false }
+        } label: {
+            Image(systemName: "lineweight")
+                .font(.system(size: 15, weight: .regular))
+                .frame(width: 30, height: 26)
+                .foregroundStyle(model.showWidth ? Theme.selectionGreen : Color.white.opacity(0.9))
+        }
+        .buttonStyle(.plain)
+        .help("线条粗细")
     }
 
     private func toolButton(_ item: AnnotationTool) -> some View {

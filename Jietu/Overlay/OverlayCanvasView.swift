@@ -859,8 +859,8 @@ final class OverlayCanvasView: NSView {
         guard isInputArmed else { return }
         if phase == .annotating {
             switch event.keyCode {
-            case 53: // Esc
-                cancelInline()
+            case 53: // Esc：直接退出整个截图
+                onCancel?()
             case 36, 76: // Return
                 confirmInline()
             case 51, 117: // Delete
@@ -904,8 +904,9 @@ final class OverlayCanvasView: NSView {
         crosshairLayer.path = nil
 
         preparePreviewBase()
-        annotationLayer.isHidden = false
-        updateAnnotationLayer()
+        // 进入时就只弹工具栏，不显示任何标注层，避免画面「跳」一下。
+        annotationLayer.contents = nil
+        annotationLayer.isHidden = true
         showToolbar()
     }
 
@@ -972,8 +973,14 @@ final class OverlayCanvasView: NSView {
     }
 
     private func updateAnnotationLayer() {
-        guard let previewBase, let selection else {
+        toolbarModel?.canUndo = !annotations.isEmpty
+        toolbarModel?.canRedo = !redoAnnotations.isEmpty
+
+        // 没有任何标注时不显示标注层（进入就地的那一刻画面保持不变）。
+        guard let previewBase, let selection, !(annotations.isEmpty && annotationDraft == nil)
+        else {
             annotationLayer.contents = nil
+            annotationLayer.isHidden = true
             return
         }
         var list = annotations
@@ -982,8 +989,7 @@ final class OverlayCanvasView: NSView {
         let image = AnnotationRenderer.render(base: previewBase, annotations: scaled) ?? previewBase
         annotationLayer.frame = selection
         annotationLayer.contents = image
-        toolbarModel?.canUndo = !annotations.isEmpty
-        toolbarModel?.canRedo = !redoAnnotations.isEmpty
+        annotationLayer.isHidden = false
     }
 
     private func inlineUndo() {
@@ -1003,7 +1009,7 @@ final class OverlayCanvasView: NSView {
     private func showToolbar() {
         let model = InlineToolbarModel()
         model.onConfirm = { [weak self] in self?.confirmInline() }
-        model.onCancel = { [weak self] in self?.cancelInline() }
+        model.onCancel = { [weak self] in self?.onCancel?() }
         model.onUndo = { [weak self] in self?.inlineUndo() }
         model.onRedo = { [weak self] in self?.inlineRedo() }
         toolbarModel = model
@@ -1013,6 +1019,31 @@ final class OverlayCanvasView: NSView {
         addSubview(host)
         toolbarHost = host
         updateToolbarPosition()
+        observeToolbar(model)
+    }
+
+    /// 工具栏展开/收起时自适应宿主视图高度并重新定位。
+    private func observeToolbar(_ model: InlineToolbarModel) {
+        withObservationTracking {
+            _ = model.tool
+            _ = model.color
+            _ = model.lineWidth
+            _ = model.canUndo
+            _ = model.canRedo
+            _ = model.showColor
+            _ = model.showWidth
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let host = self.toolbarHost {
+                    host.setFrameSize(host.fittingSize)
+                    self.updateToolbarPosition()
+                }
+                if self.toolbarModel === model {
+                    self.observeToolbar(model)
+                }
+            }
+        }
     }
 
     private func hideToolbar() {
