@@ -10,6 +10,7 @@ final class InlineToolbarModel {
     var tool: AnnotationTool = .rectangle
     var color: RGBAColor = .red
     var lineWidth: CGFloat = 7
+    var eraserSize: CGFloat = 28
     var canUndo = false
     var canRedo = false
     /// 展开状态由模型持有，便于宿主视图观察并自适应高度。
@@ -144,13 +145,19 @@ struct InlineOptionsToolbar: View {
         HStack(spacing: 14) {
             if model.showWidth {
                 HStack(spacing: 8) {
-                    Text("\(Int(model.lineWidth))")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    Text(model.tool == .eraser ? "橡皮" : "\(Int(model.lineWidth))")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 24, alignment: .trailing)
-                    Slider(value: $model.lineWidth, in: 1...24)
-                        .frame(width: 170)
-                        .tint(.white)
+                        .frame(width: 34, alignment: .trailing)
+                    if model.tool == .eraser {
+                        Slider(value: $model.eraserSize, in: 8...120)
+                            .frame(width: 170)
+                            .tint(.white)
+                    } else {
+                        Slider(value: $model.lineWidth, in: 1...24)
+                            .frame(width: 170)
+                            .tint(.white)
+                    }
                 }
             }
             if model.showColor {
