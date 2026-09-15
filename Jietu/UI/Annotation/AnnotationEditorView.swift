@@ -26,9 +26,16 @@ struct AnnotationEditorView: View {
     // MARK: - Document
 
     @State private var annotations: [Annotation] = []
-    @State private var undoStack: [[Annotation]] = []
-    @State private var redoStack: [[Annotation]] = []
+    @State private var eraserStrokes: [EraserStroke] = []
+    @State private var undoStack: [EditorSnapshot] = []
+    @State private var redoStack: [EditorSnapshot] = []
     @State private var selectedID: UUID?
+    @State private var eraserSize: CGFloat = 28
+
+    struct EditorSnapshot {
+        let annotations: [Annotation]
+        let strokes: [EraserStroke]
+    }
 
     // MARK: - Tool / style
 
@@ -393,14 +400,22 @@ struct AnnotationEditorView: View {
                     Text(model_toolIsEraser ? "橡皮" : "粗细")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
-                    Text("\(Int(lineWidth))")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .frame(width: 22, alignment: .trailing)
-                    Slider(value: $lineWidth, in: 1...24)
-                        .frame(width: 170)
-                        .onChange(of: lineWidth) { _, value in
-                            applyToSelected { $0.withLineWidth(value) }
-                        }
+                    if model_toolIsEraser {
+                        Text("\(Int(eraserSize))")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .frame(width: 22, alignment: .trailing)
+                        Slider(value: $eraserSize, in: 8...120)
+                            .frame(width: 170)
+                    } else {
+                        Text("\(Int(lineWidth))")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .frame(width: 22, alignment: .trailing)
+                        Slider(value: $lineWidth, in: 1...24)
+                            .frame(width: 170)
+                            .onChange(of: lineWidth) { _, value in
+                                applyToSelected { $0.withLineWidth(value) }
+                            }
+                    }
                 }
             }
             if showColor {
@@ -586,11 +601,13 @@ struct AnnotationEditorView: View {
             commitInlineText()
         }
 
-        // 橡皮：按轨迹擦除（优先于选择/绘制）。
+        // 橡皮：画笔式擦除（优先于选择/绘制）。
         if tool == .eraser {
             pushUndo()
             dragMode = .erasing
-            erase(along: nil, to: startPx)
+            let radius = max(3, (eraserSize / 2) / max(0.0001, pointsPerPixel))
+            eraserStrokes.append(EraserStroke(points: [startPx], radius: radius))
+            lastErasePoint = startPx
             return
         }
 
@@ -635,7 +652,10 @@ struct AnnotationEditorView: View {
         case .none:
             break
         case .erasing:
-            erase(along: lastErasePoint, to: currentPx)
+            if var stroke = eraserStrokes.last {
+                stroke.points.append(currentPx)
+                eraserStrokes[eraserStrokes.count - 1] = stroke
+            }
             lastErasePoint = currentPx
         case .creating(let start):
             draft = makeDraft(tool: tool, start: start, current: currentPx)
@@ -720,23 +740,28 @@ struct AnnotationEditorView: View {
     // MARK: - Editing ops
 
     private func pushUndo() {
-        undoStack.append(annotations)
+        undoStack.append(EditorSnapshot(annotations: annotations, strokes: eraserStrokes))
         redoStack.removeAll()
     }
 
     private func undo() {
         guard let previous = undoStack.popLast() else { return }
-        redoStack.append(annotations)
-        annotations = previous
-        if let selectedID, !annotations.contains(where: { $0.id == selectedID }) {
-            self.selectedID = nil
-        }
+        redoStack.append(EditorSnapshot(annotations: annotations, strokes: eraserStrokes))
+        apply(previous)
     }
 
     private func redo() {
         guard let next = redoStack.popLast() else { return }
-        undoStack.append(annotations)
-        annotations = next
+        undoStack.append(EditorSnapshot(annotations: annotations, strokes: eraserStrokes))
+        apply(next)
+    }
+
+    private func apply(_ snapshot: EditorSnapshot) {
+        annotations = snapshot.annotations
+        eraserStrokes = snapshot.strokes
+        if let selectedID, !annotations.contains(where: { $0.id == selectedID }) {
+            self.selectedID = nil
+        }
     }
 
     private func update(id: UUID, _ transform: (Annotation) -> Annotation) {
@@ -748,69 +773,6 @@ struct AnnotationEditorView: View {
         guard let selectedID, let index = annotations.firstIndex(where: { $0.id == selectedID })
         else { return }
         annotations[index] = transform(annotations[index])
-    }
-
-    /// 擦除采样点（沿拖拽路径密集取样；`from` 为 nil 时就是单击点）。
-    private func eraseSamples(from: CGPoint?, to point: CGPoint) -> [CGPoint] {
-        guard let from else { return [point] }
-        let distance = Annotation.distance(from, point)
-        let steps = max(1, Int(distance / max(1, 6 / max(0.0001, pointsPerPixel))))
-        return (0...steps).map { index in
-            let t = CGFloat(index) / CGFloat(steps)
-            return CGPoint(
-                x: from.x + (point.x - from.x) * t,
-                y: from.y + (point.y - from.y) * t
-            )
-        }
-    }
-
-    /// 只擦「划过的部分」：把画笔轨迹在擦除处切断，重新拼成若干段。
-    private func erase(along from: CGPoint?, to point: CGPoint) {
-        let samples = eraseSamples(from: from, to: point)
-        guard !samples.isEmpty else { return }
-        let baseRadius = max(6, 10 / max(0.0001, pointsPerPixel))
-
-        var result: [Annotation] = []
-        for annotation in annotations {
-            guard case .pen(let points) = annotation.kind else {
-                result.append(annotation)
-                continue
-            }
-            let radius = max(baseRadius, annotation.lineWidth / 2 + 2)
-
-            var segments: [[CGPoint]] = []
-            var current: [CGPoint] = []
-            for candidate in points {
-                if samples.contains(where: { Annotation.distance($0, candidate) <= radius }) {
-                    if current.count >= 2 { segments.append(current) }
-                    current = []
-                } else {
-                    current.append(candidate)
-                }
-            }
-            if current.count >= 2 { segments.append(current) }
-
-            if segments.isEmpty { continue }
-            if segments.count == 1, segments[0].count == points.count {
-                result.append(annotation)
-                continue
-            }
-            for segment in segments {
-                result.append(
-                    Annotation(
-                        kind: .pen(points: segment),
-                        color: annotation.color,
-                        lineWidth: annotation.lineWidth,
-                        rotation: annotation.rotation
-                    )
-                )
-            }
-        }
-
-        annotations = result
-        if let selectedID, !annotations.contains(where: { $0.id == selectedID }) {
-            self.selectedID = nil
-        }
     }
 
     private func deleteSelected() {
@@ -985,7 +947,11 @@ struct AnnotationEditorView: View {
     // MARK: - Export
 
     private func renderedImage() -> CGImage? {
-        AnnotationRenderer.render(base: baseImage, annotations: annotations)
+        AnnotationRenderer.render(
+            base: baseImage,
+            annotations: annotations,
+            eraserStrokes: eraserStrokes
+        )
     }
 
     private func exportToCopy() {
@@ -1027,7 +993,17 @@ struct AnnotationEditorView: View {
         if let draft { list.append(draft) }
         let scale = previewBaseScale
         let scaled = list.map { $0.scaled(by: scale) }
-        return AnnotationRenderer.render(base: previewBase, annotations: scaled)
+        let scaledStrokes = eraserStrokes.map {
+            EraserStroke(
+                points: $0.points.map { CGPoint(x: $0.x * scale, y: $0.y * scale) },
+                radius: $0.radius * scale
+            )
+        }
+        return AnnotationRenderer.render(
+            base: previewBase,
+            annotations: scaled,
+            eraserStrokes: scaledStrokes
+        )
     }
 
     private func ensurePreviewBase() {

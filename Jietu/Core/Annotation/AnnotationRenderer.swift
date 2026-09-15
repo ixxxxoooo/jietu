@@ -13,8 +13,12 @@ enum AnnotationRenderer {
     /// 马赛克的默认块尺寸（像素）。
     static let mosaicBlock: CGFloat = 8
 
-    /// 渲染底图 + 标注。
-    static func render(base: CGImage, annotations: [Annotation]) -> CGImage? {
+    /// 渲染底图 + 标注（可再叠加橡皮擦除笔迹）。
+    static func render(
+        base: CGImage,
+        annotations: [Annotation],
+        eraserStrokes: [EraserStroke] = []
+    ) -> CGImage? {
         let width = base.width
         let height = base.height
         guard width > 0, height > 0 else { return nil }
@@ -49,6 +53,26 @@ enum AnnotationRenderer {
                 imageHeight: height
             )
         }
+        if !eraserStrokes.isEmpty {
+            context.setBlendMode(.clear)
+            context.setLineCap(.round)
+            context.setLineJoin(.round)
+            for stroke in eraserStrokes {
+                context.setLineWidth(max(2, stroke.radius * 2))
+                let points = stroke.points.map { contextPoint($0, imageHeight: height) }
+                guard let first = points.first else { continue }
+                context.beginPath()
+                context.move(to: first)
+                if points.count == 1 {
+                    context.addLine(to: first)
+                } else {
+                    for point in points.dropFirst() { context.addLine(to: point) }
+                }
+                context.strokePath()
+            }
+            context.setBlendMode(.normal)
+        }
+
         return context.makeImage()
     }
 

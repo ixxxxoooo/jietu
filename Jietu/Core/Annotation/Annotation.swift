@@ -77,6 +77,14 @@ struct RGBAColor: Equatable, Hashable {
     static let palette: [RGBAColor] = [.red, .orange, .yellow, .green, .blue, .white, .black]
 }
 
+/// 一次橡皮擦除笔迹（图像像素坐标，原点左上）。
+///
+/// @author ixxxxoooo
+struct EraserStroke: Equatable {
+    var points: [CGPoint]
+    var radius: CGFloat
+}
+
 /// 一条标注对象。几何量全部为图像像素坐标（原点左上）。
 ///
 /// @author ixxxxoooo

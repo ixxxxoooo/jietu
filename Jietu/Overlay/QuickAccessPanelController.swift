@@ -64,10 +64,15 @@ final class QuickAccessPanelController {
     var onAnnotate: ((CGImage) -> Void)?
     var onPin: ((CGImage) -> Void)?
     var onDismiss: (() -> Void)?
+    /// 浮窗出现 / 全部消失。
+    var onVisibilityChanged: ((Bool) -> Void)?
     /// 可唤回状态变化：true 表示可以注册空格唤回，false 表示应撤销。
     var onRecallStateChanged: ((Bool) -> Void)?
 
     var isVisible: Bool { !entries.isEmpty }
+
+    /// 最新一张截图（用于空格打开编辑器）。
+    var latestImage: CGImage? { entries.last?.image }
 
     // MARK: - Present
 
@@ -148,7 +153,9 @@ final class QuickAccessPanelController {
             saveDirectory: saveDirectory,
             dragURL: dragURL
         )
+        let wasEmpty = entries.isEmpty
         entries.append(entry)
+        if wasEmpty { onVisibilityChanged?(true) }
 
         if let screen, maxVisible(on: screen) < entries.count {
             dismissEntry(entries[0].id, animated: false)
@@ -303,6 +310,7 @@ final class QuickAccessPanelController {
         guard entries.isEmpty else { return }
         timer?.invalidate()
         timer = nil
+        onVisibilityChanged?(false)
         onDismiss?()
     }
 

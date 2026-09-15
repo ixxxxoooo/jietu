@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: SettingsWindowController?
     private var annotationEditors: [AnnotationEditorWindowController] = []
     private var hotkeyRegistrationID: UInt32?
+    /// 浮窗存在期间注册的「空格 → 打开编辑器」热键。
+    private var spaceHotkeyID: UInt32?
     /// 当前已生效的区域截图热键，注册失败时用它回滚。
     private var activeHotkey: Hotkey?
 
@@ -125,6 +127,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         quickAccess.onPin = { image in
             PinWindowController.pin(image: image, on: NSScreen.main)
+        }
+        quickAccess.onVisibilityChanged = { [weak self] visible in
+            if visible {
+                self?.registerSpaceHotkey()
+            } else {
+                self?.unregisterSpaceHotkey()
+            }
         }
         overlays.onFinish = { [weak self] outcome in
             self?.handleOverlayOutcome(outcome)
@@ -293,6 +302,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onDisplay: displayID,
             saveDirectory: settings.saveDirectory
         )
+    }
+
+    /// 浮窗存在时：空格打开最新一张的编辑窗口。
+    private func registerSpaceHotkey() {
+        guard spaceHotkeyID == nil else { return }
+        spaceHotkeyID = hotkeys.register(.recallLastCapture) { [weak self] in
+            self?.openLatestEditor()
+        }
+        if spaceHotkeyID == nil {
+            logger.error("failed to register space hotkey")
+        }
+    }
+
+    private func unregisterSpaceHotkey() {
+        if let spaceHotkeyID {
+            hotkeys.unregister(spaceHotkeyID)
+            self.spaceHotkeyID = nil
+        }
+    }
+
+    private func openLatestEditor() {
+        guard let image = quickAccess.latestImage else { return }
+        quickAccess.dismiss()
+        openAnnotationEditor(image)
     }
 
     /// 打开标注编辑器。
