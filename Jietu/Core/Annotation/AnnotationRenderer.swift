@@ -6,22 +6,15 @@ import Foundation
 ///
 /// 只依赖 CoreGraphics/CoreText，便于脱离 UI 做像素级单测。
 /// 输入输出的几何量都按**图像像素坐标、原点左上**处理；内部绘制时统一翻到
-/// `CGContext` 的原点左下坐标系。
+/// `CGContext` 的原点左下坐标系。旋转绕标注自身中心。
 ///
 /// @author ixxxxoooo
 enum AnnotationRenderer {
-    /// 马赛克的块尺寸（像素）。预览与导出共用同一值，保证所见即所得。
-    static let mosaicBlock: Int = 8
+    /// 马赛克的默认块尺寸（像素）。
+    static let mosaicBlock: CGFloat = 8
 
-    /// 渲染底图 + 标注。失败返回 nil。
-    ///
-    /// - Parameter mosaicBlock: 马赛克块尺寸。预览时按预览比例传入，
-    ///   保证预览与导出的马赛克观感一致。
-    static func render(
-        base: CGImage,
-        annotations: [Annotation],
-        mosaicBlock: Int = AnnotationRenderer.mosaicBlock
-    ) -> CGImage? {
+    /// 渲染底图 + 标注。
+    static func render(base: CGImage, annotations: [Annotation]) -> CGImage? {
         let width = base.width
         let height = base.height
         guard width > 0, height > 0 else { return nil }
@@ -40,17 +33,26 @@ enum AnnotationRenderer {
         context.interpolationQuality = .high
         context.draw(base, in: CGRect(x: 0, y: 0, width: width, height: height))
 
-        let mosaic = downsample(base, factor: max(1, mosaicBlock))
-
+        var mosaicCache: [Int: CGImage] = [:]
         for annotation in annotations {
-            draw(annotation, base: base, mosaic: mosaic, in: context, imageHeight: height)
+            draw(
+                annotation,
+                base: base,
+                mosaic: { block in
+                    let key = max(1, Int(block.rounded()))
+                    if let cached = mosaicCache[key] { return cached }
+                    let image = downsample(base, factor: key)
+                    mosaicCache[key] = image
+                    return image
+                },
+                in: context,
+                imageHeight: height
+            )
         }
         return context.makeImage()
     }
 
     /// 生成马赛克底图（整图缩小 `factor` 倍）。
-    ///
-    /// 预览与导出都用它，避免「编辑时看到的效果和保存出来的不一样」。
     static func downsample(_ image: CGImage, factor: Int) -> CGImage? {
         let divisor = max(1, factor)
         let width = max(1, image.width / divisor)
@@ -76,7 +78,7 @@ enum AnnotationRenderer {
     private static func draw(
         _ annotation: Annotation,
         base: CGImage,
-        mosaic: CGImage?,
+        mosaic: @escaping (CGFloat) -> CGImage?,
         in context: CGContext,
         imageHeight: Int
     ) {
@@ -87,44 +89,85 @@ enum AnnotationRenderer {
         context.setLineCap(.round)
         context.setLineJoin(.round)
 
-        switch annotation.shape {
-        case .rectangle(let rect):
-            context.stroke(contextRect(rect, imageHeight: imageHeight))
+        let body: () -> Void = {
+            switch annotation.kind {
+            case .rectangle(let rect):
+                context.stroke(contextRect(rect, imageHeight: imageHeight))
 
-        case .ellipse(let rect):
-            context.strokeEllipse(in: contextRect(rect, imageHeight: imageHeight))
+            case .ellipse(let rect):
+                context.strokeEllipse(in: contextRect(rect, imageHeight: imageHeight))
 
-        case .arrow(let from, let to):
-            drawArrow(from: from, to: to, lineWidth: annotation.lineWidth, in: context, imageHeight: imageHeight)
+            case .highlight(let rect):
+                context.saveGState()
+                context.setFillColor(
+                    annotation.color.cgColor.copy(alpha: 0.35) ?? color
+                )
+                context.fill(contextRect(rect, imageHeight: imageHeight))
+                context.restoreGState()
 
-        case .text(let origin, let string, let fontSize):
-            drawText(
-                string,
-                topLeft: origin,
-                fontSize: fontSize,
-                color: annotation.color,
-                in: context,
-                imageHeight: imageHeight
-            )
+            case .arrow(let from, let to, let control):
+                drawArrow(
+                    from: from,
+                    to: to,
+                    control: control,
+                    lineWidth: annotation.lineWidth,
+                    in: context,
+                    imageHeight: imageHeight
+                )
 
-        case .pixelate(let rect):
-            drawMosaic(rect, base: base, mosaic: mosaic, in: context, imageHeight: imageHeight)
+            case .pen(let points):
+                drawPen(points, in: context, imageHeight: imageHeight)
 
-        case .counter(let center, let value):
-            drawCounter(
-                value,
-                center: center,
-                radius: max(12, annotation.lineWidth * 4),
-                color: annotation.color,
-                in: context,
-                imageHeight: imageHeight
-            )
+            case .text(let origin, let string, let fontSize):
+                drawText(
+                    string,
+                    topLeft: origin,
+                    fontSize: fontSize,
+                    color: annotation.color,
+                    in: context,
+                    imageHeight: imageHeight
+                )
+
+            case .pixelate(let rect, let block):
+                drawMosaic(
+                    rect,
+                    block: block,
+                    base: base,
+                    mosaic: mosaic,
+                    in: context,
+                    imageHeight: imageHeight
+                )
+
+            case .counter(let center, let value, let leader):
+                drawCounter(
+                    value,
+                    center: center,
+                    leader: leader,
+                    radius: max(12, annotation.lineWidth * 4),
+                    color: annotation.color,
+                    in: context,
+                    imageHeight: imageHeight
+                )
+            }
+        }
+
+        if annotation.rotation != 0 {
+            let centerPoint = contextPoint(annotation.center, imageHeight: imageHeight)
+            context.saveGState()
+            context.translateBy(x: centerPoint.x, y: centerPoint.y)
+            context.rotate(by: -annotation.rotation)
+            context.translateBy(x: -centerPoint.x, y: -centerPoint.y)
+            body()
+            context.restoreGState()
+        } else {
+            body()
         }
     }
 
     private static func drawArrow(
         from: CGPoint,
         to: CGPoint,
+        control: CGPoint?,
         lineWidth: CGFloat,
         in context: CGContext,
         imageHeight: Int
@@ -132,11 +175,21 @@ enum AnnotationRenderer {
         let start = contextPoint(from, imageHeight: imageHeight)
         let end = contextPoint(to, imageHeight: imageHeight)
 
-        context.move(to: start)
-        context.addLine(to: end)
-        context.strokePath()
+        var tangent: CGPoint
+        if let control {
+            let c = contextPoint(control, imageHeight: imageHeight)
+            context.move(to: start)
+            context.addQuadCurve(to: end, control: c)
+            context.strokePath()
+            tangent = CGPoint(x: end.x - c.x, y: end.y - c.y)
+        } else {
+            context.move(to: start)
+            context.addLine(to: end)
+            context.strokePath()
+            tangent = CGPoint(x: end.x - start.x, y: end.y - start.y)
+        }
 
-        let angle = atan2(end.y - start.y, end.x - start.x)
+        let angle = atan2(tangent.y, tangent.x)
         let headLength = max(12, lineWidth * 5)
         let spread = CGFloat.pi / 7
         for offset in [CGFloat.pi - spread, CGFloat.pi + spread] {
@@ -146,6 +199,23 @@ enum AnnotationRenderer {
             )
             context.move(to: end)
             context.addLine(to: point)
+        }
+        context.strokePath()
+    }
+
+    private static func drawPen(_ points: [CGPoint], in context: CGContext, imageHeight: Int) {
+        guard points.count > 1 else {
+            if let point = points.first {
+                let center = contextPoint(point, imageHeight: imageHeight)
+                context.fillEllipse(
+                    in: CGRect(x: center.x - 1.5, y: center.y - 1.5, width: 3, height: 3)
+                )
+            }
+            return
+        }
+        context.move(to: contextPoint(points[0], imageHeight: imageHeight))
+        for point in points.dropFirst() {
+            context.addLine(to: contextPoint(point, imageHeight: imageHeight))
         }
         context.strokePath()
     }
@@ -171,12 +241,22 @@ enum AnnotationRenderer {
     private static func drawCounter(
         _ value: Int,
         center: CGPoint,
+        leader: CGPoint?,
         radius: CGFloat,
         color: RGBAColor,
         in context: CGContext,
         imageHeight: Int
     ) {
         let centerPoint = contextPoint(center, imageHeight: imageHeight)
+
+        if let leader {
+            context.setStrokeColor(color.cgColor)
+            context.move(to: contextPoint(leader, imageHeight: imageHeight))
+            context.addLine(to: centerPoint)
+            context.strokePath()
+        }
+
+        context.setFillColor(color.cgColor)
         context.fillEllipse(
             in: CGRect(
                 x: centerPoint.x - radius,
@@ -200,14 +280,17 @@ enum AnnotationRenderer {
 
     private static func drawMosaic(
         _ rect: CGRect,
+        block: CGFloat,
         base: CGImage,
-        mosaic: CGImage?,
+        mosaic: (CGFloat) -> CGImage?,
         in context: CGContext,
         imageHeight: Int
     ) {
-        guard let mosaic, mosaic.width > 0, mosaic.height > 0 else { return }
-        let scaleX = CGFloat(mosaic.width) / CGFloat(base.width)
-        let scaleY = CGFloat(mosaic.height) / CGFloat(base.height)
+        let blockSize = max(2, block)
+        guard let mosaicImage = mosaic(blockSize), mosaicImage.width > 0, mosaicImage.height > 0
+        else { return }
+        let scaleX = CGFloat(mosaicImage.width) / CGFloat(base.width)
+        let scaleY = CGFloat(mosaicImage.height) / CGFloat(base.height)
         let source = CGRect(
             x: rect.minX * scaleX,
             y: rect.minY * scaleY,
@@ -215,8 +298,10 @@ enum AnnotationRenderer {
             height: rect.height * scaleY
         )
         .integral
-        .intersection(CGRect(x: 0, y: 0, width: mosaic.width, height: mosaic.height))
-        guard !source.isEmpty, let crop = mosaic.cropping(to: source) else { return }
+        .intersection(
+            CGRect(x: 0, y: 0, width: mosaicImage.width, height: mosaicImage.height)
+        )
+        guard !source.isEmpty, let crop = mosaicImage.cropping(to: source) else { return }
 
         context.saveGState()
         context.interpolationQuality = .none
@@ -235,7 +320,6 @@ enum AnnotationRenderer {
 
     // MARK: - Coordinate conversion
 
-    /// 图像像素矩形（原点左上）→ CGContext 矩形（原点左下）。
     private static func contextRect(_ rect: CGRect, imageHeight: Int) -> CGRect {
         CGRect(
             x: rect.minX,
@@ -245,7 +329,6 @@ enum AnnotationRenderer {
         )
     }
 
-    /// 图像像素点（原点左上）→ CGContext 点（原点左下）。
     private static func contextPoint(_ point: CGPoint, imageHeight: Int) -> CGPoint {
         CGPoint(x: point.x, y: CGFloat(imageHeight) - point.y)
     }

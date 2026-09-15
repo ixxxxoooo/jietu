@@ -55,6 +55,8 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
         )
         window.title = "标注"
         window.isReleasedWhenClosed = false
+        // 深色外观：与悬浮工具栏风格统一。
+        window.appearance = NSAppearance(named: .darkAqua)
         window.contentMinSize = NSSize(
             width: AnnotationEditorView.minWindowWidth,
             height: AnnotationEditorView.minWindowHeight

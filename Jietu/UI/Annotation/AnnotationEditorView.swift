@@ -3,12 +3,12 @@ import SwiftUI
 
 /// 标注编辑器主界面。
 ///
-/// 预览策略：把原图栅格化到与显示像素匹配的底图，再用**同一个渲染器**
-/// （`AnnotationRenderer`）把标注烘焙上去显示。这样预览和导出走同一条代码路径，
-/// 避免「编辑时看到的样子和保存出来的不一样」。
+/// 预览：把原图栅格化到与显示像素匹配的底图，再用**同一个渲染器**
+/// （`AnnotationRenderer`）把标注烘焙上去显示，保证所见即所得。
 ///
-/// 缩放：`zoom` 是相对**原始大小**（像素 ÷ 屏幕缩放）的比例，1.0 表示原始大小。
-/// 窗口可自由调整大小，内容放进双轴 `ScrollView`，超出可视区时可滚动查看。
+/// 标注是**对象化**的：选择工具下可点选、整体拖动、用控制点缩放 / 旋转、
+/// 拖箭头端点与曲线手柄、拖序号引线；文字双击改文案；颜色 / 线宽 / 字号 /
+/// 马赛克块大小都能事后修改。撤销 / 重做基于整份文档快照。
 ///
 /// @author ixxxxoooo
 struct AnnotationEditorView: View {
@@ -21,44 +21,66 @@ struct AnnotationEditorView: View {
 
     @Environment(\.displayScale) private var displayScale
 
+    // MARK: - Document
+
     @State private var annotations: [Annotation] = []
-    @State private var redoStack: [Annotation] = []
+    @State private var undoStack: [[Annotation]] = []
+    @State private var redoStack: [[Annotation]] = []
+    @State private var selectedID: UUID?
+
+    // MARK: - Tool / style
+
     @State private var tool: AnnotationTool = .rectangle
     @State private var color: RGBAColor = .red
     @State private var lineWidth: CGFloat = 3
-    @State private var draftShape: Annotation.Shape?
+    @State private var fontSize: CGFloat = 22
+    @State private var mosaicBlock: CGFloat = 10
     @State private var counterValue = 1
+
+    // MARK: - Interaction
+
+    private enum DragMode {
+        case none
+        case creating(start: CGPoint)
+        case moving(id: UUID, start: CGPoint, original: Annotation)
+        case resizing(id: UUID, handle: ShapeHandle, original: Annotation)
+        case rotating(id: UUID, startAngle: CGFloat, original: Annotation)
+        case endpoint(id: UUID, handle: ShapeHandle, original: Annotation)
+    }
+
+    @State private var dragMode: DragMode = .none
+    @State private var draft: Annotation?
 
     @State private var isTextPromptPresented = false
     @State private var textInput = ""
-    @State private var textOrigin: CGPoint = .zero
-
-    @State private var previewBase: CGImage?
-    @State private var previewBaseScale: CGFloat = -1
-
-    @State private var availableSize: CGSize = .zero
-    @State private var zoom: CGFloat = 1
-    @State private var hasUserZoomed = false
-    @State private var hasInitialized = false
+    @State private var editingTextID: UUID?
 
     @State private var ocrText = ""
     @State private var isOCRPresented = false
     @State private var isRecognizing = false
 
-    /// 画布在窗口中的全局坐标，用于「原地钉图」。
+    // MARK: - Preview / zoom
+
+    @State private var previewBase: CGImage?
+    @State private var previewBaseScale: CGFloat = -1
+    @State private var availableSize: CGSize = .zero
+    @State private var zoom: CGFloat = 1
+    @State private var hasUserZoomed = false
+    @State private var hasInitialized = false
     @State private var canvasGlobalFrame: CGRect = .zero
+    @State private var scrollMonitor: Any?
 
     // MARK: - Layout
 
-    static let toolbarHeight: CGFloat = 44
+    static let toolbarHeight: CGFloat = 58
     static let padding: CGFloat = 10
-    /// 最小窗口尺寸：不能小于工具栏一排按钮所需宽度，避免工具栏被挤压。
-    static let minWindowWidth: CGFloat = 1010
+    static let minWindowWidth: CGFloat = 1240
     static let minWindowHeight: CGFloat = 430
     private static let minZoom: CGFloat = 0.1
     private static let maxZoom: CGFloat = 8
+    private static let handleRadius: CGFloat = 4.5
+    private static let handleHitRadius: CGFloat = 11
 
-    /// 原始大小（point）：图像像素 ÷ 屏幕缩放。
     private var naturalSize: CGSize {
         let scale = max(1, displayScale)
         return CGSize(
@@ -71,9 +93,14 @@ struct AnnotationEditorView: View {
         CGSize(width: naturalSize.width * zoom, height: naturalSize.height * zoom)
     }
 
-    /// 预览底图相对原图像素的缩放比。放大（zoom > 1）时不再生成更大的缓冲，
-    /// 交给 SwiftUI 插值放大，避免 6K 图放大后爆内存。
+    private var pointsPerPixel: CGFloat { zoom / max(1, displayScale) }
+
     private var bufferScale: CGFloat { min(zoom, 1) }
+
+    private var selectedAnnotation: Annotation? {
+        guard let selectedID else { return nil }
+        return annotations.first { $0.id == selectedID }
+    }
 
     // MARK: - Body
 
@@ -101,12 +128,16 @@ struct AnnotationEditorView: View {
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .frame(minWidth: Self.minWindowWidth, minHeight: Self.minWindowHeight)
-        .onAppear { ensurePreviewBase() }
+        .onAppear {
+            ensurePreviewBase()
+            installScrollMonitor()
+        }
+        .onDisappear { removeScrollMonitor() }
         .onChange(of: bufferScale) { _, _ in ensurePreviewBase() }
         .alert("输入文字", isPresented: $isTextPromptPresented) {
             TextField("文字", text: $textInput)
             Button("确定") { commitText() }
-            Button("取消", role: .cancel) { textInput = "" }
+            Button("取消", role: .cancel) { editingTextID = nil }
         }
         .sheet(isPresented: $isOCRPresented) {
             OCRResultView(text: ocrText) { isOCRPresented = false }
@@ -122,11 +153,17 @@ struct AnnotationEditorView: View {
                     .frame(width: displayedSize.width, height: displayedSize.height)
                     .contentShape(Rectangle())
                     .gesture(drawGesture)
+                    .simultaneousGesture(
+                        SpatialTapGesture(count: 2).onEnded { value in
+                            handleDoubleClick(at: value.location)
+                        }
+                    )
                     .overlay(
                         Rectangle()
                             .strokeBorder(Color.black.opacity(0.25), lineWidth: 1)
                             .allowsHitTesting(false)
                     )
+                selectionOverlay
             } else {
                 ProgressView()
                     .frame(width: 240, height: 160)
@@ -144,6 +181,46 @@ struct AnnotationEditorView: View {
         )
         .padding(Self.padding)
     }
+
+    /// 选中态：包围盒 + 控制点。
+    private var selectionOverlay: some View {
+        Canvas { context, _ in
+            guard let selected = selectedAnnotation else { return }
+
+            let corners = selected.rotatedCorners().map(viewPoint)
+            var border = Path()
+            border.addLines(corners)
+            border.closeSubpath()
+            context.stroke(
+                border,
+                with: .color(Color.accentColor),
+                style: StrokeStyle(lineWidth: 1.2, dash: [5, 3])
+            )
+
+            for (handle, position) in shapHandles(for: selected) {
+                let center = viewPoint(position)
+                let rect = CGRect(
+                    x: center.x - Self.handleRadius,
+                    y: center.y - Self.handleRadius,
+                    width: Self.handleRadius * 2,
+                    height: Self.handleRadius * 2
+                )
+                let isRotate = handle == .rotate
+                context.fill(
+                    Path(ellipseIn: rect),
+                    with: .color(isRotate ? Color.accentColor : .white)
+                )
+                context.stroke(
+                    Path(ellipseIn: rect),
+                    with: .color(Color.accentColor),
+                    lineWidth: 1.2
+                )
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    // MARK: - Toolbar
 
     private var toolbar: some View {
         HStack(spacing: 8) {
@@ -163,24 +240,29 @@ struct AnnotationEditorView: View {
                 Image(systemName: "lineweight")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                Slider(value: $lineWidth, in: 1...12)
-                    .frame(width: 70)
+                Slider(value: $lineWidth, in: 1...16)
+                    .frame(width: 64)
+                    .onChange(of: lineWidth) { _, value in
+                        applyToSelected { $0.withLineWidth(value) }
+                    }
             }
 
-            Divider().frame(height: 20)
-
-            zoomControls
+            contextualStyleControls
 
             Spacer(minLength: 8)
 
+            zoomControls
+
+            Divider().frame(height: 20)
+
             iconButton("撤销", symbol: "arrow.uturn.backward") { undo() }
-                .disabled(annotations.isEmpty)
+                .disabled(undoStack.isEmpty)
                 .keyboardShortcut("z", modifiers: .command)
             iconButton("重做", symbol: "arrow.uturn.forward") { redo() }
                 .disabled(redoStack.isEmpty)
                 .keyboardShortcut("z", modifiers: [.command, .shift])
-            iconButton("清空", symbol: "trash") { clear() }
-                .disabled(annotations.isEmpty)
+            iconButton("删除", symbol: "trash") { deleteSelected() }
+                .disabled(selectedID == nil)
 
             Divider().frame(height: 20)
 
@@ -192,41 +274,69 @@ struct AnnotationEditorView: View {
             iconButton("关闭", symbol: "xmark") { onClose() }
                 .keyboardShortcut(.cancelAction)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(Color.black.opacity(0.78))
+        )
         .padding(.horizontal, 10)
-        // 固定最小宽度：窗口再窄也不会把工具栏挤成一团。
-        .frame(minWidth: Self.minWindowWidth, maxWidth: .infinity, minHeight: Self.toolbarHeight, maxHeight: Self.toolbarHeight)
-        .fixedSize(horizontal: false, vertical: true)
+        .padding(.vertical, 6)
+        .frame(
+            minWidth: Self.minWindowWidth,
+            maxWidth: .infinity,
+            minHeight: Self.toolbarHeight,
+            maxHeight: Self.toolbarHeight
+        )
     }
 
-    private var zoomControls: some View {
-        HStack(spacing: 4) {
-            Button("适应") { zoomToFit() }
-                .buttonStyle(.link)
-                .font(.system(size: 11))
-            iconButton("缩小", symbol: "minus.magnifyingglass") { zoomOut() }
-            Text("\(Int((zoom * 100).rounded()))%")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .frame(width: 42)
-            iconButton("放大", symbol: "plus.magnifyingglass") { zoomIn() }
-            Button("原始") { zoomToOriginal() }
-                .buttonStyle(.link)
-                .font(.system(size: 11))
+    /// 选中文字 / 马赛克时显示字号 / 块大小。
+    @ViewBuilder
+    private var contextualStyleControls: some View {
+        if let selected = selectedAnnotation {
+            switch selected.kind {
+            case .text:
+                Divider().frame(height: 20)
+                HStack(spacing: 6) {
+                    Image(systemName: "textformat.size")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Slider(value: $fontSize, in: 10...100)
+                        .frame(width: 80)
+                        .onChange(of: fontSize) { _, value in
+                            applyToSelected { $0.withFontSize(value) }
+                        }
+                }
+            case .pixelate:
+                Divider().frame(height: 20)
+                HStack(spacing: 6) {
+                    Image(systemName: "squareshape.split.3x3")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Slider(value: $mosaicBlock, in: 4...40)
+                        .frame(width: 80)
+                        .onChange(of: mosaicBlock) { _, value in
+                            applyToSelected { $0.withPixelateBlock(value) }
+                        }
+                }
+            default:
+                EmptyView()
+            }
         }
     }
 
     private func toolButton(_ item: AnnotationTool) -> some View {
         Button {
             tool = item
-            draftShape = nil
+            if item.isDrawing { selectedID = nil }
         } label: {
             Image(systemName: item.symbolName)
                 .font(.system(size: 13, weight: .medium))
                 .frame(width: 28, height: 24)
-                .foregroundStyle(tool == item ? Color.white : Color.primary)
+                .foregroundStyle(.white)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(tool == item ? Theme.brand : Color.primary.opacity(0.06))
+                        .fill(tool == item ? Theme.brand : Color.white.opacity(0.08))
                 )
         }
         .buttonStyle(.plain)
@@ -236,6 +346,7 @@ struct AnnotationEditorView: View {
     private func colorButton(_ swatch: RGBAColor) -> some View {
         Button {
             color = swatch
+            applyToSelected { $0.withColor(swatch) }
         } label: {
             Circle()
                 .fill(swatch.swiftUIColor)
@@ -259,9 +370,27 @@ struct AnnotationEditorView: View {
             Image(systemName: symbol)
                 .font(.system(size: 12, weight: .semibold))
                 .frame(width: 26, height: 24)
+                .foregroundStyle(.white)
         }
         .buttonStyle(.borderless)
         .help(title)
+    }
+
+    private var zoomControls: some View {
+        HStack(spacing: 4) {
+            Button("适应") { zoomToFit() }
+                .buttonStyle(.link)
+                .font(.system(size: 11))
+            iconButton("缩小", symbol: "minus.magnifyingglass") { zoomOut() }
+            Text("\(Int((zoom * 100).rounded()))%")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 42)
+            iconButton("放大", symbol: "plus.magnifyingglass") { zoomIn() }
+            Button("原始") { zoomToOriginal() }
+                .buttonStyle(.link)
+                .font(.system(size: 11))
+        }
     }
 
     // MARK: - Gesture
@@ -269,72 +398,249 @@ struct AnnotationEditorView: View {
     private var drawGesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
-                let start = imagePoint(from: value.startLocation)
-                let current = imagePoint(from: value.location)
-                draftShape = draftShape(for: tool, start: start, current: current)
+                let startPx = imagePoint(from: value.startLocation)
+                let currentPx = imagePoint(from: value.location)
+                let startView = value.startLocation
+                let currentView = value.location
+
+                if case .none = dragMode {
+                    beginDrag(startPx: startPx, startView: startView)
+                }
+                continueDrag(currentPx: currentPx, currentView: currentView)
             }
             .onEnded { value in
-                let start = imagePoint(from: value.startLocation)
-                let current = imagePoint(from: value.location)
-                draftShape = nil
-
-                switch tool {
-                case .text:
-                    textOrigin = start
-                    textInput = ""
-                    isTextPromptPresented = true
-                case .counter:
-                    commit(
-                        Annotation(
-                            shape: .counter(center: start, value: counterValue),
-                            color: color,
-                            lineWidth: lineWidth
-                        )
-                    )
-                    counterValue += 1
-                default:
-                    if let shape = draftShape(for: tool, start: start, current: current),
-                        isValid(shape)
-                    {
-                        commit(Annotation(shape: shape, color: color, lineWidth: lineWidth))
-                    }
-                }
+                let currentPx = imagePoint(from: value.location)
+                endDrag(currentPx: currentPx)
             }
     }
 
-    // MARK: - Editing
+    private func beginDrag(startPx: CGPoint, startView: CGPoint) {
+        // 1) 选中标注的控制点
+        if let selected = selectedAnnotation,
+            let handle = hitHandle(for: selected, at: startView)
+        {
+            pushUndo()
+            switch handle {
+            case .rotate:
+                let angle = atan2(startPx.y - selected.center.y, startPx.x - selected.center.x)
+                dragMode = .rotating(id: selected.id, startAngle: angle, original: selected)
+            case .arrowStart, .arrowEnd, .arrowControl, .counterLeader:
+                dragMode = .endpoint(id: selected.id, handle: handle, original: selected)
+            default:
+                dragMode = .resizing(id: selected.id, handle: handle, original: selected)
+            }
+            return
+        }
 
-    private func commit(_ annotation: Annotation) {
-        annotations.append(annotation)
+        // 2) 命中已有标注 → 选中并移动
+        if let hit = topmostAnnotation(at: startPx) {
+            selectedID = hit.id
+            color = hit.color
+            lineWidth = hit.lineWidth
+            pushUndo()
+            dragMode = .moving(id: hit.id, start: startPx, original: hit)
+            return
+        }
+
+        // 3) 空白处
+        if tool.isDrawing {
+            dragMode = .creating(start: startPx)
+        } else {
+            selectedID = nil
+            dragMode = .none
+        }
+    }
+
+    private func continueDrag(currentPx: CGPoint, currentView: CGPoint) {
+        switch dragMode {
+        case .none:
+            break
+        case .creating(let start):
+            draft = makeDraft(tool: tool, start: start, current: currentPx)
+        case .moving(let id, let start, let original):
+            let delta = CGSize(width: currentPx.x - start.x, height: currentPx.y - start.y)
+            update(id: id) { _ in original.translated(by: delta) }
+        case .resizing(let id, let handle, let original):
+            update(id: id) { _ in original.resized(handle: handle, to: currentPx, lockAspect: false) }
+        case .rotating(let id, let startAngle, let original):
+            let angle = atan2(currentPx.y - original.center.y, currentPx.x - original.center.x)
+            update(id: id) { _ in original.rotated(by: angle - startAngle) }
+        case .endpoint(let id, let handle, let original):
+            update(id: id) { _ in original.withEndpoint(handle, to: currentPx) }
+        }
+    }
+
+    private func endDrag(currentPx: CGPoint) {
+        if case .creating = dragMode, tool == .text {
+            // 文本：先弹输入框，确定时再用 draft 落盘。
+            if draft != nil {
+                editingTextID = nil
+                textInput = ""
+                isTextPromptPresented = true
+            }
+            dragMode = .none
+            return
+        }
+
+        switch dragMode {
+        case .creating:
+            if let draft, isValid(draft) {
+                pushUndo()
+                annotations.append(draft)
+                selectedID = draft.id
+                if case .counter = draft.kind { counterValue += 1 }
+            }
+        default:
+            break
+        }
+        draft = nil
+        dragMode = .none
+    }
+
+    private func makeDraft(tool: AnnotationTool, start: CGPoint, current: CGPoint) -> Annotation? {
+        let rect = normalizedRect(start, current)
+        switch tool {
+        case .rectangle:
+            return Annotation(kind: .rectangle(rect), color: color, lineWidth: lineWidth)
+        case .ellipse:
+            return Annotation(kind: .ellipse(rect), color: color, lineWidth: lineWidth)
+        case .highlight:
+            return Annotation(kind: .highlight(rect), color: color, lineWidth: lineWidth)
+        case .pixelate:
+            return Annotation(kind: .pixelate(rect, block: mosaicBlock), color: color, lineWidth: lineWidth)
+        case .arrow:
+            return Annotation(kind: .arrow(from: start, to: current, control: nil), color: color, lineWidth: lineWidth)
+        case .pen:
+            return Annotation(kind: .pen(points: [start, current]), color: color, lineWidth: lineWidth)
+        case .counter:
+            return Annotation(kind: .counter(center: current, value: counterValue, leader: nil), color: color, lineWidth: lineWidth)
+        case .text:
+            return Annotation(
+                kind: .text(origin: start, string: "", fontSize: fontSize),
+                color: color,
+                lineWidth: lineWidth
+            )
+        case .select:
+            return nil
+        }
+    }
+
+    // MARK: - Editing ops
+
+    private func pushUndo() {
+        undoStack.append(annotations)
         redoStack.removeAll()
     }
 
     private func undo() {
-        guard let last = annotations.popLast() else { return }
-        redoStack.append(last)
+        guard let previous = undoStack.popLast() else { return }
+        redoStack.append(annotations)
+        annotations = previous
+        if let selectedID, !annotations.contains(where: { $0.id == selectedID }) {
+            self.selectedID = nil
+        }
     }
 
     private func redo() {
-        guard let restored = redoStack.popLast() else { return }
-        annotations.append(restored)
+        guard let next = redoStack.popLast() else { return }
+        undoStack.append(annotations)
+        annotations = next
     }
 
-    private func clear() {
-        annotations.removeAll()
-        redoStack.removeAll()
+    private func update(id: UUID, _ transform: (Annotation) -> Annotation) {
+        guard let index = annotations.firstIndex(where: { $0.id == id }) else { return }
+        annotations[index] = transform(annotations[index])
+    }
+
+    private func applyToSelected(_ transform: (Annotation) -> Annotation) {
+        guard let selectedID, let index = annotations.firstIndex(where: { $0.id == selectedID })
+        else { return }
+        annotations[index] = transform(annotations[index])
+    }
+
+    private func deleteSelected() {
+        guard let selectedID else { return }
+        pushUndo()
+        annotations.removeAll { $0.id == selectedID }
+        self.selectedID = nil
     }
 
     private func commitText() {
         let trimmed = textInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        textInput = ""
+        defer { textInput = ""; editingTextID = nil }
         guard !trimmed.isEmpty else { return }
-        commit(
-            Annotation(
-                shape: .text(origin: textOrigin, string: trimmed, fontSize: max(14, lineWidth * 6)),
-                color: color,
-                lineWidth: lineWidth
-            )
-        )
+
+        if let editingTextID, let index = annotations.firstIndex(where: { $0.id == editingTextID }) {
+            pushUndo()
+            annotations[index] = annotations[index].withText(trimmed)
+            self.editingTextID = nil
+            return
+        }
+        guard let draft else { return }
+        pushUndo()
+        let text = draft.withText(trimmed)
+        annotations.append(text)
+        selectedID = text.id
+        self.draft = nil
+    }
+
+    private func topmostAnnotation(at point: CGPoint) -> Annotation? {
+        let tolerance = max(6, pointsPerPixel > 0 ? 8 / pointsPerPixel : 6)
+        return annotations.last { $0.contains(point, tolerance: tolerance) }
+    }
+
+    /// 双击：文字直接进编辑态。
+    private func handleDoubleClick(at location: CGPoint) {
+        let point = imagePoint(from: location)
+        guard let hit = topmostAnnotation(at: point) else { return }
+        selectedID = hit.id
+        if case .text(_, let string, _) = hit.kind {
+            editingTextID = hit.id
+            textInput = string
+            isTextPromptPresented = true
+        }
+    }
+
+    private func hitHandle(for annotation: Annotation, at viewPoint: CGPoint) -> ShapeHandle? {
+        var best: (ShapeHandle, CGFloat)?
+        for (handle, position) in shapHandles(for: annotation) {
+            let distance = Annotation.distance(viewPoint, self.viewPoint(position))
+            if distance <= Self.handleHitRadius, best == nil || distance < best!.1 {
+                best = (handle, distance)
+            }
+        }
+        return best?.0
+    }
+
+    /// 选中标注的控制点（图像坐标）。旋转后仅提供旋转手柄 + 该类型的端点手柄。
+    private func shapHandles(for annotation: Annotation) -> [(ShapeHandle, CGPoint)] {
+        var handles: [(ShapeHandle, CGPoint)] = []
+        let rotated = abs(annotation.rotation) > 0.001
+
+        if !rotated {
+            switch annotation.kind {
+            case .rectangle, .ellipse, .highlight, .pixelate, .pen, .text:
+                handles.append(contentsOf: ShapeGeometry.resizeHandles(for: annotation))
+            default:
+                break
+            }
+        }
+
+        switch annotation.kind {
+        case .arrow(let from, let to, let control):
+            handles.append((.arrowStart, from))
+            handles.append((.arrowEnd, to))
+            let mid = control ?? CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2)
+            handles.append((.arrowControl, mid))
+        case .counter(let center, _, let leader):
+            let leaderPoint = leader ?? CGPoint(x: center.x + 48, y: center.y - 48)
+            handles.append((.counterLeader, leaderPoint))
+        default:
+            break
+        }
+
+        handles.append((.rotate, ShapeGeometry.rotateHandle(for: annotation, distance: 28)))
+        return handles
     }
 
     // MARK: - Zoom
@@ -376,6 +682,36 @@ struct AnnotationEditorView: View {
         zoom = 1
     }
 
+    /// 监听本窗口的滚轮 / 捏合手势做缩放（SwiftUI 没有直接的滚轮事件接口）。
+    private func installScrollMonitor() {
+        guard scrollMonitor == nil else { return }
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .magnify]) { event in
+            guard event.window?.title == "标注" else { return event }
+            if event.type == .magnify {
+                applyZoomFactor(1 + event.magnification)
+            } else {
+                let raw = event.hasPreciseScrollingDeltas
+                    ? event.scrollingDeltaY / 8
+                    : event.scrollingDeltaY
+                guard raw != 0 else { return event }
+                applyZoomFactor(min(1.5, max(0.67, 1 + raw * 0.05)))
+            }
+            return nil
+        }
+    }
+
+    private func removeScrollMonitor() {
+        if let scrollMonitor {
+            NSEvent.removeMonitor(scrollMonitor)
+        }
+        scrollMonitor = nil
+    }
+
+    private func applyZoomFactor(_ factor: CGFloat) {
+        hasUserZoomed = true
+        zoom = min(Self.maxZoom, max(Self.minZoom, zoom * factor))
+    }
+
     // MARK: - Export
 
     private func renderedImage() -> CGImage? {
@@ -397,7 +733,6 @@ struct AnnotationEditorView: View {
         onPin(rendered, canvasGlobalFrame)
     }
 
-    /// OCR：识别当前成图里的文字，复制到剪贴板并弹窗展示。
     private func exportOCR() {
         guard let rendered = renderedImage(), !isRecognizing else { return }
         isRecognizing = true
@@ -419,13 +754,10 @@ struct AnnotationEditorView: View {
     private var renderedPreview: CGImage? {
         guard let previewBase else { return nil }
         var list = annotations
-        if let draftShape {
-            list.append(Annotation(shape: draftShape, color: color, lineWidth: lineWidth))
-        }
+        if let draft { list.append(draft) }
         let scale = previewBaseScale
         let scaled = list.map { $0.scaled(by: scale) }
-        let block = max(1, Int((CGFloat(AnnotationRenderer.mosaicBlock) * scale).rounded()))
-        return AnnotationRenderer.render(base: previewBase, annotations: scaled, mosaicBlock: block)
+        return AnnotationRenderer.render(base: previewBase, annotations: scaled)
     }
 
     private func ensurePreviewBase() {
@@ -456,30 +788,13 @@ struct AnnotationEditorView: View {
 
     // MARK: - Geometry helpers
 
-    /// 视图坐标（point）→ 图像像素坐标。
     private func imagePoint(from viewPoint: CGPoint) -> CGPoint {
-        let pointsPerPixel = zoom / max(1, displayScale)
         guard pointsPerPixel > 0 else { return .zero }
         return CGPoint(x: viewPoint.x / pointsPerPixel, y: viewPoint.y / pointsPerPixel)
     }
 
-    private func draftShape(
-        for tool: AnnotationTool,
-        start: CGPoint,
-        current: CGPoint
-    ) -> Annotation.Shape? {
-        switch tool {
-        case .rectangle:
-            return .rectangle(normalizedRect(start, current))
-        case .ellipse:
-            return .ellipse(normalizedRect(start, current))
-        case .pixelate:
-            return .pixelate(normalizedRect(start, current))
-        case .arrow:
-            return .arrow(from: start, to: current)
-        case .text, .counter:
-            return nil
-        }
+    private func viewPoint(_ imagePoint: CGPoint) -> CGPoint {
+        CGPoint(x: imagePoint.x * pointsPerPixel, y: imagePoint.y * pointsPerPixel)
     }
 
     private func normalizedRect(_ a: CGPoint, _ b: CGPoint) -> CGRect {
@@ -491,12 +806,14 @@ struct AnnotationEditorView: View {
         )
     }
 
-    private func isValid(_ shape: Annotation.Shape) -> Bool {
-        switch shape {
-        case .rectangle(let rect), .ellipse(let rect), .pixelate(let rect):
+    private func isValid(_ annotation: Annotation) -> Bool {
+        switch annotation.kind {
+        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _):
             return rect.width >= 4 && rect.height >= 4
-        case .arrow(let from, let to):
+        case .arrow(let from, let to, _):
             return hypot(to.x - from.x, to.y - from.y) >= 4
+        case .pen(let points):
+            return points.count >= 2
         case .text, .counter:
             return true
         }
@@ -504,8 +821,6 @@ struct AnnotationEditorView: View {
 
     // MARK: - Window sizing
 
-    /// 编辑器初始窗口尺寸：默认按原始大小，超过屏幕 90% 时等比缩小。
-    /// 宽度不小于 `minWindowWidth`，避免工具栏被挤压。
     static func initialWindowSize(for image: CGImage, screen: NSScreen?) -> CGSize {
         let scale = max(1, screen?.backingScaleFactor ?? 2)
         let natural = CGSize(

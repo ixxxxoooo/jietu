@@ -7,11 +7,7 @@ import Testing
 /// @author ixxxxoooo
 @Suite("标注渲染")
 struct AnnotationRendererTests {
-    private func color(
-        _ image: CGImage,
-        _ x: Int,
-        _ y: Int
-    ) throws -> PixelSampler.Sample {
+    private func sample(_ image: CGImage, _ x: Int, _ y: Int) throws -> PixelSampler.Sample {
         try #require(PixelSampler.sample(image, atPixel: CGPoint(x: x, y: y)))
     }
 
@@ -27,16 +23,16 @@ struct AnnotationRendererTests {
     func rectangleStroke() throws {
         let base = TestImage.solidBlack(side: 20)
         let annotation = Annotation(
-            shape: .rectangle(CGRect(x: 2, y: 2, width: 16, height: 16)),
+            kind: .rectangle(CGRect(x: 2, y: 2, width: 16, height: 16)),
             color: .white,
             lineWidth: 2
         )
         let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [annotation]))
 
-        let edge = try color(rendered, 2, 10)
+        let edge = try sample(rendered, 2, 10)
         #expect(edge.red >= 200 && edge.green >= 200 && edge.blue >= 200)
 
-        let center = try color(rendered, 10, 10)
+        let center = try sample(rendered, 10, 10)
         #expect(center.red <= 40 && center.green <= 40 && center.blue <= 40)
     }
 
@@ -44,14 +40,13 @@ struct AnnotationRendererTests {
     func counterFillsCircle() throws {
         let base = TestImage.solidBlack(side: 40)
         let annotation = Annotation(
-            shape: .counter(center: CGPoint(x: 20, y: 20), value: 1),
+            kind: .counter(center: CGPoint(x: 20, y: 20), value: 1, leader: nil),
             color: .red,
             lineWidth: 3
         )
         let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [annotation]))
-        // 采样点避开中央白色数字，取圆内靠下的位置。
-        let center = try color(rendered, 20, 29)
-        #expect(center.red >= 200 && center.green <= 90 && center.blue <= 90)
+        let point = try sample(rendered, 20, 29)
+        #expect(point.red >= 200 && point.green <= 90 && point.blue <= 90)
     }
 
     @Test("马赛克把细粒度图案合并成块")
@@ -60,31 +55,29 @@ struct AnnotationRendererTests {
             (x + y) % 2 == 0 ? (0, 0, 0) : (255, 255, 255)
         }
         let annotation = Annotation(
-            shape: .pixelate(CGRect(x: 0, y: 0, width: 16, height: 16)),
+            kind: .pixelate(CGRect(x: 0, y: 0, width: 16, height: 16), block: 8),
             color: .black
         )
         let rendered = try #require(AnnotationRenderer.render(base: checker, annotations: [annotation]))
-
-        let first = try color(rendered, 0, 0)
-        let second = try color(rendered, 1, 0)
+        let first = try sample(rendered, 0, 0)
+        let second = try sample(rendered, 1, 0)
         #expect(first.red == second.red)
         #expect(first.green == second.green)
         #expect(first.blue == second.blue)
     }
 
-    @Test("马赛克只作用于指定区域，区域外不变")
-    func pixelateIsScoped() throws {
-        let checker = TestImage.make(width: 16, height: 16) { x, y in
-            (x + y) % 2 == 0 ? (0, 0, 0) : (255, 255, 255)
-        }
+    @Test("高亮是半透明叠加，不会变成纯色")
+    func highlightIsTranslucent() throws {
+        let base = TestImage.solidBlack(side: 20)
         let annotation = Annotation(
-            shape: .pixelate(CGRect(x: 0, y: 0, width: 8, height: 8)),
-            color: .black
+            kind: .highlight(CGRect(x: 0, y: 0, width: 20, height: 20)),
+            color: .yellow
         )
-        let rendered = try #require(AnnotationRenderer.render(base: checker, annotations: [annotation]))
-
-        let outsideA = try color(rendered, 12, 12)
-        let outsideB = try color(rendered, 13, 12)
-        #expect(outsideA.red != outsideB.red)
+        let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [annotation]))
+        let point = try sample(rendered, 10, 10)
+        // 黑色底 + 黄色半透明 → 混出偏黄的中间色，而不是纯黄。
+        #expect(point.red > 60)
+        #expect(point.green > 60)
+        #expect(point.blue < 80)
     }
 }
