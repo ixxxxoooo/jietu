@@ -13,6 +13,8 @@ import SwiftUI
 /// @author ixxxxoooo
 struct AnnotationEditorView: View {
     let baseImage: CGImage
+    /// 就地模式：图片在上、工具栏贴在下方，无窗口边框。
+    var inline = false
     var onCopy: (CGImage) -> Void
     var onSave: (CGImage) -> Void
     /// 参数二为画布在窗口中的全局坐标（供「原地钉图」定位）。
@@ -112,29 +114,26 @@ struct AnnotationEditorView: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Divider()
-            GeometryReader { geo in
-                ScrollView([.horizontal, .vertical]) {
-                    canvas
-                        .frame(width: displayedSize.width, height: displayedSize.height)
-                        .frame(minWidth: geo.size.width, minHeight: geo.size.height)
+        Group {
+            if inline {
+                // 就地模式：图片在上，工具栏贴在下方。
+                VStack(spacing: 0) {
+                    canvasArea
+                    toolbar
                 }
-                .onAppear {
-                    availableSize = geo.size
-                    initializeZoomIfNeeded()
-                }
-                .onChange(of: geo.size) { _, newValue in
-                    availableSize = newValue
-                    if !hasUserZoomed {
-                        zoom = min(1, fitFactor(for: newValue))
-                    }
+            } else {
+                VStack(spacing: 0) {
+                    toolbar
+                    Divider()
+                    canvasArea
                 }
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
-        .frame(minWidth: Self.minWindowWidth, minHeight: Self.minWindowHeight)
+        .background(inline ? Color.clear : Color(nsColor: .windowBackgroundColor))
+        .frame(
+            minWidth: inline ? 320 : Self.minWindowWidth,
+            minHeight: inline ? 200 : Self.minWindowHeight
+        )
         .onAppear {
             ensurePreviewBase()
             installScrollMonitor()
@@ -143,6 +142,26 @@ struct AnnotationEditorView: View {
         .onChange(of: bufferScale) { _, _ in ensurePreviewBase() }
         .sheet(isPresented: $isOCRPresented) {
             OCRResultView(text: ocrText) { isOCRPresented = false }
+        }
+    }
+
+    private var canvasArea: some View {
+        GeometryReader { geo in
+            ScrollView([.horizontal, .vertical]) {
+                canvas
+                    .frame(width: displayedSize.width, height: displayedSize.height)
+                    .frame(minWidth: geo.size.width, minHeight: geo.size.height)
+            }
+            .onAppear {
+                availableSize = geo.size
+                initializeZoomIfNeeded()
+            }
+            .onChange(of: geo.size) { _, newValue in
+                availableSize = newValue
+                if !hasUserZoomed {
+                    zoom = inline ? 1 : min(1, fitFactor(for: newValue))
+                }
+            }
         }
     }
 
@@ -183,7 +202,7 @@ struct AnnotationEditorView: View {
                     }
             }
         )
-        .padding(Self.padding)
+        .padding(inline ? 0 : Self.padding)
     }
 
     /// 选中态：包围盒 + 控制点。
@@ -342,7 +361,7 @@ struct AnnotationEditorView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .frame(
-            minWidth: Self.minWindowWidth,
+            minWidth: inline ? 0 : Self.minWindowWidth,
             maxWidth: .infinity,
             minHeight: Self.toolbarHeight,
             maxHeight: Self.toolbarHeight
@@ -812,7 +831,7 @@ struct AnnotationEditorView: View {
     private func initializeZoomIfNeeded() {
         guard !hasInitialized else { return }
         hasInitialized = true
-        zoom = min(1, fitFactor(for: availableSize))
+        zoom = inline ? 1 : min(1, fitFactor(for: availableSize))
     }
 
     private func zoomIn() {

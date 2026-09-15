@@ -34,11 +34,14 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
             return
         }
 
+        let inline = (anchor?.width ?? 0) > 1 && (anchor?.height ?? 0) > 1
+
         previousActivationPolicy = NSApp.activationPolicy()
         NSApp.setActivationPolicy(.regular)
 
         let root = AnnotationEditorView(
             baseImage: image,
+            inline: inline,
             onCopy: { [weak self] rendered in self?.onCopy?(rendered) },
             onSave: { [weak self] rendered in self?.onSave?(rendered) },
             onPin: { [weak self] rendered, frame in
@@ -47,31 +50,91 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
             onClose: { [weak self] in self?.close() }
         )
         let hosting = NSHostingView(rootView: root)
-        let size = AnnotationEditorView.initialWindowSize(for: image, screen: NSScreen.main)
+
+        let size = inline
+            ? inlineWindowSize(for: image)
+            : AnnotationEditorView.initialWindowSize(for: image, screen: NSScreen.main)
         hosting.frame = NSRect(origin: .zero, size: size)
 
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.titled, .closable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "标注"
+        let window: NSWindow
+        if inline {
+            // 无边框：图片在上、工具栏贴在下，直接贴着选区，看起来像「就地编辑」。
+            let keyable = KeyableBorderlessWindow(
+                contentRect: NSRect(origin: .zero, size: size),
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            keyable.isOpaque = false
+            keyable.backgroundColor = .clear
+            keyable.hasShadow = true
+            keyable.level = .floating
+            window = keyable
+        } else {
+            window = NSWindow(
+                contentRect: NSRect(origin: .zero, size: size),
+                styleMask: [.titled, .closable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "标注"
+            window.contentMinSize = NSSize(
+                width: AnnotationEditorView.minWindowWidth,
+                height: AnnotationEditorView.minWindowHeight
+            )
+        }
         window.isReleasedWhenClosed = false
-        // 深色外观：与悬浮工具栏风格统一。
         window.appearance = NSAppearance(named: .darkAqua)
-        window.contentMinSize = NSSize(
-            width: AnnotationEditorView.minWindowWidth,
-            height: AnnotationEditorView.minWindowHeight
-        )
         window.contentView = hosting
-        positionWindow(window, size: size)
+        if inline {
+            positionInline(window, size: size)
+        } else {
+            positionWindow(window, size: size)
+        }
         window.delegate = self
         self.window = window
 
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         NSApp.activate()
+    }
+
+    /// 就地编辑窗口尺寸：图片原始大小 + 底部工具栏。
+    private func inlineWindowSize(for image: CGImage) -> CGSize {
+        let scale = max(1, anchorScreen()?.backingScaleFactor ?? 2)
+        let imageSize = CGSize(
+            width: CGFloat(image.width) / scale,
+            height: CGFloat(image.height) / scale
+        )
+        let width = max(imageSize.width, 620)
+        return CGSize(width: width, height: imageSize.height + AnnotationEditorView.toolbarHeight)
+    }
+
+    /// 就地编辑：让图片区域正好覆盖选区，工具栏落在选区下方。
+    private func positionInline(_ window: NSWindow, size: CGSize) {
+        guard let anchor else {
+            window.center()
+            return
+        }
+        let screen = anchorScreen() ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let imageHeight = size.height - AnnotationEditorView.toolbarHeight
+        var origin = CGPoint(
+            x: anchor.midX - size.width / 2,
+            y: anchor.maxY - size.height
+        )
+        origin.x = min(max(origin.x, visible.minX), visible.maxX - size.width)
+        origin.y = min(
+            max(origin.y, visible.minY),
+            visible.maxY - size.height
+        )
+        _ = imageHeight
+        window.setFrame(NSRect(origin: origin, size: size), display: false)
+    }
+
+    private func anchorScreen() -> NSScreen? {
+        guard let anchor else { return NSScreen.main }
+        return NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main
     }
 
     func close() {
@@ -133,4 +196,12 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
         restoreActivationPolicy()
         onClose?()
     }
+}
+
+/// 无边框但可成为 key window（否则收不到键盘事件）。
+///
+/// @author ixxxxoooo
+final class KeyableBorderlessWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 }
