@@ -44,7 +44,13 @@ struct QuickAccessView: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: Self.cardWidth, height: Self.cardHeight)
                 .blur(radius: isHovering ? 16 : 0)
-                .background(Color.black.opacity(0.28))
+                // 磨砂底 + 较实的深色：默认就不透明，悬停更实。
+                .background(
+                    ZStack {
+                        VisualEffectBackground(material: .hudWindow)
+                        Color.black.opacity(isHovering ? 0.78 : 0.62)
+                    }
+                )
                 // 手势只挂在图片上：按钮在更上层，点按钮不会触发这里。
                 .contentShape(Rectangle())
                 .onTapGesture { onAnnotate() }
