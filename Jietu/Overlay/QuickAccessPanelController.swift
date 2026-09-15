@@ -50,6 +50,7 @@ final class QuickAccessPanelController {
     var onSave: ((CGImage) -> Void)?
     var onAnnotate: ((CGImage) -> Void)?
     var onPin: ((CGImage) -> Void)?
+    var onOCR: ((CGImage) -> Void)?
     var onDismiss: (() -> Void)?
 
     var isVisible: Bool { !entries.isEmpty }
@@ -74,6 +75,7 @@ final class QuickAccessPanelController {
                 self?.onAnnotate?(image)
             },
             onPin: { [weak self] in self?.onPin?(image) },
+            onOCR: { [weak self] in self?.onOCR?(image) },
             onClose: { [weak self] in self?.dismissEntry(id, animated: true) },
             onHoverChange: { [weak self] hovering in self?.setHover(id, hovering) },
             dragProvider: { [weak self] in

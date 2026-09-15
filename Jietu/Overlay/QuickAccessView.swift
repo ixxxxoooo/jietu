@@ -3,8 +3,8 @@ import SwiftUI
 
 /// 截图后的浮动预览（Quick Access Overlay）。
 ///
-/// 只展示图片预览本身（尺寸 / 体积等信息不再显示）。功能按钮放在四角、
-/// 保存居中，且**仅鼠标悬停时出现**。按钮使用 macOS 26 的 Liquid Glass 材质。
+/// 默认只显示图片预览本身；鼠标移入时**压暗图片**并浮出操作按钮：
+/// 四角为圆形图标（关闭 / 钉图 / 标注 / 文字识别），中间两条胶囊按钮（复制 / 保存）。
 /// 点击图片打开标注编辑器，拖拽图片可导出。
 ///
 /// @author ixxxxoooo
@@ -14,6 +14,7 @@ struct QuickAccessView: View {
     var onSave: () -> Void
     var onAnnotate: () -> Void
     var onPin: () -> Void
+    var onOCR: () -> Void
     var onClose: () -> Void
     var onHoverChange: (Bool) -> Void
     /// 拖拽导出用：向外提供 PNG 文件。
@@ -38,65 +39,90 @@ struct QuickAccessView: View {
     }
 
     private var imageCard: some View {
-        Image(nsImage: image)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: Self.cardWidth, height: Self.cardHeight)
-            .background(Color.black.opacity(0.28))
-            .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
-            )
-            .overlay { overlayControls }
-            .contentShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
-            .onTapGesture { onAnnotate() }
-            .onDrag { dragProvider() }
-            .shadow(color: .black.opacity(0.34), radius: 12, y: 5)
-            .help("点击打开标注编辑器，拖拽到其它 App 或文件夹可导出")
-            .onHover { hovering in
-                isHovering = hovering
-                onHoverChange(hovering)
-            }
+        ZStack {
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: Self.cardWidth, height: Self.cardHeight)
+                .background(Color.black.opacity(0.28))
+
+            // 悬停时压暗图片，让按钮更清晰。
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+                .fill(Color.black.opacity(isHovering ? 0.36 : 0))
+                .allowsHitTesting(false)
+
+            controls
+        }
+        .frame(width: Self.cardWidth, height: Self.cardHeight)
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+                .strokeBorder(
+                    isHovering ? Theme.brand.opacity(0.9) : Color.white.opacity(0.10),
+                    lineWidth: isHovering ? 2 : 0.5
+                )
+        )
+        .contentShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .onTapGesture { onAnnotate() }
+        .onDrag { dragProvider() }
+        .shadow(color: .black.opacity(0.34), radius: 12, y: 5)
+        .help("点击打开标注编辑器，拖拽到其它 App 或文件夹可导出")
+        .animation(.easeOut(duration: 0.14), value: isHovering)
+        .onHover { hovering in
+            isHovering = hovering
+            onHoverChange(hovering)
+        }
     }
 
-    /// 四角功能按钮 + 正中保存，仅悬停时出现。
-    private var overlayControls: some View {
+    /// 四角圆形图标 + 中间两条胶囊按钮，仅悬停时出现。
+    private var controls: some View {
         ZStack {
-            saveButton
+            VStack(spacing: 8) {
+                pillButton("复制", symbol: "doc.on.doc", action: onCopy)
+                pillButton("保存", symbol: "square.and.arrow.down", action: onSave)
+            }
+
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    cornerButton("复制", symbol: "doc.on.doc", action: onCopy)
+                    circleButton("关闭", symbol: "xmark", action: onClose)
                     Spacer(minLength: 0)
-                    cornerButton("标注", symbol: "pencil.tip.crop.circle", action: onAnnotate)
+                    circleButton("钉图", symbol: "pin", action: onPin)
                 }
                 Spacer(minLength: 0)
                 HStack(spacing: 0) {
-                    cornerButton("钉图", symbol: "pin", action: onPin)
+                    circleButton("标注", symbol: "pencil.tip.crop.circle", action: onAnnotate)
                     Spacer(minLength: 0)
-                    cornerButton("关闭", symbol: "xmark", action: onClose)
+                    circleButton("文字识别", symbol: "text.viewfinder", action: onOCR)
                 }
             }
         }
-        .padding(6)
+        .padding(8)
         .opacity(isHovering ? 1 : 0)
         .allowsHitTesting(isHovering)
-        .animation(.easeOut(duration: 0.12), value: isHovering)
     }
 
-    private var saveButton: some View {
-        Button(action: onSave) {
-            Image(systemName: "square.and.arrow.down")
-                .font(.system(size: 16, weight: .semibold))
-                .frame(width: 42, height: 42)
-                .foregroundStyle(.white)
+    private func pillButton(
+        _ title: String,
+        symbol: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .foregroundStyle(.white)
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
-        .help("保存到磁盘")
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .help(title)
     }
 
-    private func cornerButton(
+    private func circleButton(
         _ title: String,
         symbol: String,
         action: @escaping () -> Void
