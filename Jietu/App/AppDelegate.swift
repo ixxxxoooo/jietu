@@ -129,6 +129,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlays.onFinish = { [weak self] outcome in
             self?.handleOverlayOutcome(outcome)
         }
+        overlays.onSaveImage = { [weak self] image in
+            self?.save(image)
+        }
+        overlays.onPinImage = { image in
+            PinWindowController.pin(image: image, on: NSScreen.main)
+        }
     }
 
     // MARK: - Capture flow

@@ -22,6 +22,9 @@ final class OverlayCoordinator {
     private var previousApplication: NSRunningApplication?
 
     var onFinish: ((Outcome) -> Void)?
+    /// 就地工具栏的下载 / 钉图。
+    var onSaveImage: ((CGImage) -> Void)?
+    var onPinImage: ((CGImage) -> Void)?
 
     var isPresenting: Bool { !controllers.isEmpty }
 
@@ -54,6 +57,13 @@ final class OverlayCoordinator {
             }
             controller.onCommitAnnotated = { [weak self] image, rect in
                 self?.commitAnnotated(image: image, snapshot: snapshot, localRect: rect)
+            }
+            controller.onSaveImage = { [weak self] image in
+                self?.onSaveImage?(image)
+            }
+            controller.onPinImage = { [weak self] image in
+                self?.onPinImage?(image)
+                self?.finish(.cancelled, reason: "pin")
             }
             controllers.append(controller)
         }

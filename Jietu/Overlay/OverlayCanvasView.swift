@@ -62,6 +62,9 @@ final class OverlayCanvasView: NSView {
     var onCommitAnnotated: ((CGImage, CGRect) -> Void)?
     /// 进入就地标注时通知 Coordinator（用于同步其它显示器的状态）。
     var onInlineEditingChanged: ((Bool) -> Void)?
+    /// 就地工具栏的「下载 / 钉图」回调（传入已烘焙标注的图）。
+    var onSaveImage: ((CGImage) -> Void)?
+    var onPinImage: ((CGImage) -> Void)?
 
     private enum Phase {
         case selecting
@@ -534,10 +537,14 @@ final class OverlayCanvasView: NSView {
         let pixel = snapshot.pixelPoint(fromLocalPoint: cursorPoint)
         updateMagnifierContents(pixel: pixel, size: size)
 
-        // 跟随光标，贴边时自动翻转。
-        var origin = CGPoint(x: cursorPoint.x + 28, y: cursorPoint.y - size / 2)
-        if origin.x + size > bounds.maxX {
-            origin.x = cursorPoint.x - 28 - size
+        // 跟在光标的右上角，贴边时自动翻到另一侧。
+        let gap: CGFloat = 16
+        var origin = CGPoint(x: cursorPoint.x + gap, y: cursorPoint.y + gap)
+        if origin.x + size > bounds.maxX - 8 {
+            origin.x = cursorPoint.x - gap - size
+        }
+        if origin.y + size > bounds.maxY - 8 {
+            origin.y = cursorPoint.y - gap - size
         }
         origin.x = min(max(origin.x, bounds.minX + 8), bounds.maxX - size - 8)
         origin.y = min(max(origin.y, bounds.minY + 8), bounds.maxY - size - 8)
@@ -617,10 +624,7 @@ final class OverlayCanvasView: NSView {
         let textWidth = max(60, CGFloat(text.count) * 7.0)
         let pillWidth = 7 + swatchSize + 6 + textWidth + 8
         let pillOrigin = CGPoint(
-            x: min(
-                max(circleFrame.midX - pillWidth / 2, bounds.minX + 6),
-                bounds.maxX - pillWidth - 6
-            ),
+            x: min(max(circleFrame.minX, bounds.minX + 6), bounds.maxX - pillWidth - 6),
             y: max(circleFrame.minY - height - 6, bounds.minY + 6)
         )
         let pillFrame = CGRect(
@@ -1008,6 +1012,15 @@ final class OverlayCanvasView: NSView {
         updateAllLayers()
     }
 
+    /// 当前「已烘焙标注」的成图（用于下载 / 钉图）。
+    private func currentAnnotatedImage() -> CGImage? {
+        commitPendingInlineText()
+        guard let selection, let crop = CaptureOutput.crop(snapshot, toLocalRect: selection) else {
+            return nil
+        }
+        return AnnotationRenderer.render(base: crop, annotations: annotations) ?? crop
+    }
+
     private func confirmInline() {
         guard let selection, let crop = CaptureOutput.crop(snapshot, toLocalRect: selection) else {
             cancelInline()
@@ -1226,6 +1239,14 @@ final class OverlayCanvasView: NSView {
         model.onCancel = { [weak self] in self?.onCancel?() }
         model.onUndo = { [weak self] in self?.inlineUndo() }
         model.onRedo = { [weak self] in self?.inlineRedo() }
+        model.onSave = { [weak self] in
+            guard let self, let image = self.currentAnnotatedImage() else { return }
+            self.onSaveImage?(image)
+        }
+        model.onPin = { [weak self] in
+            guard let self, let image = self.currentAnnotatedImage() else { return }
+            self.onPinImage?(image)
+        }
         toolbarModel = model
 
         // 主工具栏：固定尺寸，永不重算 → 展开选项时也不闪烁。

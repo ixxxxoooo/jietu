@@ -18,6 +18,8 @@ final class InlineToolbarModel {
 
     var onUndo: (() -> Void)?
     var onRedo: (() -> Void)?
+    var onSave: (() -> Void)?
+    var onPin: (() -> Void)?
     var onConfirm: (() -> Void)?
     var onCancel: (() -> Void)?
 }
@@ -55,6 +57,8 @@ struct InlineMainToolbar: View {
 
             Spacer(minLength: 12)
 
+            iconButton("下载", symbol: "square.and.arrow.down") { model.onSave?() }
+            iconButton("钉图", symbol: "pin") { model.onPin?() }
             iconButton("取消", symbol: "xmark", tint: .red) { model.onCancel?() }
             iconButton("确认", symbol: "checkmark", tint: .green) { model.onConfirm?() }
         }

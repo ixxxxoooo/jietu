@@ -24,6 +24,16 @@ final class OverlayWindowController {
     /// 是否正在就地标注（Esc 归属判断）。
     var isInlineEditing: Bool { canvas.isAnnotationPhase }
 
+    /// 就地工具栏「下载 / 钉图」。
+    var onSaveImage: ((CGImage) -> Void)? {
+        get { canvas.onSaveImage }
+        set { canvas.onSaveImage = newValue }
+    }
+    var onPinImage: ((CGImage) -> Void)? {
+        get { canvas.onPinImage }
+        set { canvas.onPinImage = newValue }
+    }
+
     /// 本遮罩覆盖的显示器 AppKit 全局范围，用来判断鼠标落在哪块屏。
     var screenFrame: CGRect { window.frame }
 
