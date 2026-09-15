@@ -8,7 +8,7 @@ import SwiftUI
 final class InlineToolbarModel {
     var tool: AnnotationTool = .rectangle
     var color: RGBAColor = .red
-    var lineWidth: CGFloat = 3
+    var lineWidth: CGFloat = 8
     /// 是否已有选区（决定 ✓ 是否可用）。
     var canConfirm = false
 
@@ -71,6 +71,8 @@ struct InlineAnnotationToolbar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+        // 固定宽度：否则 NSHostingView 的 fittingSize 会算窄，内容被裁切。
+        .frame(width: 700)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.black.opacity(0.82))

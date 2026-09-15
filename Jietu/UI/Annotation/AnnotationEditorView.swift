@@ -34,7 +34,7 @@ struct AnnotationEditorView: View {
 
     @State private var tool: AnnotationTool = .rectangle
     @State private var color: RGBAColor = .red
-    @State private var lineWidth: CGFloat = 3
+    @State private var lineWidth: CGFloat = 8
     @State private var fontSize: CGFloat = 22
     @State private var mosaicBlock: CGFloat = 10
     @State private var counterValue = 1
