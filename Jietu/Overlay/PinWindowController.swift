@@ -59,7 +59,7 @@ final class PinWindowController: NSObject {
         }
 
         content = PinContentView(frame: NSRect(origin: .zero, size: frame.size), image: image)
-        window = NSWindow(
+        window = PinPanel(
             contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -72,7 +72,8 @@ final class PinWindowController: NSObject {
         window.backgroundColor = .clear
         window.hasShadow = true
         window.level = .floating
-        window.isMovableByWindowBackground = false
+        // 交给系统做「拖动窗口」，我们只额外处理边缘缩放。
+        window.isMovableByWindowBackground = true
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         window.hidesOnDeactivate = false
         window.animationBehavior = .none
@@ -98,6 +99,14 @@ final class PinWindowController: NSObject {
         PinWindowController.controllers.removeAll { $0 === self }
     }
 
+}
+
+/// 无边框但可成为 key 的钉图面板。
+///
+/// @author ixxxxoooo
+final class PinPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 }
 
 /// 钉图的绘制与交互载体。
