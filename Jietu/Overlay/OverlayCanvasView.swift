@@ -149,11 +149,11 @@ final class OverlayCanvasView: NSView {
         dimLayer.frame = bounds
         root.addSublayer(dimLayer)
 
-        // 吸附预览：压暗层已经把窗口挖空，这一层只负责淡绿色染色 + 描边。
+        // 吸附预览（自动识别窗口边界）：绿色粗线描边。
         windowHighlightLayer.fillColor = NSColor(Theme.selectionGreen)
-            .withAlphaComponent(0.10).cgColor
+            .withAlphaComponent(0.06).cgColor
         windowHighlightLayer.strokeColor = NSColor(Theme.selectionGreen).cgColor
-        windowHighlightLayer.lineWidth = 1.5
+        windowHighlightLayer.lineWidth = 3
         windowHighlightLayer.isHidden = true
         windowHighlightLayer.frame = bounds
         root.addSublayer(windowHighlightLayer)
@@ -757,17 +757,16 @@ final class OverlayCanvasView: NSView {
 
         switch interaction {
         case .pressing:
-            // 没拖动 = 单击：命中窗口就选整窗，否则回到空闲。
-            // 选中后不再有蓝色高亮，只保留选区边框（与框选一致）。
+            // 单击：命中窗口就**贴边截取**（配合悬停的绿色粗线吸附）。
             if let hoveredWindow {
                 selection = DisplayGeometry.localRect(
                     fromCGRect: hoveredWindow.frameInCGPoints,
                     screen: screen
                 ).intersection(canvasBounds)
-                interaction = .settled
-            } else {
-                interaction = .idle
+                commit()
+                return
             }
+            interaction = .idle
         case .selecting:
             if let rect = selection,
                 rect.width >= Theme.minimumSelectionSize,
