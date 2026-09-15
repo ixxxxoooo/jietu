@@ -145,6 +145,17 @@ final class PinContentView: NSView {
         layer?.cornerRadius = 10
         layer?.masksToBounds = true
         configureLiveTextButton()
+
+        let doubleClick = NSClickGestureRecognizer(
+            target: self,
+            action: #selector(handleDoubleClick)
+        )
+        doubleClick.numberOfClicksRequired = 2
+        addGestureRecognizer(doubleClick)
+    }
+
+    @objc private func handleDoubleClick() {
+        onRequestClose?()
     }
 
     @available(*, unavailable)

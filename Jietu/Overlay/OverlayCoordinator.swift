@@ -29,6 +29,17 @@ final class OverlayCoordinator {
 
     var isPresenting: Bool { !controllers.isEmpty }
 
+    /// 临时隐藏 / 恢复所有遮罩窗（例如弹系统保存面板时，否则会被遮罩挡住）。
+    func setOverlayHidden(_ hidden: Bool) {
+        for controller in controllers {
+            if hidden {
+                controller.window.orderOut(nil)
+            } else {
+                controller.window.orderFrontRegardless()
+            }
+        }
+    }
+
     func present(session: CaptureSession, inlineMode: Bool) {
         guard !isPresenting else { return }
         guard !session.snapshots.isEmpty else { return }

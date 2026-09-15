@@ -143,7 +143,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.handleOverlayOutcome(outcome)
         }
         overlays.onSaveImage = { [weak self] image in
-            self?.save(image)
+            guard let self else { return }
+            // 遮罩窗在最上层，保存面板会被挡住：先隐藏，存完再恢复。
+            self.overlays.setOverlayHidden(true)
+            self.saveAs(image)
+            self.overlays.setOverlayHidden(false)
         }
         overlays.onPinImage = { image, screenRect in
             PinWindowController.pin(image: image, on: NSScreen.main, targetFrame: screenRect)
