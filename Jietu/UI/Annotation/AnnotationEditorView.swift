@@ -324,19 +324,17 @@ struct AnnotationEditorView: View {
     }
 
     private var toolbar: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(spacing: 0) {
             mainBar
             if showColor || showWidth {
+                Divider()
                 optionsBar
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .frame(minWidth: inline ? 0 : Self.minWindowWidth, maxWidth: .infinity, alignment: .leading)
     }
 
     private var mainBar: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             ForEach(AnnotationTool.allCases) { item in
                 toolButton(item)
             }
@@ -366,7 +364,7 @@ struct AnnotationEditorView: View {
             iconButton(
                 "识别文字",
                 symbol: "text.viewfinder",
-                tint: isLiveTextActive ? Theme.selectionGreen : .white
+                tint: isLiveTextActive ? Theme.brand : .primary
             ) {
                 if isLiveTextActive {
                     isLiveTextActive = false
@@ -378,25 +376,26 @@ struct AnnotationEditorView: View {
             iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
             iconButton("保存", symbol: "square.and.arrow.down") { exportToSave() }
             iconButton("钉图", symbol: "pin") { exportToPin() }
-            iconButton("关闭", symbol: "xmark", tint: .red) { onClose() }
+            iconButton("关闭", symbol: "xmark") { onClose() }
                 .keyboardShortcut(.cancelAction)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .fixedSize()
-        .background(toolbarBar)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// 点开颜色 / 粗细后出现的第二行（独立一条）。
+    /// 点开颜色 / 粗细后出现的第二行（同样通栏，与窗口风格一致）。
     @ViewBuilder
     private var optionsBar: some View {
         HStack(spacing: 14) {
             if showWidth {
                 HStack(spacing: 8) {
-                    Text(model_toolIsEraser ? "橡皮" : "\(Int(lineWidth))")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 34, alignment: .trailing)
+                    Text(model_toolIsEraser ? "橡皮" : "粗细")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Text("\(Int(lineWidth))")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .frame(width: 22, alignment: .trailing)
                     Slider(value: $lineWidth, in: 1...24)
                         .frame(width: 170)
                         .onChange(of: lineWidth) { _, value in
@@ -413,7 +412,7 @@ struct AnnotationEditorView: View {
                         } label: {
                             Circle()
                                 .fill(swatch.swiftUIColor)
-                                .frame(width: 20, height: 20)
+                                .frame(width: 18, height: 18)
                                 .overlay(
                                     Circle().strokeBorder(
                                         color == swatch
@@ -429,20 +428,9 @@ struct AnnotationEditorView: View {
             contextualStyleControls
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .fixedSize()
-        .background(toolbarBar)
-    }
-
-    /// 普通窗口风格的工具栏底：不透明系统底 + 细描边（不用磨砂）。
-    private var toolbarBar: some View {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
-            )
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var model_toolIsEraser: Bool { tool == .eraser }
