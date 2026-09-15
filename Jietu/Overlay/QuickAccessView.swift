@@ -14,7 +14,6 @@ struct QuickAccessView: View {
     var onSave: () -> Void
     var onAnnotate: () -> Void
     var onPin: () -> Void
-    var onOCR: () -> Void
     var onClose: () -> Void
     var onHoverChange: (Bool) -> Void
     /// 拖拽导出用：向外提供 PNG 文件。
@@ -44,12 +43,8 @@ struct QuickAccessView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: Self.cardWidth, height: Self.cardHeight)
+                .blur(radius: isHovering ? 16 : 0)
                 .background(Color.black.opacity(0.28))
-
-            // 悬停时压暗图片，让按钮更清晰。
-            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                .fill(Color.black.opacity(isHovering ? 0.36 : 0))
-                .allowsHitTesting(false)
 
             controls
         }
@@ -92,7 +87,6 @@ struct QuickAccessView: View {
                 HStack(spacing: 0) {
                     circleButton("标注", symbol: "pencil.tip.crop.circle", action: onAnnotate)
                     Spacer(minLength: 0)
-                    circleButton("文字识别", symbol: "text.viewfinder", action: onOCR)
                 }
             }
         }

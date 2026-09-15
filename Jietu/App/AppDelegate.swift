@@ -126,9 +126,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickAccess.onPin = { image in
             PinWindowController.pin(image: image, on: NSScreen.main)
         }
-        quickAccess.onOCR = { [weak self] image in
-            self?.recognizeText(image)
-        }
         overlays.onFinish = { [weak self] outcome in
             self?.handleOverlayOutcome(outcome)
         }
@@ -304,26 +301,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             logger.notice("saved capture to \(url.path, privacy: .public)")
         } catch {
             logger.error("save failed: \(error.localizedDescription)")
-        }
-    }
-
-    /// OCR：识别截图里的文字，复制到剪贴板并弹窗展示。
-    private func recognizeText(_ image: CGImage) {
-        Task { @MainActor in
-            let text = await OCRService.recognizeText(in: image)
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            if !text.isEmpty {
-                pasteboard.setString(text, forType: .string)
-            }
-
-            NSApp.activate()
-            let alert = NSAlert()
-            alert.alertStyle = .informational
-            alert.messageText = text.isEmpty ? "没有识别到文字" : "已识别文字（已复制到剪贴板）"
-            alert.informativeText = text.isEmpty ? "" : String(text.prefix(800))
-            alert.addButton(withTitle: "好")
-            alert.runModal()
         }
     }
 
