@@ -1196,74 +1196,6 @@ final class OverlayCanvasView: NSView {
         return annotations.last { $0.contains(cropPoint, tolerance: tolerance) }
     }
 
-    private func inlineSelectMouseDown(_ cropPoint: CGPoint, clickCount: Int) {
-        commitPendingInlineText()
-
-        if let selected = selectedAnnotation,
-            let handle = inlineHitHandle(selected, at: cropPoint)
-        {
-            redoAnnotations.removeAll()
-            switch handle {
-            case .rotate:
-                let angle = atan2(
-                    cropPoint.y - selected.center.y,
-                    cropPoint.x - selected.center.x
-                )
-                inlineEditDrag = .rotating(id: selected.id, startAngle: angle, original: selected)
-            case .arrowStart, .arrowEnd, .arrowControl, .counterLeader:
-                inlineEditDrag = .endpoint(id: selected.id, handle: handle, original: selected)
-            default:
-                inlineEditDrag = .resizing(id: selected.id, handle: handle, original: selected)
-            }
-            return
-        }
-
-        if let hit = inlineAnnotation(at: cropPoint) {
-            selectedID = hit.id
-            if clickCount >= 2, case .text = hit.kind {
-                beginInlineText(at: textOrigin(of: hit), editing: hit)
-                inlineEditDrag = .none
-                updateInlineSelectionLayers()
-                return
-            }
-            redoAnnotations.removeAll()
-            inlineEditDrag = .moving(id: hit.id, start: cropPoint, original: hit)
-            updateInlineSelectionLayers()
-            return
-        }
-
-        selectedID = nil
-        inlineEditDrag = .none
-        updateInlineSelectionLayers()
-    }
-
-    private func inlineSelectMouseDragged(_ cropPoint: CGPoint) {
-        switch inlineEditDrag {
-        case .none:
-            break
-        case .moving(let id, let start, let original):
-            let delta = CGSize(width: cropPoint.x - start.x, height: cropPoint.y - start.y)
-            updateAnnotation(id) { _ in original.translated(by: delta) }
-        case .resizing(let id, let handle, let original):
-            updateAnnotation(id) { _ in
-                original.resized(handle: handle, to: cropPoint, lockAspect: false)
-            }
-        case .rotating(let id, let startAngle, let original):
-            let angle = atan2(cropPoint.y - original.center.y, cropPoint.x - original.center.x)
-            updateAnnotation(id) { _ in original.rotated(by: angle - startAngle) }
-        case .endpoint(let id, let handle, let original):
-            updateAnnotation(id) { _ in original.withEndpoint(handle, to: cropPoint) }
-        }
-        updateAnnotationLayer()
-        updateInlineSelectionLayers()
-    }
-
-    private func inlineSelectMouseUp() {
-        if case .none = inlineEditDrag { return }
-        inlineEditDrag = .none
-        updateInlineSelectionLayers()
-    }
-
     private func textOrigin(of annotation: Annotation) -> CGPoint {
         if case .text(let origin, _, _) = annotation.kind { return origin }
         return annotation.center
@@ -1394,56 +1326,116 @@ final class OverlayCanvasView: NSView {
         }
     }
 
+    /// 统一的就地鼠标处理：先命中已有对象（任意工具下都可编辑），空白处才新建。
     private func inlineMouseDown(_ point: CGPoint, clickCount: Int) {
-        if toolbarModel?.tool == .select {
-            inlineSelectMouseDown(annotationPoint(from: point), clickCount: clickCount)
+        let crop = annotationPoint(from: point)
+        let tool = toolbarModel?.tool ?? .rectangle
+
+        // 1) 选中对象 + 命中控制点 → 缩放 / 旋转 / 端点
+        if let selected = selectedAnnotation,
+            let handle = inlineHitHandle(selected, at: crop)
+        {
+            redoAnnotations.removeAll()
+            switch handle {
+            case .rotate:
+                let angle = atan2(crop.y - selected.center.y, crop.x - selected.center.x)
+                inlineEditDrag = .rotating(id: selected.id, startAngle: angle, original: selected)
+            case .arrowStart, .arrowEnd, .arrowControl, .counterLeader:
+                inlineEditDrag = .endpoint(id: selected.id, handle: handle, original: selected)
+            default:
+                inlineEditDrag = .resizing(id: selected.id, handle: handle, original: selected)
+            }
             return
         }
+
+        // 2) 命中已有标注 → 选中并移动（不区分当前工具，和编辑窗口一致）
+        if let hit = inlineAnnotation(at: crop) {
+            selectedID = hit.id
+            if clickCount >= 2, case .text = hit.kind {
+                beginInlineText(at: textOrigin(of: hit), editing: hit)
+                inlineEditDrag = .none
+                updateInlineSelectionLayers()
+                return
+            }
+            redoAnnotations.removeAll()
+            inlineEditDrag = .moving(id: hit.id, start: crop, original: hit)
+            updateInlineSelectionLayers()
+            return
+        }
+
+        // 3) 空白：清空选中；若当前是绘制工具则开始新标注
+        selectedID = nil
+        inlineEditDrag = .none
+        updateInlineSelectionLayers()
+        guard tool.isDrawing else { return }
+
         commitPendingInlineText()
-        inlineStart = annotationPoint(from: point)
+        inlineStart = crop
         inlineDragging = true
-        annotationDraft = makeInlineDraft(start: inlineStart, current: inlineStart)
+        annotationDraft = makeInlineDraft(start: crop, current: crop)
         updateAnnotationLayer()
     }
 
     private func inlineMouseDragged(_ point: CGPoint) {
-        if toolbarModel?.tool == .select {
-            inlineSelectMouseDragged(annotationPoint(from: point))
+        let crop = annotationPoint(from: point)
+
+        if inlineDragging, let model = toolbarModel {
+            if model.tool == .pen, case .pen(var points) = annotationDraft?.kind {
+                points.append(crop)
+                annotationDraft?.kind = .pen(points: points)
+            } else {
+                annotationDraft = makeInlineDraft(start: inlineStart, current: crop)
+            }
+            updateAnnotationLayer()
             return
         }
-        guard inlineDragging, let model = toolbarModel else { return }
-        let current = annotationPoint(from: point)
-        if model.tool == .pen, case .pen(var points) = annotationDraft?.kind {
-            points.append(current)
-            annotationDraft?.kind = .pen(points: points)
-        } else {
-            annotationDraft = makeInlineDraft(start: inlineStart, current: current)
+
+        switch inlineEditDrag {
+        case .none:
+            break
+        case .moving(let id, let start, let original):
+            let delta = CGSize(width: crop.x - start.x, height: crop.y - start.y)
+            updateAnnotation(id) { _ in original.translated(by: delta) }
+        case .resizing(let id, let handle, let original):
+            updateAnnotation(id) { _ in
+                original.resized(handle: handle, to: crop, lockAspect: false)
+            }
+        case .rotating(let id, let startAngle, let original):
+            let angle = atan2(crop.y - original.center.y, crop.x - original.center.x)
+            updateAnnotation(id) { _ in original.rotated(by: angle - startAngle) }
+        case .endpoint(let id, let handle, let original):
+            updateAnnotation(id) { _ in original.withEndpoint(handle, to: crop) }
         }
         updateAnnotationLayer()
+        updateInlineSelectionLayers()
     }
 
     private func inlineMouseUp(_ point: CGPoint) {
-        if toolbarModel?.tool == .select {
-            inlineSelectMouseUp()
-            return
-        }
-        guard inlineDragging, let model = toolbarModel else { return }
-        inlineDragging = false
-        let current = annotationPoint(from: point)
+        let crop = annotationPoint(from: point)
 
-        if model.tool == .text {
+        if inlineDragging, let model = toolbarModel {
+            inlineDragging = false
+            if model.tool == .text {
+                annotationDraft = nil
+                updateAnnotationLayer()
+                beginInlineText(at: inlineStart)
+                return
+            }
+            if let draft = annotationDraft, isValidInlineDraft(draft) {
+                annotations.append(draft)
+                selectedID = draft.id
+                redoAnnotations.removeAll()
+                if case .counter = draft.kind { inlineCounterValue += 1 }
+            }
             annotationDraft = nil
             updateAnnotationLayer()
-            beginInlineText(at: inlineStart)
+            updateInlineSelectionLayers()
             return
         }
-        if let draft = annotationDraft, isValidInlineDraft(draft) {
-            annotations.append(draft)
-            redoAnnotations.removeAll()
-            if case .counter = draft.kind { inlineCounterValue += 1 }
-        }
-        annotationDraft = nil
-        updateAnnotationLayer()
+
+        if case .none = inlineEditDrag { return }
+        inlineEditDrag = .none
+        updateInlineSelectionLayers()
     }
 
     // MARK: Inline text field
@@ -1465,7 +1457,9 @@ final class OverlayCanvasView: NSView {
         }
 
         let view = viewPoint(fromAnnotation: cropPoint)
-        let font = NSFont.systemFont(ofSize: max(12, model.lineWidth * 6))
+        // 标注字号是图像像素，输入框用屏幕点大小，需要除以缩放。
+        let pointSize = max(11, model.lineWidth * 6 / max(1, snapshot.effectiveScale))
+        let font = NSFont.systemFont(ofSize: pointSize)
         let field = NSTextField(
             frame: CGRect(x: view.x, y: view.y - 16, width: 220, height: 30)
         )

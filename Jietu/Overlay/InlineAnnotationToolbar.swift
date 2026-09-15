@@ -36,13 +36,14 @@ struct InlineAnnotationToolbar: View {
     ]
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             mainBar
+                .frame(width: 560)
             if model.showColor || model.showWidth {
                 optionsBar
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
-        .frame(width: 520)
         .animation(.easeOut(duration: 0.12), value: model.showColor)
         .animation(.easeOut(duration: 0.12), value: model.showWidth)
     }
