@@ -1,4 +1,5 @@
 import AppKit
+import VisionKit
 
 /// 「钉图」：把截图钉在屏幕上，作为一个可拖动、可缩放的浮动窗口。
 ///
@@ -142,6 +143,10 @@ final class PinContentView: NSView {
     var onRequestClose: (() -> Void)?
     var onOCR: (() -> Void)?
 
+    private var liveTextOverlay: ImageAnalysisOverlayView?
+    private let liveTextDelegate = PinLiveTextDelegate()
+    private let liveTextButton = NSButton()
+
     private let edgeTolerance: CGFloat = 7
 
     init(frame: NSRect, image: CGImage) {
@@ -149,10 +154,9 @@ final class PinContentView: NSView {
         self.nsImage = NSImage(cgImage: image, size: frame.size)
         super.init(frame: frame)
         wantsLayer = true
-        layer?.cornerRadius = 8
+        layer?.cornerRadius = 10
         layer?.masksToBounds = true
-        layer?.borderWidth = 1
-        layer?.borderColor = NSColor.black.withAlphaComponent(0.25).cgColor
+        configureLiveTextButton()
     }
 
     @available(*, unavailable)
@@ -176,12 +180,83 @@ final class PinContentView: NSView {
         }
         let area = NSTrackingArea(
             rect: .zero,
-            options: [.mouseEnteredAndExited, .cursorUpdate, .activeAlways, .inVisibleRect],
+            options: [
+                .mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect,
+            ],
             owner: self,
             userInfo: nil
         )
         addTrackingArea(area)
         trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        liveTextButton.isHidden = false
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        liveTextButton.isHidden = true
+    }
+
+    // MARK: - Live Text
+
+    private func configureLiveTextButton() {
+        liveTextButton.isBordered = false
+        liveTextButton.bezelStyle = .regularSquare
+        liveTextButton.image = NSImage(
+            systemSymbolName: "text.viewfinder",
+            accessibilityDescription: "识别文字"
+        )
+        liveTextButton.imagePosition = .imageOnly
+        liveTextButton.contentTintColor = .white
+        liveTextButton.target = self
+        liveTextButton.action = #selector(toggleLiveText)
+        liveTextButton.wantsLayer = true
+        liveTextButton.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.5).cgColor
+        liveTextButton.layer?.cornerRadius = 7
+        liveTextButton.layer?.masksToBounds = true
+        liveTextButton.isHidden = true
+        addSubview(liveTextButton)
+    }
+
+    override func layout() {
+        super.layout()
+        let size: CGFloat = 28
+        liveTextButton.frame = CGRect(
+            x: bounds.maxX - size - 10,
+            y: bounds.minY + 10,
+            width: size,
+            height: size
+        )
+    }
+
+    @objc private func toggleLiveText() {
+        if liveTextOverlay != nil {
+            liveTextOverlay?.removeFromSuperview()
+            liveTextOverlay = nil
+            liveTextButton.contentTintColor = .white
+            return
+        }
+        let overlay = ImageAnalysisOverlayView(liveTextDelegate)
+        overlay.preferredInteractionTypes = .textSelection
+        overlay.frame = bounds
+        overlay.autoresizingMask = [.width, .height]
+        addSubview(overlay, positioned: .below, relativeTo: liveTextButton)
+        liveTextOverlay = overlay
+        liveTextButton.contentTintColor = NSColor.systemGreen
+
+        Task { @MainActor in
+            guard ImageAnalyzer.isSupported, let image = cgImage as CGImage? else { return }
+            let analyzer = ImageAnalyzer()
+            let configuration = ImageAnalyzer.Configuration(.text)
+            if let analysis = try? await analyzer.analyze(
+                image,
+                orientation: .up,
+                configuration: configuration
+            ) {
+                overlay.analysis = analysis
+            }
+        }
     }
 
     override func cursorUpdate(with event: NSEvent) {
@@ -345,5 +420,15 @@ final class PinContentView: NSView {
 
     @objc private func handleClose() {
         onRequestClose?()
+    }
+}
+
+
+/// 实况文本覆盖层的 contentsRect 提供者（覆盖整张图）。
+///
+/// @author ixxxxoooo
+final class PinLiveTextDelegate: NSObject, ImageAnalysisOverlayViewDelegate {
+    func contentsRect(for overlayView: ImageAnalysisOverlayView) -> CGRect {
+        CGRect(x: 0, y: 0, width: 1, height: 1)
     }
 }
