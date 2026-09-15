@@ -123,6 +123,8 @@ final class PinContentView: NSView {
 
     private var liveTextOverlay: ImageAnalysisOverlayView?
     private let liveTextDelegate = PinLiveTextDelegate()
+    private let liveTextButton = NSButton()
+    private var isLiveTextOn = false
 
     private let edgeTolerance: CGFloat = 7
 
@@ -133,7 +135,7 @@ final class PinContentView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 10
         layer?.masksToBounds = true
-        attachLiveText()
+        configureLiveTextButton()
     }
 
     @available(*, unavailable)
@@ -169,13 +171,62 @@ final class PinContentView: NSView {
 
     // MARK: - Live Text
 
-    /// 直接铺一层系统实况文本覆盖层：它自带右下角的实况文本按钮与文本选择。
-    private func attachLiveText() {
+    private func configureLiveTextButton() {
+        liveTextButton.isBordered = false
+        liveTextButton.image = NSImage(
+            systemSymbolName: "text.viewfinder",
+            accessibilityDescription: "实况文本"
+        )
+        liveTextButton.imagePosition = .imageOnly
+        liveTextButton.contentTintColor = .white
+        liveTextButton.target = self
+        liveTextButton.action = #selector(toggleLiveText)
+        liveTextButton.wantsLayer = true
+        liveTextButton.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.5).cgColor
+        liveTextButton.layer?.cornerRadius = 7
+        liveTextButton.layer?.masksToBounds = true
+        liveTextButton.isHidden = true
+        addSubview(liveTextButton)
+    }
+
+    override func layout() {
+        super.layout()
+        let size: CGFloat = 28
+        liveTextButton.frame = CGRect(
+            x: bounds.maxX - size - 10,
+            y: bounds.minY + 10,
+            width: size,
+            height: size
+        )
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        if !isLiveTextOn { liveTextButton.isHidden = false }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        liveTextButton.isHidden = true
+    }
+
+    /// 点击才进入实况文本；默认拖动是移动窗口。
+    @objc private func toggleLiveText() {
+        if isLiveTextOn {
+            stopLiveText()
+        } else {
+            startLiveText()
+        }
+    }
+
+    private func startLiveText() {
+        guard liveTextOverlay == nil else { return }
+        isLiveTextOn = true
+        liveTextButton.isHidden = true
+
         let overlay = ImageAnalysisOverlayView(liveTextDelegate)
         overlay.preferredInteractionTypes = .textSelection
         overlay.frame = bounds
         overlay.autoresizingMask = [.width, .height]
-        addSubview(overlay)
+        addSubview(overlay, positioned: .below, relativeTo: liveTextButton)
         liveTextOverlay = overlay
 
         Task { @MainActor in
@@ -190,6 +241,17 @@ final class PinContentView: NSView {
                 overlay.analysis = analysis
             }
         }
+    }
+
+    private func stopLiveText() {
+        liveTextOverlay?.removeFromSuperview()
+        liveTextOverlay = nil
+        isLiveTextOn = false
+        liveTextButton.isHidden = true
+    }
+
+    @objc private func handleExitLiveText() {
+        stopLiveText()
     }
 
     @objc private func handleCopy() {
