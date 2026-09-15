@@ -1,3 +1,4 @@
+import AppKit
 import Observation
 import SwiftUI
 
@@ -9,14 +10,19 @@ final class InlineToolbarModel {
     var tool: AnnotationTool = .rectangle
     var color: RGBAColor = .red
     var lineWidth: CGFloat = 8
-    /// 是否已有选区（决定 ✓ 是否可用）。
-    var canConfirm = false
+    var canUndo = false
+    var canRedo = false
 
+    var onUndo: (() -> Void)?
+    var onRedo: (() -> Void)?
     var onConfirm: (() -> Void)?
     var onCancel: (() -> Void)?
 }
 
 /// 截图选区下方就地弹出的标注工具栏。
+///
+/// 风格参考：高斯模糊深色胶囊、图标无背景框、选中项用颜色区分、
+/// 粗细为数字 + 滑杆、颜色为圆点。
 ///
 /// @author ixxxxoooo
 struct InlineAnnotationToolbar: View {
@@ -28,59 +34,82 @@ struct InlineAnnotationToolbar: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 8) {
+            HStack(spacing: 4) {
                 ForEach(Self.tools) { item in
                     toolButton(item)
                 }
 
-                Divider().frame(height: 20)
+                separator
 
-                colorControl
-                widthControl
+                iconButton("撤销", symbol: "arrow.uturn.backward") { model.onUndo?() }
+                    .disabled(!model.canUndo)
+                iconButton("重做", symbol: "arrow.uturn.forward") { model.onRedo?() }
+                    .disabled(!model.canRedo)
 
-                Divider().frame(height: 20)
+                Spacer(minLength: 12)
 
-                iconButton("撤销", symbol: "arrow.uturn.backward") {}
-                    .disabled(true)
-
-                Spacer(minLength: 10)
-
-                iconButton("取消", symbol: "xmark") { model.onCancel?() }
-                confirmButton
+                iconButton("取消", symbol: "xmark", tint: .red) { model.onCancel?() }
+                iconButton("确认", symbol: "checkmark", tint: .green) { model.onConfirm?() }
             }
 
-            HStack(spacing: 8) {
-                ForEach(RGBAColor.palette, id: \.self) { swatch in
-                    Button {
-                        model.color = swatch
-                    } label: {
-                        Circle()
-                            .fill(swatch.swiftUIColor)
-                            .frame(width: 18, height: 18)
-                            .overlay(
-                                Circle().strokeBorder(
-                                    model.color == swatch ? Color.white : Color.white.opacity(0.25),
-                                    lineWidth: model.color == swatch ? 2 : 1
-                                )
-                            )
-                    }
-                    .buttonStyle(.plain)
+            HStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Text("\(Int(model.lineWidth))")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .frame(width: 24, alignment: .trailing)
+                    Slider(value: $model.lineWidth, in: 1...24)
+                        .frame(width: 170)
+                        .tint(.white)
                 }
-                Spacer(minLength: 10)
+
+                separator
+
+                HStack(spacing: 10) {
+                    ForEach(RGBAColor.palette, id: \.self) { swatch in
+                        Button {
+                            model.color = swatch
+                        } label: {
+                            Circle()
+                                .fill(swatch.swiftUIColor)
+                                .frame(width: 18, height: 18)
+                                .overlay(
+                                    Circle().strokeBorder(
+                                        model.color == swatch
+                                            ? Color.white : Color.white.opacity(0.2),
+                                        lineWidth: model.color == swatch ? 2 : 1
+                                    )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Spacer(minLength: 0)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .padding(.vertical, 10)
         // 固定宽度：否则 NSHostingView 的 fittingSize 会算窄，内容被裁切。
-        .frame(width: 700)
+        .frame(width: 640)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.black.opacity(0.82))
+            ZStack {
+                VisualEffectBackground(material: .hudWindow)
+                Color.black.opacity(0.45)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
         )
+    }
+
+    private var separator: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.14))
+            .frame(width: 1, height: 20)
+            .padding(.horizontal, 4)
     }
 
     private func toolButton(_ item: AnnotationTool) -> some View {
@@ -88,67 +117,29 @@ struct InlineAnnotationToolbar: View {
             model.tool = item
         } label: {
             Image(systemName: item.symbolName)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 28, height: 24)
-                .foregroundStyle(.white)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(model.tool == item ? Theme.brand : Color.white.opacity(0.08))
+                .font(.system(size: 15, weight: .regular))
+                .frame(width: 30, height: 26)
+                .foregroundStyle(
+                    model.tool == item ? Theme.selectionGreen : Color.white.opacity(0.9)
                 )
         }
         .buttonStyle(.plain)
         .help(item.title)
     }
 
-    private var colorControl: some View {
-        Button {} label: {
-            Circle()
-                .fill(model.color.swiftUIColor)
-                .frame(width: 18, height: 18)
-                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1.2))
-        }
-        .buttonStyle(.plain)
-        .help("颜色（下方调色板）")
-    }
-
-    private var widthControl: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "lineweight")
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.7))
-            Slider(value: $model.lineWidth, in: 1...16)
-                .frame(width: 70)
-        }
-    }
-
     private func iconButton(
         _ title: String,
         symbol: String,
+        tint: Color = .white,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 26, height: 24)
-                .foregroundStyle(.white)
-        }
-        .buttonStyle(.borderless)
-        .help(title)
-    }
-
-    private var confirmButton: some View {
-        Button { model.onConfirm?() } label: {
-            Image(systemName: "checkmark")
-                .font(.system(size: 12, weight: .bold))
-                .frame(width: 30, height: 24)
-                .foregroundStyle(.white)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(model.canConfirm ? Theme.brand : Color.white.opacity(0.12))
-                )
+                .font(.system(size: 14, weight: .medium))
+                .frame(width: 28, height: 26)
+                .foregroundStyle(tint)
         }
         .buttonStyle(.plain)
-        .disabled(!model.canConfirm)
-        .help("确认")
+        .help(title)
     }
 }

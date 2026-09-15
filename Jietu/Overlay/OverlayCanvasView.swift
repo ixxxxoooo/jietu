@@ -71,6 +71,7 @@ final class OverlayCanvasView: NSView {
     private var phase: Phase = .selecting
     /// 是否正处于就地标注阶段（供 Coordinator 判断 Esc 归属）。
     var isAnnotationPhase: Bool { phase == .annotating }
+    private var redoAnnotations: [Annotation] = []
     private var annotations: [Annotation] = []
     private var annotationDraft: Annotation?
     private var previewBase: CGImage?
@@ -307,11 +308,12 @@ final class OverlayCanvasView: NSView {
         let scale = window?.backingScaleFactor ?? snapshot.nominalScaleFactor
         for layer in [
             imageLayer, dimLayer, windowHighlightLayer, selectionBorderOuterLayer,
-            selectionBorderInnerLayer, handlesLayer, crosshairLayer, annotationLayer,
+            selectionBorderInnerLayer, handlesLayer, crosshairLayer,
         ] {
             layer.frame = bounds
         }
         imageLayer.contentsScale = scale
+        // 标注层尺寸由 updateAnnotationLayer() 按选区设置，这里不能重置成整屏。
         annotationLayer.contentsScale = scale
         for textLayer in [sizeLabelLayer, windowLabelLayer, hintLayer, magnifierLabelLayer] {
             textLayer.contentsScale = scale
@@ -862,10 +864,7 @@ final class OverlayCanvasView: NSView {
             case 36, 76: // Return
                 confirmInline()
             case 51, 117: // Delete
-                if !annotations.isEmpty {
-                    annotations.removeLast()
-                    updateAnnotationLayer()
-                }
+                inlineUndo()
             default:
                 super.keyDown(with: event)
             }
@@ -892,6 +891,7 @@ final class OverlayCanvasView: NSView {
         guard inlineMode, let selection, selection.width > 1, selection.height > 1 else { return }
         phase = .annotating
         annotations.removeAll()
+        redoAnnotations.removeAll()
         annotationDraft = nil
         interaction = .settled
         onInlineEditingChanged?(true)
@@ -982,15 +982,30 @@ final class OverlayCanvasView: NSView {
         let image = AnnotationRenderer.render(base: previewBase, annotations: scaled) ?? previewBase
         annotationLayer.frame = selection
         annotationLayer.contents = image
+        toolbarModel?.canUndo = !annotations.isEmpty
+        toolbarModel?.canRedo = !redoAnnotations.isEmpty
+    }
+
+    private func inlineUndo() {
+        guard let last = annotations.popLast() else { return }
+        redoAnnotations.append(last)
+        updateAnnotationLayer()
+    }
+
+    private func inlineRedo() {
+        guard let restored = redoAnnotations.popLast() else { return }
+        annotations.append(restored)
+        updateAnnotationLayer()
     }
 
     // MARK: Inline toolbar
 
     private func showToolbar() {
         let model = InlineToolbarModel()
-        model.canConfirm = true
         model.onConfirm = { [weak self] in self?.confirmInline() }
         model.onCancel = { [weak self] in self?.cancelInline() }
+        model.onUndo = { [weak self] in self?.inlineUndo() }
+        model.onRedo = { [weak self] in self?.inlineRedo() }
         toolbarModel = model
 
         let host = NSHostingView(rootView: InlineAnnotationToolbar(model: model))
@@ -1109,6 +1124,7 @@ final class OverlayCanvasView: NSView {
         }
         if let draft = annotationDraft, isValidInlineDraft(draft) {
             annotations.append(draft)
+            redoAnnotations.removeAll()
             if case .counter = draft.kind { inlineCounterValue += 1 }
         }
         annotationDraft = nil
@@ -1160,6 +1176,7 @@ final class OverlayCanvasView: NSView {
                 lineWidth: model.lineWidth
             )
         )
+        redoAnnotations.removeAll()
         updateAnnotationLayer()
     }
 

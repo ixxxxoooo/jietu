@@ -61,8 +61,6 @@ struct AnnotationEditorView: View {
     @State private var inlineFontSize: CGFloat = 22
     @FocusState private var inlineFieldFocused: Bool
 
-    @State private var showColorPopover = false
-    @State private var showWidthPopover = false
 
     @State private var ocrText = ""
     @State private var isOCRPresented = false
@@ -81,9 +79,9 @@ struct AnnotationEditorView: View {
 
     // MARK: - Layout
 
-    static let toolbarHeight: CGFloat = 58
+    static let toolbarHeight: CGFloat = 104
     static let padding: CGFloat = 10
-    static let minWindowWidth: CGFloat = 1240
+    static let minWindowWidth: CGFloat = 900
     static let minWindowHeight: CGFloat = 430
     private static let minZoom: CGFloat = 0.1
     private static let maxZoom: CGFloat = 8
@@ -315,48 +313,91 @@ struct AnnotationEditorView: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: 8) {
-            ForEach(AnnotationTool.allCases) { item in
-                toolButton(item)
+        VStack(spacing: 6) {
+            HStack(spacing: 4) {
+                ForEach(AnnotationTool.allCases) { item in
+                    toolButton(item)
+                }
+
+                separator
+
+                iconButton("撤销", symbol: "arrow.uturn.backward") { undo() }
+                    .disabled(undoStack.isEmpty)
+                    .keyboardShortcut("z", modifiers: .command)
+                iconButton("重做", symbol: "arrow.uturn.forward") { redo() }
+                    .disabled(redoStack.isEmpty)
+                    .keyboardShortcut("z", modifiers: [.command, .shift])
+                iconButton("删除", symbol: "trash") { deleteSelected() }
+                    .disabled(selectedID == nil)
+
+                Spacer(minLength: 8)
+
+                zoomControls
+
+                separator
+
+                iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
+                iconButton("保存", symbol: "square.and.arrow.down") { exportToSave() }
+                iconButton("OCR", symbol: "text.viewfinder") { exportOCR() }
+                    .disabled(isRecognizing)
+                iconButton("钉图", symbol: "pin") { exportToPin() }
+                iconButton("关闭", symbol: "xmark", tint: .red) { onClose() }
+                    .keyboardShortcut(.cancelAction)
             }
 
-            Divider().frame(height: 20)
+            HStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Text("\(Int(lineWidth))")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .frame(width: 24, alignment: .trailing)
+                    Slider(value: $lineWidth, in: 1...24)
+                        .frame(width: 150)
+                        .tint(.white)
+                        .onChange(of: lineWidth) { _, value in
+                            applyToSelected { $0.withLineWidth(value) }
+                        }
+                }
 
-            colorControl
-            widthControl
+                separator
 
-            contextualStyleControls
+                HStack(spacing: 10) {
+                    ForEach(RGBAColor.palette, id: \.self) { swatch in
+                        Button {
+                            color = swatch
+                            applyToSelected { $0.withColor(swatch) }
+                        } label: {
+                            Circle()
+                                .fill(swatch.swiftUIColor)
+                                .frame(width: 18, height: 18)
+                                .overlay(
+                                    Circle().strokeBorder(
+                                        color == swatch ? Color.white : Color.white.opacity(0.2),
+                                        lineWidth: color == swatch ? 2 : 1
+                                    )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
 
-            Spacer(minLength: 8)
+                contextualStyleControls
 
-            zoomControls
-
-            Divider().frame(height: 20)
-
-            iconButton("撤销", symbol: "arrow.uturn.backward") { undo() }
-                .disabled(undoStack.isEmpty)
-                .keyboardShortcut("z", modifiers: .command)
-            iconButton("重做", symbol: "arrow.uturn.forward") { redo() }
-                .disabled(redoStack.isEmpty)
-                .keyboardShortcut("z", modifiers: [.command, .shift])
-            iconButton("删除", symbol: "trash") { deleteSelected() }
-                .disabled(selectedID == nil)
-
-            Divider().frame(height: 20)
-
-            iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
-            iconButton("保存", symbol: "square.and.arrow.down") { exportToSave() }
-            iconButton("OCR", symbol: "text.viewfinder") { exportOCR() }
-                .disabled(isRecognizing)
-            iconButton("钉图", symbol: "pin") { exportToPin() }
-            iconButton("关闭", symbol: "xmark") { onClose() }
-                .keyboardShortcut(.cancelAction)
+                Spacer(minLength: 0)
+            }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
         .background(
+            ZStack {
+                VisualEffectBackground(material: .hudWindow)
+                Color.black.opacity(0.45)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        )
+        .overlay(
             RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .fill(Color.black.opacity(0.78))
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
         )
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -368,31 +409,40 @@ struct AnnotationEditorView: View {
         )
     }
 
+    private var separator: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.14))
+            .frame(width: 1, height: 20)
+            .padding(.horizontal, 4)
+    }
+
     /// 选中文字 / 马赛克时显示字号 / 块大小。
     @ViewBuilder
     private var contextualStyleControls: some View {
         if let selected = selectedAnnotation {
             switch selected.kind {
             case .text:
-                Divider().frame(height: 20)
+                separator
                 HStack(spacing: 6) {
                     Image(systemName: "textformat.size")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.6))
                     Slider(value: $fontSize, in: 10...100)
-                        .frame(width: 80)
+                        .frame(width: 90)
+                        .tint(.white)
                         .onChange(of: fontSize) { _, value in
                             applyToSelected { $0.withFontSize(value) }
                         }
                 }
             case .pixelate:
-                Divider().frame(height: 20)
+                separator
                 HStack(spacing: 6) {
                     Image(systemName: "squareshape.split.3x3")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.6))
                     Slider(value: $mosaicBlock, in: 4...40)
-                        .frame(width: 80)
+                        .frame(width: 90)
+                        .tint(.white)
                         .onChange(of: mosaicBlock) { _, value in
                             applyToSelected { $0.withPixelateBlock(value) }
                         }
@@ -409,117 +459,27 @@ struct AnnotationEditorView: View {
             if item.isDrawing { selectedID = nil }
         } label: {
             Image(systemName: item.symbolName)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 28, height: 24)
-                .foregroundStyle(.white)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(tool == item ? Theme.brand : Color.white.opacity(0.08))
-                )
+                .font(.system(size: 15, weight: .regular))
+                .frame(width: 30, height: 26)
+                .foregroundStyle(tool == item ? Theme.selectionGreen : Color.white.opacity(0.9))
         }
         .buttonStyle(.plain)
         .help(item.title)
     }
 
-    /// 颜色收敛成一个按钮，点击再展开选色。
-    private var colorControl: some View {
-        Button { showColorPopover = true } label: {
-            Circle()
-                .fill(color.swiftUIColor)
-                .frame(width: 18, height: 18)
-                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1.2))
-        }
-        .buttonStyle(.plain)
-        .help("颜色")
-        .popover(isPresented: $showColorPopover, arrowEdge: .bottom) {
-            HStack(spacing: 8) {
-                ForEach(RGBAColor.palette, id: \.self) { swatch in
-                    Button {
-                        color = swatch
-                        applyToSelected { $0.withColor(swatch) }
-                        showColorPopover = false
-                    } label: {
-                        Circle()
-                            .fill(swatch.swiftUIColor)
-                            .frame(width: 24, height: 24)
-                            .overlay(
-                                Circle().strokeBorder(
-                                    color == swatch
-                                        ? Theme.brand : Color.primary.opacity(0.2),
-                                    lineWidth: color == swatch ? 2 : 1
-                                )
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(12)
-        }
-    }
-
-    /// 线宽收敛成一个按钮，点击展开滑杆 + 预设。
-    private var widthControl: some View {
-        Button { showWidthPopover = true } label: {
-            Image(systemName: "lineweight")
-                .font(.system(size: 13))
-                .foregroundStyle(.white)
-                .frame(width: 24, height: 24)
-        }
-        .buttonStyle(.plain)
-        .help("粗细")
-        .popover(isPresented: $showWidthPopover, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("粗细")
-                    Spacer()
-                    Text("\(Int(lineWidth))")
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-                Slider(value: $lineWidth, in: 1...16)
-                    .frame(width: 200)
-                    .onChange(of: lineWidth) { _, value in
-                        applyToSelected { $0.withLineWidth(value) }
-                    }
-                HStack(spacing: 6) {
-                    ForEach([1, 2, 3, 5, 8, 12, 16], id: \.self) { value in
-                        let width = CGFloat(value)
-                        Button {
-                            lineWidth = width
-                            applyToSelected { $0.withLineWidth(width) }
-                        } label: {
-                            Text("\(value)")
-                                .font(.system(size: 11))
-                                .frame(width: 24, height: 22)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                        .fill(
-                                            Color.primary.opacity(
-                                                abs(lineWidth - width) < 0.01 ? 0.22 : 0.08
-                                            )
-                                        )
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .padding(12)
-        }
-    }
-
     private func iconButton(
         _ title: String,
         symbol: String,
+        tint: Color = .white,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 26, height: 24)
-                .foregroundStyle(.white)
+                .font(.system(size: 14, weight: .medium))
+                .frame(width: 28, height: 26)
+                .foregroundStyle(tint)
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         .help(title)
     }
 
@@ -531,7 +491,7 @@ struct AnnotationEditorView: View {
             iconButton("缩小", symbol: "minus.magnifyingglass") { zoomOut() }
             Text("\(Int((zoom * 100).rounded()))%")
                 .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.7))
                 .frame(width: 42)
             iconButton("放大", symbol: "plus.magnifyingglass") { zoomIn() }
             Button("原始") { zoomToOriginal() }
