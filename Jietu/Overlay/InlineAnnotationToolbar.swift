@@ -22,35 +22,19 @@ final class InlineToolbarModel {
     var onCancel: (() -> Void)?
 }
 
-/// 截图选区下方就地弹出的标注工具栏。
-///
-/// 主工具栏一条，颜色/粗细点开后是**下方另一条独立的小工具栏**（中间留空隙）。
-/// 与编辑窗口工具一致：含选择工具，可拖拽 / 旋转 / 改端点。
+/// 就地标注的**主工具栏**：固定尺寸，展开选项时也不重算，避免闪烁。
 ///
 /// @author ixxxxoooo
-struct InlineAnnotationToolbar: View {
+struct InlineMainToolbar: View {
     @Bindable var model: InlineToolbarModel
 
     private static let tools: [AnnotationTool] = [
         .select, .rectangle, .ellipse, .arrow, .pen, .highlight, .pixelate, .text, .counter,
     ]
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            mainBar
-                .frame(width: 560)
-            if model.showColor || model.showWidth {
-                // 对齐到颜色 / 粗细两个按钮下方（靠右）。
-                optionsBar
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(width: 560, alignment: .trailing)
-            }
-        }
-        .animation(.easeOut(duration: 0.12), value: model.showColor)
-        .animation(.easeOut(duration: 0.12), value: model.showWidth)
-    }
+    static let size = CGSize(width: 560, height: 46)
 
-    private var mainBar: some View {
+    var body: some View {
         HStack(spacing: 4) {
             ForEach(Self.tools) { item in
                 toolButton(item)
@@ -74,50 +58,7 @@ struct InlineAnnotationToolbar: View {
             iconButton("确认", symbol: "checkmark", tint: .green) { model.onConfirm?() }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(FrostedBar())
-    }
-
-    /// 点开颜色 / 粗细后出现的第二行——**独立的一条**，与主工具栏中间有缝隙。
-    @ViewBuilder
-    private var optionsBar: some View {
-        HStack(spacing: 14) {
-            if model.showWidth {
-                HStack(spacing: 8) {
-                    Text("\(Int(model.lineWidth))")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.white)
-                        .frame(width: 24, alignment: .trailing)
-                    Slider(value: $model.lineWidth, in: 1...24)
-                        .frame(width: 170)
-                        .tint(.white)
-                }
-            }
-            if model.showColor {
-                HStack(spacing: 10) {
-                    ForEach(RGBAColor.palette, id: \.self) { swatch in
-                        Button {
-                            model.color = swatch
-                        } label: {
-                            Circle()
-                                .fill(swatch.swiftUIColor)
-                                .frame(width: 20, height: 20)
-                                .overlay(
-                                    Circle().strokeBorder(
-                                        model.color == swatch
-                                            ? Color.white : Color.white.opacity(0.2),
-                                        lineWidth: model.color == swatch ? 2 : 1
-                                    )
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .frame(width: Self.size.width, height: Self.size.height)
         .background(FrostedBar())
     }
 
@@ -186,6 +127,55 @@ struct InlineAnnotationToolbar: View {
         }
         .buttonStyle(.plain)
         .help(title)
+    }
+}
+
+/// 就地标注的**展开选项条**（颜色 / 粗细）：单独一条，出现在主栏下方。
+///
+/// @author ixxxxoooo
+struct InlineOptionsToolbar: View {
+    @Bindable var model: InlineToolbarModel
+
+    var body: some View {
+        HStack(spacing: 14) {
+            if model.showWidth {
+                HStack(spacing: 8) {
+                    Text("\(Int(model.lineWidth))")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .frame(width: 24, alignment: .trailing)
+                    Slider(value: $model.lineWidth, in: 1...24)
+                        .frame(width: 170)
+                        .tint(.white)
+                }
+            }
+            if model.showColor {
+                HStack(spacing: 10) {
+                    ForEach(RGBAColor.palette, id: \.self) { swatch in
+                        Button {
+                            model.color = swatch
+                        } label: {
+                            Circle()
+                                .fill(swatch.swiftUIColor)
+                                .frame(width: 20, height: 20)
+                                .overlay(
+                                    Circle().strokeBorder(
+                                        model.color == swatch
+                                            ? Color.white : Color.white.opacity(0.2),
+                                        lineWidth: model.color == swatch ? 2 : 1
+                                    )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .fixedSize()
+        .background(FrostedBar())
     }
 }
 

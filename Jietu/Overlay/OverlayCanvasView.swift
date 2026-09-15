@@ -93,7 +93,8 @@ final class OverlayCanvasView: NSView {
     private var previewBase: CGImage?
     private var previewScale: CGFloat = 1
     private var toolbarModel: InlineToolbarModel?
-    private var toolbarHost: NSView?
+    private var mainToolbarHost: NSView?
+    private var optionsToolbarHost: NSView?
     private var textField: NSTextField?
     private var inlineDragging = false
     private var inlineStart: CGPoint = .zero
@@ -377,7 +378,7 @@ final class OverlayCanvasView: NSView {
             textLayer.contentsScale = scale
         }
         updateAllLayers()
-        updateToolbarPosition()
+        layoutToolbars()
     }
 
     override func viewDidChangeBackingProperties() {
@@ -1211,63 +1212,79 @@ final class OverlayCanvasView: NSView {
         model.onRedo = { [weak self] in self?.inlineRedo() }
         toolbarModel = model
 
-        let host = NSHostingView(rootView: InlineAnnotationToolbar(model: model))
-        host.translatesAutoresizingMaskIntoConstraints = true
-        addSubview(host)
-        toolbarHost = host
-        updateToolbarPosition()
-        observeToolbar(model)
+        // 主工具栏：固定尺寸，永不重算 → 展开选项时也不闪烁。
+        let main = NSHostingView(rootView: InlineMainToolbar(model: model))
+        main.translatesAutoresizingMaskIntoConstraints = true
+        addSubview(main)
+        mainToolbarHost = main
+        layoutToolbars()
+
+        // 只在颜色/粗细开关变化时重建下方选项条。
+        observeOptions(model)
     }
 
-    /// 工具栏展开/收起时自适应宿主视图高度并重新定位。
-    private func observeToolbar(_ model: InlineToolbarModel) {
+    private func hideToolbar() {
+        mainToolbarHost?.removeFromSuperview()
+        mainToolbarHost = nil
+        optionsToolbarHost?.removeFromSuperview()
+        optionsToolbarHost = nil
+        toolbarModel = nil
+    }
+
+    /// 颜色 / 粗细开关变化时重建选项条（重新量尺寸，避免改尺寸闪烁）。
+    private func observeOptions(_ model: InlineToolbarModel) {
         withObservationTracking {
-            _ = model.tool
-            _ = model.color
-            _ = model.lineWidth
-            _ = model.canUndo
-            _ = model.canRedo
             _ = model.showColor
             _ = model.showWidth
         } onChange: { [weak self] in
             DispatchQueue.main.async {
                 guard let self else { return }
-                if let host = self.toolbarHost {
-                    host.layoutSubtreeIfNeeded()
-                    host.setFrameSize(host.fittingSize)
-                    self.updateToolbarPosition()
-                }
+                self.rebuildOptionsToolbar()
                 if self.toolbarModel === model {
-                    self.observeToolbar(model)
+                    self.observeOptions(model)
                 }
             }
         }
     }
 
-    private func hideToolbar() {
-        toolbarHost?.removeFromSuperview()
-        toolbarHost = nil
-        toolbarModel = nil
+    private func rebuildOptionsToolbar() {
+        optionsToolbarHost?.removeFromSuperview()
+        optionsToolbarHost = nil
+
+        guard let model = toolbarModel, model.showColor || model.showWidth else { return }
+        let host = NSHostingView(rootView: InlineOptionsToolbar(model: model))
+        host.translatesAutoresizingMaskIntoConstraints = true
+        addSubview(host)
+        optionsToolbarHost = host
+        layoutToolbars()
     }
 
-    private func updateToolbarPosition() {
-        guard let host = toolbarHost, let selection else { return }
-        host.layoutSubtreeIfNeeded()
-        var size = host.fittingSize
-        if size.width < 10 || size.height < 10 {
-            size = NSSize(width: 560, height: 56)
-        }
+    private func layoutToolbars() {
+        guard let selection, let main = mainToolbarHost else { return }
+        let mainSize = InlineMainToolbar.size
         var origin = CGPoint(
-            x: selection.midX - size.width / 2,
-            y: selection.minY - size.height - 10
+            x: selection.midX - mainSize.width / 2,
+            y: selection.minY - mainSize.height - 10
         )
         if origin.y < bounds.minY + 8 {
             origin.y = selection.maxY + 10
         }
-        origin.x = min(max(origin.x, bounds.minX + 8), max(bounds.minX + 8, bounds.maxX - size.width - 8))
-        origin.y = min(origin.y, bounds.maxY - size.height - 8)
-        // 一步设置尺寸与位置，避免中间态导致主工具栏跳动。
-        host.frame = CGRect(origin: origin, size: size)
+        origin.x = min(
+            max(origin.x, bounds.minX + 8),
+            max(bounds.minX + 8, bounds.maxX - mainSize.width - 8)
+        )
+        origin.y = min(origin.y, bounds.maxY - mainSize.height - 8)
+        main.frame = CGRect(origin: origin, size: mainSize)
+
+        guard let options = optionsToolbarHost else { return }
+        options.layoutSubtreeIfNeeded()
+        let size = options.fittingSize
+        // 靠右对齐到颜色 / 粗细按钮下方。
+        let optionsOrigin = CGPoint(
+            x: main.frame.maxX - size.width,
+            y: main.frame.minY - 8 - size.height
+        )
+        options.frame = CGRect(origin: optionsOrigin, size: size)
     }
 
     // MARK: Inline geometry
