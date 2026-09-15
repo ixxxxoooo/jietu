@@ -71,8 +71,11 @@ final class OverlayCanvasView: NSView {
     private var phase: Phase = .selecting
     /// 是否正处于就地标注阶段（供 Coordinator 判断 Esc 归属）。
     var isAnnotationPhase: Bool { phase == .annotating }
-    private var redoAnnotations: [Annotation] = []
+    private var undoStack: [[Annotation]] = []
+    private var redoStack: [[Annotation]] = []
     private var selectedID: UUID?
+    private var erasing = false
+    private var lastErasePoint: CGPoint?
 
     /// 选择工具下的拖拽类型。
     private enum InlineEditDrag {
@@ -953,7 +956,8 @@ final class OverlayCanvasView: NSView {
         guard inlineMode, let selection, selection.width > 1, selection.height > 1 else { return }
         phase = .annotating
         annotations.removeAll()
-        redoAnnotations.removeAll()
+        undoStack.removeAll()
+        redoStack.removeAll()
         annotationDraft = nil
         selectedID = nil
         inlineEditingTextID = nil
@@ -1047,8 +1051,8 @@ final class OverlayCanvasView: NSView {
     }
 
     private func updateAnnotationLayer() {
-        toolbarModel?.canUndo = !annotations.isEmpty
-        toolbarModel?.canRedo = !redoAnnotations.isEmpty
+        toolbarModel?.canUndo = !undoStack.isEmpty
+        toolbarModel?.canRedo = !redoStack.isEmpty
 
         // 草稿要「有实际尺寸」才画；单击产生的零尺寸草稿不显示，避免闪一下。
         var list = annotations
@@ -1088,16 +1092,28 @@ final class OverlayCanvasView: NSView {
         }
     }
 
+    private func pushUndo() {
+        undoStack.append(annotations)
+        redoStack.removeAll()
+    }
+
     private func inlineUndo() {
-        guard let last = annotations.popLast() else { return }
-        redoAnnotations.append(last)
+        guard let previous = undoStack.popLast() else { return }
+        redoStack.append(annotations)
+        annotations = previous
+        if let selectedID, !annotations.contains(where: { $0.id == selectedID }) {
+            self.selectedID = nil
+        }
         updateAnnotationLayer()
+        updateInlineSelectionLayers()
     }
 
     private func inlineRedo() {
-        guard let restored = redoAnnotations.popLast() else { return }
-        annotations.append(restored)
+        guard let next = redoStack.popLast() else { return }
+        undoStack.append(annotations)
+        annotations = next
         updateAnnotationLayer()
+        updateInlineSelectionLayers()
     }
 
     // MARK: Inline selection / editing
@@ -1287,6 +1303,43 @@ final class OverlayCanvasView: NSView {
         options.frame = CGRect(origin: optionsOrigin, size: size)
     }
 
+    // MARK: Eraser
+
+    /// 沿轨迹擦除：移除路径上命中的标注。`from` 为 nil 表示单击点擦。
+    private func erase(along from: CGPoint?, to point: CGPoint) {
+        let tolerance = max(8, 12 * snapshot.effectiveScale)
+        var removed = false
+
+        if let from {
+            let distance = Annotation.distance(from, point)
+            let steps = max(1, Int(distance / max(1, tolerance * 0.5)))
+            for index in 0...steps {
+                let t = CGFloat(index) / CGFloat(steps)
+                let sample = CGPoint(
+                    x: from.x + (point.x - from.x) * t,
+                    y: from.y + (point.y - from.y) * t
+                )
+                if removeAnnotations(at: sample, tolerance: tolerance) { removed = true }
+            }
+        } else {
+            removed = removeAnnotations(at: point, tolerance: tolerance)
+        }
+
+        if removed {
+            updateAnnotationLayer()
+            updateInlineSelectionLayers()
+        }
+    }
+
+    private func removeAnnotations(at point: CGPoint, tolerance: CGFloat) -> Bool {
+        let before = annotations.count
+        annotations.removeAll { $0.contains(point, tolerance: tolerance) }
+        if let selectedID, !annotations.contains(where: { $0.id == selectedID }) {
+            self.selectedID = nil
+        }
+        return annotations.count != before
+    }
+
     // MARK: Inline geometry
 
     /// 视图坐标（原点左下）→ 选区裁剪后的图像像素坐标（原点左上）。
@@ -1326,8 +1379,7 @@ final class OverlayCanvasView: NSView {
         case .pen: return Annotation(kind: .pen(points: [start, current]), color: model.color, lineWidth: model.lineWidth)
         case .counter:
             return Annotation(kind: .counter(center: start, value: inlineCounterValue, leader: nil), color: model.color, lineWidth: model.lineWidth)
-        case .text: return nil
-        case .select: return nil
+        case .text, .select, .eraser: return nil
         }
     }
 
@@ -1347,11 +1399,21 @@ final class OverlayCanvasView: NSView {
         let crop = annotationPoint(from: point)
         let tool = toolbarModel?.tool ?? .rectangle
 
+        // 橡皮：按轨迹擦除（优先于选择/绘制）。
+        if tool == .eraser {
+            commitPendingInlineText()
+            erasing = true
+            pushUndo()
+            lastErasePoint = crop
+            erase(along: nil, to: crop)
+            return
+        }
+
         // 1) 选中对象 + 命中控制点 → 缩放 / 旋转 / 端点
         if let selected = selectedAnnotation,
             let handle = inlineHitHandle(selected, at: crop)
         {
-            redoAnnotations.removeAll()
+            pushUndo()
             switch handle {
             case .rotate:
                 let angle = atan2(crop.y - selected.center.y, crop.x - selected.center.x)
@@ -1373,7 +1435,7 @@ final class OverlayCanvasView: NSView {
                 updateInlineSelectionLayers()
                 return
             }
-            redoAnnotations.removeAll()
+            pushUndo()
             inlineEditDrag = .moving(id: hit.id, start: crop, original: hit)
             updateInlineSelectionLayers()
             return
@@ -1394,6 +1456,12 @@ final class OverlayCanvasView: NSView {
 
     private func inlineMouseDragged(_ point: CGPoint) {
         let crop = annotationPoint(from: point)
+
+        if erasing {
+            erase(along: lastErasePoint, to: crop)
+            lastErasePoint = crop
+            return
+        }
 
         if inlineDragging, let model = toolbarModel {
             if model.tool == .pen, case .pen(var points) = annotationDraft?.kind {
@@ -1429,6 +1497,12 @@ final class OverlayCanvasView: NSView {
     private func inlineMouseUp(_ point: CGPoint) {
         let crop = annotationPoint(from: point)
 
+        if erasing {
+            erasing = false
+            lastErasePoint = nil
+            return
+        }
+
         if inlineDragging, let model = toolbarModel {
             inlineDragging = false
             if model.tool == .text {
@@ -1438,9 +1512,9 @@ final class OverlayCanvasView: NSView {
                 return
             }
             if let draft = annotationDraft, isValidInlineDraft(draft) {
+                pushUndo()
                 annotations.append(draft)
                 selectedID = draft.id
-                redoAnnotations.removeAll()
                 if case .counter = draft.kind { inlineCounterValue += 1 }
             }
             annotationDraft = nil
@@ -1507,12 +1581,16 @@ final class OverlayCanvasView: NSView {
         inlineEditingTextID = nil
 
         guard !string.isEmpty else {
-            if let editingID { annotations.removeAll { $0.id == editingID } }
+            if let editingID {
+                pushUndo()
+                annotations.removeAll { $0.id == editingID }
+            }
             updateAnnotationLayer()
             updateInlineSelectionLayers()
             return
         }
 
+        pushUndo()
         if let editingID, let index = annotations.firstIndex(where: { $0.id == editingID }) {
             annotations[index] = annotations[index].withText(string)
         } else {
@@ -1528,7 +1606,6 @@ final class OverlayCanvasView: NSView {
                 )
             )
         }
-        redoAnnotations.removeAll()
         updateAnnotationLayer()
         updateInlineSelectionLayers()
     }

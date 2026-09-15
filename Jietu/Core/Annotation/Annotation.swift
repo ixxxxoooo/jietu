@@ -15,6 +15,7 @@ enum AnnotationTool: String, CaseIterable, Identifiable {
     case text
     case pixelate
     case counter
+    case eraser
 
     var id: String { rawValue }
 
@@ -29,6 +30,7 @@ enum AnnotationTool: String, CaseIterable, Identifiable {
         case .text: return "文字"
         case .pixelate: return "马赛克"
         case .counter: return "序号"
+        case .eraser: return "橡皮"
         }
     }
 
@@ -43,10 +45,11 @@ enum AnnotationTool: String, CaseIterable, Identifiable {
         case .text: return "textformat"
         case .pixelate: return "squareshape.split.3x3"
         case .counter: return "1.circle"
+        case .eraser: return "eraser"
         }
     }
 
-    /// 选择工具不产生新标注。
+    /// 是否为「绘制/动作类」工具（选择工具不是）。
     var isDrawing: Bool { self != .select }
 }
 

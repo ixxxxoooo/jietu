@@ -9,7 +9,7 @@ import SwiftUI
 final class InlineToolbarModel {
     var tool: AnnotationTool = .rectangle
     var color: RGBAColor = .red
-    var lineWidth: CGFloat = 8
+    var lineWidth: CGFloat = 7
     var canUndo = false
     var canRedo = false
     /// 展开状态由模型持有，便于宿主视图观察并自适应高度。
@@ -30,6 +30,7 @@ struct InlineMainToolbar: View {
 
     private static let tools: [AnnotationTool] = [
         .select, .rectangle, .ellipse, .arrow, .pen, .highlight, .pixelate, .text, .counter,
+        .eraser,
     ]
 
     static let size = CGSize(width: 560, height: 46)

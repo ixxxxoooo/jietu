@@ -34,7 +34,7 @@ struct AnnotationEditorView: View {
 
     @State private var tool: AnnotationTool = .rectangle
     @State private var color: RGBAColor = .red
-    @State private var lineWidth: CGFloat = 8
+    @State private var lineWidth: CGFloat = 7
     @State private var fontSize: CGFloat = 22
     @State private var mosaicBlock: CGFloat = 10
     @State private var counterValue = 1
@@ -48,10 +48,12 @@ struct AnnotationEditorView: View {
         case resizing(id: UUID, handle: ShapeHandle, original: Annotation)
         case rotating(id: UUID, startAngle: CGFloat, original: Annotation)
         case endpoint(id: UUID, handle: ShapeHandle, original: Annotation)
+        case erasing
     }
 
     @State private var dragMode: DragMode = .none
     @State private var draft: Annotation?
+    @State private var lastErasePoint: CGPoint?
 
     @State private var editingTextID: UUID?
 
@@ -527,6 +529,14 @@ struct AnnotationEditorView: View {
             commitInlineText()
         }
 
+        // 橡皮：按轨迹擦除（优先于选择/绘制）。
+        if tool == .eraser {
+            pushUndo()
+            dragMode = .erasing
+            erase(along: nil, to: startPx)
+            return
+        }
+
         // 1) 选中标注的控制点
         if let selected = selectedAnnotation,
             let handle = hitHandle(for: selected, at: startView)
@@ -567,6 +577,9 @@ struct AnnotationEditorView: View {
         switch dragMode {
         case .none:
             break
+        case .erasing:
+            erase(along: lastErasePoint, to: currentPx)
+            lastErasePoint = currentPx
         case .creating(let start):
             draft = makeDraft(tool: tool, start: start, current: currentPx)
         case .moving(let id, let start, let original):
@@ -606,6 +619,8 @@ struct AnnotationEditorView: View {
                 selectedID = draft.id
                 if case .counter = draft.kind { counterValue += 1 }
             }
+        case .erasing:
+            lastErasePoint = nil
         default:
             break
         }
@@ -636,7 +651,7 @@ struct AnnotationEditorView: View {
                 color: color,
                 lineWidth: lineWidth
             )
-        case .select:
+        case .select, .eraser:
             return nil
         }
     }
@@ -672,6 +687,37 @@ struct AnnotationEditorView: View {
         guard let selectedID, let index = annotations.firstIndex(where: { $0.id == selectedID })
         else { return }
         annotations[index] = transform(annotations[index])
+    }
+
+    /// 沿轨迹擦除：移除路径上命中的标注。`from` 为 nil 表示单击点擦。
+    private func erase(along from: CGPoint?, to point: CGPoint) {
+        let tolerance = max(8, 12 / max(0.0001, pointsPerPixel))
+        var removed = false
+
+        if let from {
+            let distance = Annotation.distance(from, point)
+            let steps = max(1, Int(distance / max(1, tolerance * 0.5)))
+            for index in 0...steps {
+                let t = CGFloat(index) / CGFloat(steps)
+                let sample = CGPoint(
+                    x: from.x + (point.x - from.x) * t,
+                    y: from.y + (point.y - from.y) * t
+                )
+                if removeAnnotations(at: sample, tolerance: tolerance) { removed = true }
+            }
+        } else {
+            removed = removeAnnotations(at: point, tolerance: tolerance)
+        }
+
+        if removed, let selectedID, !annotations.contains(where: { $0.id == selectedID }) {
+            self.selectedID = nil
+        }
+    }
+
+    private func removeAnnotations(at point: CGPoint, tolerance: CGFloat) -> Bool {
+        let before = annotations.count
+        annotations.removeAll { $0.contains(point, tolerance: tolerance) }
+        return annotations.count != before
     }
 
     private func deleteSelected() {
