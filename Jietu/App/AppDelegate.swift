@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboarding: OnboardingWindowController?
     private var settingsWindow: SettingsWindowController?
     private var historyPanel: HistoryPanelController?
+    /// 会话内的截图历史（新截的即时可见，不必先保存）。
+    private var sessionHistory: [HistoryItem] = []
     private var annotationEditors: [AnnotationEditorWindowController] = []
     private var hotkeyRegistrationID: UInt32?
     /// 浮窗存在期间注册的「空格 → 打开编辑器」热键。
@@ -286,6 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func deliver(_ image: CGImage, onDisplay displayID: CGDirectDisplayID) {
         logger.notice("delivering \(image.width)x\(image.height) capture")
+        recordHistory(image)
 
         if settings.playShutterSound {
             CaptureOutput.playShutterSound()
@@ -397,8 +400,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if historyPanel == nil {
             let controller = HistoryPanelController()
             controller.itemsProvider = { [weak self] in self?.historyItems() ?? [] }
-            controller.onSelect = { [weak self] url in
-                guard let self,
+            controller.onSelect = { [weak self] item in
+                guard let self else { return }
+                if let cgImage = item.cgImage {
+                    self.openAnnotationEditor(cgImage)
+                    return
+                }
+                guard let url = item.url,
                     let image = NSImage(contentsOf: url),
                     let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
                 else { return }
@@ -409,17 +417,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         historyPanel?.toggle()
     }
 
+    /// 会话内截图（最新在前）+ 磁盘上保存过的截图，按时间倒序。
     private func historyItems() -> [HistoryItem] {
-        settings.recentCaptureURLs.map { url in
-            let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey])
-                .contentModificationDate) ?? Date()
-            return HistoryItem(
+        let saved = settings.recentCaptureURLs.map { url -> HistoryItem in
+            HistoryItem(
                 id: url.path,
+                date: Self.captureDate(of: url),
+                image: NSImage(contentsOf: url),
                 url: url,
-                date: date,
-                image: NSImage(contentsOf: url)
+                cgImage: nil
             )
         }
+        let merged = sessionHistory + saved
+        return merged
+            .sorted { $0.date > $1.date }
+            .prefix(40)
+            .map { $0 }
+    }
+
+    /// 从文件名（`Jietu yyyy-MM-dd at HH.mm.ss`）解析截图时刻，失败则用文件时间。
+    private static func captureDate(of url: URL) -> Date {
+        let name = url.lastPathComponent
+        if name.hasPrefix("Jietu ") {
+            let body = name.dropFirst("Jietu ".count)
+            if let range = body.range(of: " at ") {
+                let datePart = String(body[body.startIndex..<range.lowerBound])
+                let timePart = String(body[range.upperBound...].prefix(8))
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
+                if let date = formatter.date(from: "\(datePart) \(timePart)") {
+                    return date
+                }
+            }
+        }
+        return (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date()
+    }
+
+    /// 记录一次截图到会话历史。
+    private func recordHistory(_ image: CGImage) {
+        let item = HistoryItem(
+            id: UUID().uuidString,
+            date: Date(),
+            image: NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height)),
+            url: nil,
+            cgImage: image
+        )
+        sessionHistory.insert(item, at: 0)
+        if sessionHistory.count > 40 { sessionHistory.removeLast(sessionHistory.count - 40) }
     }
 
     /// 打开截图保存目录（不存在则先创建）。

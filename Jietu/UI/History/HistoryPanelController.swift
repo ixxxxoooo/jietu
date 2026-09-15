@@ -12,7 +12,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
     /// 返回最近截图（路径集合）。
     var itemsProvider: (() -> [HistoryItem])?
-    var onSelect: ((URL) -> Void)?
+    var onSelect: ((HistoryItem) -> Void)?
 
     var isVisible: Bool { window?.isVisible ?? false }
 
@@ -29,8 +29,8 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
         let root = HistoryView(
             items: itemsProvider?() ?? [],
-            onSelect: { [weak self] url in
-                self?.onSelect?(url)
+            onSelect: { [weak self] item in
+                self?.onSelect?(item)
             },
             onClose: { [weak self] in self?.close() }
         )

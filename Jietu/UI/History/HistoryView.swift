@@ -6,9 +6,12 @@ import SwiftUI
 /// @author ixxxxoooo
 struct HistoryItem: Identifiable {
     let id: String
-    let url: URL
     let date: Date
     let image: NSImage?
+    /// 已保存到磁盘的文件（可选）。
+    let url: URL?
+    /// 会话内截图的原始位图（可选）。
+    let cgImage: CGImage?
 }
 
 /// 托盘历史面板：按时间列出最近的截图缩略图。
@@ -16,7 +19,7 @@ struct HistoryItem: Identifiable {
 /// @author ixxxxoooo
 struct HistoryView: View {
     let items: [HistoryItem]
-    var onSelect: (URL) -> Void
+    var onSelect: (HistoryItem) -> Void
     var onClose: () -> Void
 
     var body: some View {
@@ -72,7 +75,7 @@ struct HistoryView: View {
                             .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
                     )
                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .onTapGesture { onSelect(item.url) }
+                    .onTapGesture { onSelect(item) }
                     .help("点击在编辑器中打开")
             } else {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
