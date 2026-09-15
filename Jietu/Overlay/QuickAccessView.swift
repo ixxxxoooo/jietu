@@ -69,13 +69,10 @@ struct QuickAccessView: View {
         }
     }
 
-    /// 四角圆形图标 + 中间两条胶囊按钮，仅悬停时出现。
+    /// 四角圆形图标 + 中间保存按钮，仅悬停时出现。
     private var controls: some View {
         ZStack {
-            VStack(spacing: 8) {
-                pillButton("复制", symbol: "doc.on.doc", action: onCopy)
-                pillButton("保存", symbol: "square.and.arrow.down", action: onSave)
-            }
+            pillButton("保存", symbol: "square.and.arrow.down", action: onSave)
 
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
@@ -87,6 +84,7 @@ struct QuickAccessView: View {
                 HStack(spacing: 0) {
                     circleButton("标注", symbol: "pencil.tip.crop.circle", action: onAnnotate)
                     Spacer(minLength: 0)
+                    circleButton("复制", symbol: "doc.on.doc", action: onCopy)
                 }
             }
         }

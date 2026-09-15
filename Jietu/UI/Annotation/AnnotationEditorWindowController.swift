@@ -14,7 +14,6 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
 
     var onCopy: ((CGImage) -> Void)?
     var onSave: ((CGImage) -> Void)?
-    var onPin: ((CGImage) -> Void)?
     var onClose: (() -> Void)?
 
     init(image: CGImage) {
@@ -39,7 +38,9 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
             baseImage: image,
             onCopy: { [weak self] rendered in self?.onCopy?(rendered) },
             onSave: { [weak self] rendered in self?.onSave?(rendered) },
-            onPin: { [weak self] rendered in self?.onPin?(rendered) },
+            onPin: { [weak self] rendered, frame in
+                self?.pinInPlace(rendered, globalFrame: frame)
+            },
             onClose: { [weak self] in self?.close() }
         )
         let hosting = NSHostingView(rootView: root)
@@ -73,6 +74,31 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
         window = nil
         restoreActivationPolicy()
         onClose?()
+    }
+
+    /// 「原地钉图」：按编辑器里图片当前所在的位置与大小钉住，然后关闭编辑器。
+    private func pinInPlace(_ image: CGImage, globalFrame: CGRect) {
+        let target = screenRect(fromGlobal: globalFrame)
+        PinWindowController.pin(
+            image: image,
+            on: window?.screen ?? NSScreen.main,
+            targetFrame: target
+        )
+        close()
+    }
+
+    /// SwiftUI 全局坐标（窗口内，原点左上）→ 屏幕坐标（AppKit，原点左下）。
+    private func screenRect(fromGlobal rect: CGRect) -> CGRect? {
+        guard let window, let content = window.contentView,
+            rect.width > 1, rect.height > 1
+        else { return nil }
+        let appKitRect = NSRect(
+            x: rect.minX,
+            y: content.bounds.height - rect.maxY,
+            width: rect.width,
+            height: rect.height
+        )
+        return window.convertToScreen(appKitRect)
     }
 
     private func restoreActivationPolicy() {

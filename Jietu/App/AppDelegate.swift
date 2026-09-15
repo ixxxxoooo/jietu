@@ -278,9 +278,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onSave = { [weak self] rendered in
             self?.save(rendered)
         }
-        controller.onPin = { rendered in
-            PinWindowController.pin(image: rendered, on: NSScreen.main)
-        }
         controller.onClose = { [weak self, weak controller] in
             guard let self else { return }
             self.annotationEditors.removeAll { $0 === controller }

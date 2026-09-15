@@ -8,6 +8,9 @@ enum Theme {
     /// CleanShot 品牌蓝。
     static let brand = Color(red: 0x0D / 255, green: 0x44 / 255, blue: 0xE8 / 255)
 
+    /// 截图选框的绿色（参考 CleanShot：绿色虚线选框 + 绿色控制点）。
+    static let selectionGreen = Color(red: 0.14, green: 0.87, blue: 0.45)
+
     static let hudForeground = Color.white.opacity(0.6)
     static let hudForegroundActive = Color.white
     static let hudSelectionFill = Color.white.opacity(0.1)

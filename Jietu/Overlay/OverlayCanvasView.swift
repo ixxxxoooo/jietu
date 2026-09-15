@@ -149,21 +149,25 @@ final class OverlayCanvasView: NSView {
         dimLayer.frame = bounds
         root.addSublayer(dimLayer)
 
-        // 吸附预览：压暗层已经把窗口挖空，这一层只负责淡蓝色染色 + 描边。
-        windowHighlightLayer.fillColor = NSColor(Theme.brand).withAlphaComponent(0.10).cgColor
-        windowHighlightLayer.strokeColor = NSColor(Theme.brand).cgColor
+        // 吸附预览：压暗层已经把窗口挖空，这一层只负责淡绿色染色 + 描边。
+        windowHighlightLayer.fillColor = NSColor(Theme.selectionGreen)
+            .withAlphaComponent(0.10).cgColor
+        windowHighlightLayer.strokeColor = NSColor(Theme.selectionGreen).cgColor
         windowHighlightLayer.lineWidth = 1.5
         windowHighlightLayer.isHidden = true
         windowHighlightLayer.frame = bounds
         root.addSublayer(windowHighlightLayer)
 
-        configureBorderLayer(selectionBorderOuterLayer, color: NSColor(Theme.brand))
-        configureBorderLayer(selectionBorderInnerLayer, color: .white)
+        // 绿色虚线选框（参考 CleanShot）。
+        configureBorderLayer(selectionBorderOuterLayer, color: NSColor(Theme.selectionGreen))
+        selectionBorderOuterLayer.lineWidth = 1.5
+        selectionBorderOuterLayer.lineDashPattern = [6, 4]
+        configureBorderLayer(selectionBorderInnerLayer, color: .clear)
         root.addSublayer(selectionBorderOuterLayer)
         root.addSublayer(selectionBorderInnerLayer)
 
-        handlesLayer.fillColor = NSColor.white.cgColor
-        handlesLayer.strokeColor = NSColor(Theme.brand).cgColor
+        handlesLayer.fillColor = NSColor(Theme.selectionGreen).cgColor
+        handlesLayer.strokeColor = NSColor.white.cgColor
         handlesLayer.lineWidth = 1
         handlesLayer.frame = bounds
         root.addSublayer(handlesLayer)
@@ -350,13 +354,9 @@ final class OverlayCanvasView: NSView {
         }
 
         selectionBorderOuterLayer.isHidden = false
-        selectionBorderInnerLayer.isHidden = false
-        // 外蓝内白：在任意底色上都能看清。
-        selectionBorderOuterLayer.path = CGPath(
-            rect: selection.insetBy(dx: -1, dy: -1),
-            transform: nil
-        )
-        selectionBorderInnerLayer.path = CGPath(rect: selection, transform: nil)
+        selectionBorderInnerLayer.isHidden = true
+        // 绿色虚线选框。
+        selectionBorderOuterLayer.path = CGPath(rect: selection, transform: nil)
 
         let path = CGMutablePath()
         let size = Theme.selectionHandleSize

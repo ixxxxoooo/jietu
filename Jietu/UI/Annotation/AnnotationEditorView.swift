@@ -15,7 +15,8 @@ struct AnnotationEditorView: View {
     let baseImage: CGImage
     var onCopy: (CGImage) -> Void
     var onSave: (CGImage) -> Void
-    var onPin: (CGImage) -> Void
+    /// 参数二为画布在窗口中的全局坐标（供「原地钉图」定位）。
+    var onPin: (CGImage, CGRect) -> Void
     var onClose: () -> Void
 
     @Environment(\.displayScale) private var displayScale
@@ -43,6 +44,9 @@ struct AnnotationEditorView: View {
     @State private var ocrText = ""
     @State private var isOCRPresented = false
     @State private var isRecognizing = false
+
+    /// 画布在窗口中的全局坐标，用于「原地钉图」。
+    @State private var canvasGlobalFrame: CGRect = .zero
 
     // MARK: - Layout
 
@@ -129,6 +133,15 @@ struct AnnotationEditorView: View {
             }
         }
         .frame(width: displayedSize.width, height: displayedSize.height)
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { canvasGlobalFrame = proxy.frame(in: .global) }
+                    .onChange(of: proxy.frame(in: .global)) { _, frame in
+                        canvasGlobalFrame = frame
+                    }
+            }
+        )
         .padding(Self.padding)
     }
 
@@ -381,7 +394,7 @@ struct AnnotationEditorView: View {
 
     private func exportToPin() {
         guard let rendered = renderedImage() else { return }
-        onPin(rendered)
+        onPin(rendered, canvasGlobalFrame)
     }
 
     /// OCR：识别当前成图里的文字，复制到剪贴板并弹窗展示。

@@ -18,39 +18,48 @@ final class PinWindowController: NSObject {
     private var monitor: Any?
 
     /// 钉一张截图。多张可共存。
-    static func pin(image: CGImage, on screen: NSScreen?) {
-        let controller = PinWindowController(image: image, screen: screen)
+    ///
+    /// - Parameter targetFrame: 指定屏幕坐标位置与大小（用于「原地钉图」）；
+    ///   为 nil 时按原始大小钉在屏幕右上角。
+    static func pin(image: CGImage, on screen: NSScreen?, targetFrame: CGRect? = nil) {
+        let controller = PinWindowController(image: image, screen: screen, targetFrame: targetFrame)
         controllers.append(controller)
         controller.window.orderFrontRegardless()
     }
 
-    private init(image: CGImage, screen: NSScreen?) {
+    private init(image: CGImage, screen: NSScreen?, targetFrame: CGRect?) {
         let target = screen ?? NSScreen.main
         let visible = target?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
 
-        // 默认按**原始大小**显示：像素尺寸除以屏幕缩放。超过屏幕 90% 才等比缩小。
-        let backingScale = target?.backingScaleFactor ?? 2
-        let naturalSize = CGSize(
-            width: CGFloat(image.width) / backingScale,
-            height: CGFloat(image.height) / backingScale
-        )
-        let maxSize = CGSize(width: visible.width * 0.9, height: visible.height * 0.9)
-        let scale = min(
-            1,
-            min(maxSize.width / naturalSize.width, maxSize.height / naturalSize.height)
-        )
-        let size = CGSize(width: naturalSize.width * scale, height: naturalSize.height * scale)
+        let frame: NSRect
+        if let targetFrame, targetFrame.width > 1, targetFrame.height > 1 {
+            // 原地钉图：直接使用编辑器里图片所在的位置与大小。
+            frame = targetFrame
+        } else {
+            // 默认按**原始大小**显示：像素尺寸除以屏幕缩放。超过屏幕 90% 才等比缩小。
+            let backingScale = target?.backingScaleFactor ?? 2
+            let naturalSize = CGSize(
+                width: CGFloat(image.width) / backingScale,
+                height: CGFloat(image.height) / backingScale
+            )
+            let maxSize = CGSize(width: visible.width * 0.9, height: visible.height * 0.9)
+            let scale = min(
+                1,
+                min(maxSize.width / naturalSize.width, maxSize.height / naturalSize.height)
+            )
+            let size = CGSize(width: naturalSize.width * scale, height: naturalSize.height * scale)
+            // 每多钉一张就向右下错开一点，避免完全重叠。
+            let offset = CGFloat(PinWindowController.controllers.count % 6) * 24
+            let origin = CGPoint(
+                x: visible.maxX - size.width - 24 - offset,
+                y: visible.maxY - size.height - 24 - offset
+            )
+            frame = NSRect(origin: origin, size: size)
+        }
 
-        // 每多钉一张就向右下错开一点，避免完全重叠。
-        let offset = CGFloat(PinWindowController.controllers.count % 6) * 24
-        let origin = CGPoint(
-            x: visible.maxX - size.width - 24 - offset,
-            y: visible.maxY - size.height - 24 - offset
-        )
-
-        content = PinContentView(frame: NSRect(origin: .zero, size: size), image: image)
+        content = PinContentView(frame: NSRect(origin: .zero, size: frame.size), image: image)
         window = NSWindow(
-            contentRect: NSRect(origin: origin, size: size),
+            contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
