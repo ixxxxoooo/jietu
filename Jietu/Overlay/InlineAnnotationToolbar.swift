@@ -65,7 +65,12 @@ struct InlineMainToolbar: View {
                 symbol: "text.viewfinder",
                 tint: model.isLiveTextActive ? Theme.selectionGreen : .white
             ) {
-                model.isLiveTextActive.toggle()
+                if model.isLiveTextActive {
+                    model.isLiveTextActive = false
+                } else {
+                    model.isLiveTextActive = true
+                    model.tool = .select
+                }
             }
             iconButton("取消", symbol: "xmark", tint: .red) { model.onCancel?() }
             iconButton("确认", symbol: "checkmark", tint: .green) { model.onConfirm?() }
@@ -115,6 +120,7 @@ struct InlineMainToolbar: View {
     private func toolButton(_ item: AnnotationTool) -> some View {
         Button {
             model.tool = item
+            if item.isDrawing { model.isLiveTextActive = false }
         } label: {
             Image(systemName: item.symbolName)
                 .font(.system(size: 15, weight: .regular))

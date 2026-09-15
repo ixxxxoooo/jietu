@@ -353,7 +353,13 @@ struct AnnotationEditorView: View {
                 symbol: "text.viewfinder",
                 tint: isLiveTextActive ? Theme.selectionGreen : .white
             ) {
-                isLiveTextActive.toggle()
+                if isLiveTextActive {
+                    isLiveTextActive = false
+                } else {
+                    // 点 OCR = 自动切到选择工具并开启实况文本，可直接选字。
+                    isLiveTextActive = true
+                    tool = .select
+                }
             }
                 iconButton("OCR", symbol: "text.viewfinder") { exportOCR() }
                     .disabled(isRecognizing)
@@ -473,7 +479,11 @@ struct AnnotationEditorView: View {
     private func toolButton(_ item: AnnotationTool) -> some View {
         Button {
             tool = item
-            if item.isDrawing { selectedID = nil }
+            if item.isDrawing {
+                selectedID = nil
+                // 切到绘制类工具时关闭实况文本，避免抢手势。
+                isLiveTextActive = false
+            }
         } label: {
             Image(systemName: item.symbolName)
                 .font(.system(size: 15, weight: .regular))
