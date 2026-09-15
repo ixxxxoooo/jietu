@@ -1,0 +1,36 @@
+import CoreGraphics
+import Foundation
+
+enum CaptureError: LocalizedError {
+    case permissionDenied
+    case noShareableContent(String)
+    case noDisplays
+    case displayNotShareable(CGDirectDisplayID)
+    case emptyImage(CGDirectDisplayID)
+
+    var errorDescription: String? {
+        switch self {
+        case .permissionDenied:
+            return "未获得「屏幕录制」权限"
+        case .noShareableContent(let detail):
+            return "无法获取可捕获的屏幕内容：\(detail)"
+        case .noDisplays:
+            return "没有找到可捕获的显示器"
+        case .displayNotShareable(let id):
+            return "显示器 \(id) 当前不可捕获"
+        case .emptyImage(let id):
+            return "显示器 \(id) 返回了空图像"
+        }
+    }
+
+    var recoverySuggestion: String? {
+        switch self {
+        case .permissionDenied:
+            return "请在「系统设置 › 隐私与安全性 › 屏幕录制」中勾选 Jietu，然后重启 Jietu。"
+        case .noShareableContent, .displayNotShareable, .emptyImage:
+            return "通常是权限刚授予但进程尚未重启，请重启 Jietu 后重试。"
+        case .noDisplays:
+            return "请确认显示器已正确连接。"
+        }
+    }
+}
