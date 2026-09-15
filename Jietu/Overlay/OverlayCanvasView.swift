@@ -109,6 +109,8 @@ final class OverlayCanvasView: NSView {
     private var annotationDraft: Annotation?
     private var previewBase: CGImage?
     private var previewScale: CGFloat = 1
+    private var cropImage: CGImage?
+    private var liveTextHost: NSView?
     private var toolbarModel: InlineToolbarModel?
     private var mainToolbarHost: NSView?
     private var optionsToolbarHost: NSView?
@@ -988,6 +990,7 @@ final class OverlayCanvasView: NSView {
         crosshairLayer.path = nil
 
         preparePreviewBase()
+        updateLiveTextOverlay()
         // 进入时就只弹工具栏，不显示任何标注层，避免画面「跳」一下。
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -999,6 +1002,9 @@ final class OverlayCanvasView: NSView {
 
     private func exitAnnotating() {
         hideToolbar()
+        liveTextHost?.removeFromSuperview()
+        liveTextHost = nil
+        cropImage = nil
         textField?.removeFromSuperview()
         textField = nil
         annotations.removeAll()
@@ -1052,6 +1058,7 @@ final class OverlayCanvasView: NSView {
             previewScale = 1
             return
         }
+        cropImage = crop
         let longest = max(crop.width, crop.height)
         previewScale = longest > 1600 ? 1600 / CGFloat(longest) : 1
         previewBase = Self.rasterize(crop, scale: previewScale)
@@ -1355,14 +1362,35 @@ final class OverlayCanvasView: NSView {
         withObservationTracking {
             _ = model.showColor
             _ = model.showWidth
+            _ = model.tool
         } onChange: { [weak self] in
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.rebuildOptionsToolbar()
+                self.updateLiveTextOverlay()
                 if self.toolbarModel === model {
                     self.observeOptions(model)
                 }
             }
+        }
+    }
+
+    /// 实况文本：选中「选择」工具时铺一层可拖选复制文字的覆盖层。
+    private func updateLiveTextOverlay() {
+        let wantsLiveText = (toolbarModel?.tool == .select) && cropImage != nil && selection != nil
+        if wantsLiveText {
+            if liveTextHost == nil, let image = cropImage {
+                let host = NSHostingView(rootView: LiveTextOverlay(image: image))
+                host.translatesAutoresizingMaskIntoConstraints = true
+                addSubview(host)
+                liveTextHost = host
+            }
+            if let host = liveTextHost, let selection {
+                host.frame = selection
+            }
+        } else {
+            liveTextHost?.removeFromSuperview()
+            liveTextHost = nil
         }
     }
 
@@ -1639,19 +1667,46 @@ final class OverlayCanvasView: NSView {
             existing = ""
         }
 
+        let scale = max(1, snapshot.effectiveScale)
         let view = viewPoint(fromAnnotation: cropPoint)
-        // 标注字号是图像像素，输入框用屏幕点大小，需要除以缩放。
-        let pointSize = max(11, model.lineWidth * 6 / max(1, snapshot.effectiveScale))
-        let font = NSFont.systemFont(ofSize: pointSize)
-        let field = NSTextField(
-            frame: CGRect(x: view.x, y: view.y - 16, width: 220, height: 30)
-        )
+        let font = NSFont.systemFont(ofSize: max(11, model.lineWidth * 6 / scale))
+        let field: NSTextField
+        if let editing, case .callout(_, _, let labelOrigin, let s, let fs) = editing.kind {
+            // 气泡就地编辑：输入框直接做成气泡的样子，盖在气泡位置。
+            let rect = Annotation.calloutLabelRect(origin: labelOrigin, string: s, fontSize: fs)
+            let topLeft = viewPoint(rect.origin)
+            let size = CGSize(width: max(120, rect.width / scale), height: max(26, rect.height / scale))
+            field = NSTextField(
+                frame: CGRect(
+                    x: topLeft.x,
+                    y: topLeft.y - size.height,
+                    width: size.width,
+                    height: size.height
+                )
+            )
+            field.isBordered = false
+            field.drawsBackground = true
+            field.backgroundColor = NSColor(
+                srgbRed: model.color.red,
+                green: model.color.green,
+                blue: model.color.blue,
+                alpha: 1
+            )
+            field.wantsLayer = true
+            field.layer?.cornerRadius = 8
+            field.layer?.masksToBounds = true
+            field.font = NSFont.systemFont(ofSize: max(11, fs / scale), weight: .medium)
+        } else {
+            field = NSTextField(
+                frame: CGRect(x: view.x, y: view.y - 16, width: 220, height: 30)
+            )
+            field.isBordered = true
+            field.drawsBackground = true
+            field.backgroundColor = NSColor.black.withAlphaComponent(0.45)
+            field.font = font
+        }
         field.stringValue = existing
-        field.font = font
         field.textColor = .white
-        field.backgroundColor = NSColor.black.withAlphaComponent(0.45)
-        field.drawsBackground = true
-        field.isBordered = true
         field.focusRingType = .none
         field.target = self
         field.action = #selector(handleInlineTextCommit)

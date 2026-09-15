@@ -140,9 +140,6 @@ struct AnnotationEditorView: View {
         }
         .onDisappear { removeScrollMonitor() }
         .onChange(of: bufferScale) { _, _ in ensurePreviewBase() }
-        .sheet(isPresented: $isOCRPresented) {
-            OCRResultView(text: ocrText) { isOCRPresented = false }
-        }
     }
 
     private var canvasArea: some View {
@@ -184,6 +181,10 @@ struct AnnotationEditorView: View {
                             .strokeBorder(Color.black.opacity(0.25), lineWidth: 1)
                             .allowsHitTesting(false)
                     )
+                if tool == .select {
+                    LiveTextOverlay(image: baseImage)
+                        .frame(width: displayedSize.width, height: displayedSize.height)
+                }
                 selectionOverlay
                 selectionControls
                 textEditorOverlay
@@ -278,28 +279,33 @@ struct AnnotationEditorView: View {
     /// 内联文字编辑：直接在图片原位置输入，不再弹窗。
     @ViewBuilder
     private var textEditorOverlay: some View {
-        if editingTextID != nil {
+        if let id = editingTextID {
+            let isCallout = annotations.first { $0.id == id }
+                .map { if case .callout = $0.kind { return true } else { return false } } ?? false
             let font = inlineFontSize * pointsPerPixel
             let measured = Annotation.textSize(
                 string: inlineText.isEmpty ? "文字" : inlineText,
                 fontSize: inlineFontSize
             )
-            let width = max(90, measured.width * pointsPerPixel + 16)
-            let height = max(24, font * 1.4 + 8)
+            let width = max(isCallout ? 120 : 90, measured.width * pointsPerPixel + (isCallout ? 24 : 16))
+            let height = max(isCallout ? 30 : 24, font * 1.6 + 8)
 
             TextField("文字", text: $inlineText)
                 .textFieldStyle(.plain)
                 .font(.system(size: max(11, font)))
-                .foregroundStyle(color.swiftUIColor)
-                .padding(.horizontal, 6)
+                .foregroundStyle(isCallout ? .white : color.swiftUIColor)
+                .padding(.horizontal, isCallout ? 10 : 6)
                 .frame(width: width, height: height)
                 .background(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(Color.black.opacity(0.35))
+                    RoundedRectangle(cornerRadius: isCallout ? 9 : 4, style: .continuous)
+                        .fill(isCallout ? color.swiftUIColor : Color.black.opacity(0.35))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .strokeBorder(Color.accentColor, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: isCallout ? 9 : 4, style: .continuous)
+                        .strokeBorder(
+                            isCallout ? Color.white.opacity(0.25) : Color.accentColor,
+                            lineWidth: 1
+                        )
                 )
                 .position(
                     x: inlineOriginView.x + width / 2,

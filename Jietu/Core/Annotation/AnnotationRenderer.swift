@@ -269,41 +269,38 @@ enum AnnotationRenderer {
             fontSize: fontSize
         )
         let contextLabelRect = contextRect(labelRect, imageHeight: imageHeight)
+        let corner: CGFloat = 10
 
-        // 箭头：从文字框边缘指向序号圆点。
+        // 小尾巴：从气泡边缘指向序号圆点（iMessage 那种气泡）。
         let edge = CGPoint(
             x: min(max(center.x, labelRect.minX), labelRect.maxX),
             y: min(max(center.y, labelRect.minY), labelRect.maxY)
         )
-        let start = contextPoint(edge, imageHeight: imageHeight)
-        context.setStrokeColor(color.cgColor)
-        context.setLineWidth(max(2, annotation.lineWidth * 0.6))
-        context.setLineCap(.round)
-        context.move(to: start)
-        context.addLine(to: dotCenter)
-        context.strokePath()
-
-        let angle = atan2(dotCenter.y - start.y, dotCenter.x - start.x)
-        let headLength = max(8, annotation.lineWidth * 2.4)
-        let spread = CGFloat.pi / 7
-        for offset in [CGFloat.pi - spread, CGFloat.pi + spread] {
-            context.move(to: dotCenter)
-            context.addLine(
-                to: CGPoint(
-                    x: dotCenter.x + cos(angle + offset) * headLength,
-                    y: dotCenter.y + sin(angle + offset) * headLength
-                )
-            )
-        }
-        context.strokePath()
-
-        // 文字框。
+        let edgeContext = contextPoint(edge, imageHeight: imageHeight)
+        let dx = dotCenter.x - edgeContext.x
+        let dy = dotCenter.y - edgeContext.y
+        let length = max(1, hypot(dx, dy))
+        let ux = dx / length
+        let uy = dy / length
+        let tailLength = min(14, length)
+        let tip = CGPoint(x: edgeContext.x + ux * tailLength, y: edgeContext.y + uy * tailLength)
+        let halfBase: CGFloat = 7
+        let baseA = CGPoint(x: edgeContext.x - uy * halfBase, y: edgeContext.y + ux * halfBase)
+        let baseB = CGPoint(x: edgeContext.x + uy * halfBase, y: edgeContext.y - ux * halfBase)
         context.setFillColor(color.cgColor)
+        context.beginPath()
+        context.move(to: baseA)
+        context.addLine(to: tip)
+        context.addLine(to: baseB)
+        context.closePath()
+        context.fillPath()
+
+        // 气泡本体。
         context.addPath(
             CGPath(
                 roundedRect: contextLabelRect,
-                cornerWidth: 7,
-                cornerHeight: 7,
+                cornerWidth: corner,
+                cornerHeight: corner,
                 transform: nil
             )
         )
