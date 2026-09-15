@@ -80,7 +80,6 @@ final class PinWindowController: NSObject {
         window.acceptsMouseMovedEvents = true
 
         content.onRequestClose = { [weak self] in self?.close() }
-        content.onOCR = { [weak self] in self?.recognizeText() }
 
         // Esc 关闭最近钉的一张，方便键盘用户。
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -99,26 +98,6 @@ final class PinWindowController: NSObject {
         PinWindowController.controllers.removeAll { $0 === self }
     }
 
-    /// OCR：识别钉图里的文字并复制到剪贴板，弹窗展示结果。
-    private func recognizeText() {
-        let image = content.cgImage
-        Task { @MainActor in
-            let text = await OCRService.recognizeText(in: image)
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            if !text.isEmpty {
-                pasteboard.setString(text, forType: .string)
-            }
-
-            NSApp.activate()
-            let alert = NSAlert()
-            alert.alertStyle = .informational
-            alert.messageText = text.isEmpty ? "没有识别到文字" : "已识别文字（已复制到剪贴板）"
-            alert.informativeText = text.isEmpty ? "" : String(text.prefix(800))
-            alert.addButton(withTitle: "好")
-            alert.runModal()
-        }
-    }
 }
 
 /// 钉图的绘制与交互载体。
@@ -141,7 +120,6 @@ final class PinContentView: NSView {
     private var trackingArea: NSTrackingArea?
 
     var onRequestClose: (() -> Void)?
-    var onOCR: (() -> Void)?
 
     private var liveTextOverlay: ImageAnalysisOverlayView?
     private let liveTextDelegate = PinLiveTextDelegate()
@@ -301,9 +279,6 @@ final class PinContentView: NSView {
 
     override func rightMouseDown(with event: NSEvent) {
         let menu = NSMenu()
-        let ocr = NSMenuItem(title: "识别文字（OCR）", action: #selector(handleOCR), keyEquivalent: "")
-        ocr.target = self
-        menu.addItem(ocr)
         let copy = NSMenuItem(title: "复制图像", action: #selector(handleCopy), keyEquivalent: "")
         copy.target = self
         menu.addItem(copy)
@@ -407,10 +382,6 @@ final class PinContentView: NSView {
     }
 
     // MARK: - Menu actions
-
-    @objc private func handleOCR() {
-        onOCR?()
-    }
 
     @objc private func handleCopy() {
         let pasteboard = NSPasteboard.general
