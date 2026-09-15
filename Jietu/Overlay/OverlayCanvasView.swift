@@ -179,6 +179,15 @@ final class OverlayCanvasView: NSView {
         annotationLayer.contentsGravity = .resize
         annotationLayer.magnificationFilter = .nearest
         annotationLayer.isHidden = true
+        // 关闭隐式动画：否则设置 contents/frame 会有 0.25s 过渡，表现为「闪一下」。
+        annotationLayer.actions = [
+            "contents": NSNull(),
+            "frame": NSNull(),
+            "bounds": NSNull(),
+            "position": NSNull(),
+            "hidden": NSNull(),
+            "opacity": NSNull(),
+        ]
         root.addSublayer(annotationLayer)
 
         dimLayer.fillColor = NSColor.black
@@ -209,6 +218,23 @@ final class OverlayCanvasView: NSView {
         handlesLayer.lineWidth = 1
         handlesLayer.frame = bounds
         root.addSublayer(handlesLayer)
+
+        // 关闭这些图层的隐式动画：否则隐藏/改 path 时会有淡入淡出或缩放过渡。
+        let noActions: [String: CAAction] = [
+            "path": NSNull(),
+            "hidden": NSNull(),
+            "opacity": NSNull(),
+            "contents": NSNull(),
+            "fillColor": NSNull(),
+            "strokeColor": NSNull(),
+            "lineWidth": NSNull(),
+        ]
+        for layer in [
+            dimLayer, windowHighlightLayer, selectionBorderOuterLayer,
+            selectionBorderInnerLayer, handlesLayer, crosshairLayer,
+        ] {
+            layer.actions = noActions
+        }
 
         crosshairLayer.strokeColor = NSColor.white.withAlphaComponent(0.55).cgColor
         crosshairLayer.lineWidth = 1
@@ -905,8 +931,11 @@ final class OverlayCanvasView: NSView {
 
         preparePreviewBase()
         // 进入时就只弹工具栏，不显示任何标注层，避免画面「跳」一下。
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         annotationLayer.contents = nil
         annotationLayer.isHidden = true
+        CATransaction.commit()
         showToolbar()
     }
 
@@ -916,8 +945,11 @@ final class OverlayCanvasView: NSView {
         textField = nil
         annotations.removeAll()
         annotationDraft = nil
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         annotationLayer.contents = nil
         annotationLayer.isHidden = true
+        CATransaction.commit()
         phase = .selecting
         onInlineEditingChanged?(false)
         updateAllLayers()
@@ -976,20 +1008,42 @@ final class OverlayCanvasView: NSView {
         toolbarModel?.canUndo = !annotations.isEmpty
         toolbarModel?.canRedo = !redoAnnotations.isEmpty
 
-        // 没有任何标注时不显示标注层（进入就地的那一刻画面保持不变）。
-        guard let previewBase, let selection, !(annotations.isEmpty && annotationDraft == nil)
-        else {
+        // 草稿要「有实际尺寸」才画；单击产生的零尺寸草稿不显示，避免闪一下。
+        var list = annotations
+        if let annotationDraft, isMeaningfulDraft(annotationDraft) {
+            list.append(annotationDraft)
+        }
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        guard let previewBase, let selection, !list.isEmpty else {
             annotationLayer.contents = nil
             annotationLayer.isHidden = true
+            CATransaction.commit()
             return
         }
-        var list = annotations
-        if let annotationDraft { list.append(annotationDraft) }
         let scaled = list.map { $0.scaled(by: previewScale) }
         let image = AnnotationRenderer.render(base: previewBase, annotations: scaled) ?? previewBase
         annotationLayer.frame = selection
         annotationLayer.contents = image
         annotationLayer.isHidden = false
+        CATransaction.commit()
+    }
+
+    /// 草稿是否已经「成形」（用于避免单击时的零尺寸闪烁）。
+    private func isMeaningfulDraft(_ annotation: Annotation) -> Bool {
+        switch annotation.kind {
+        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _):
+            return rect.width >= 1.5 || rect.height >= 1.5
+        case .arrow(let from, let to, _):
+            return hypot(to.x - from.x, to.y - from.y) >= 2
+        case .pen(let points):
+            return points.count >= 2
+        case .counter:
+            return true
+        case .text:
+            return false
+        }
     }
 
     private func inlineUndo() {
