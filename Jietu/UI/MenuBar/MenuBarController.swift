@@ -149,6 +149,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             )
             entry.target = self
             entry.representedObject = url
+            entry.image = Self.thumbnail(for: url, height: 18)
             recentMenu.addItem(entry)
         }
 
@@ -156,6 +157,17 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let clear = NSMenuItem(title: "清除记录", action: #selector(handleClearRecents), keyEquivalent: "")
         clear.target = self
         recentMenu.addItem(clear)
+    }
+
+    /// 菜单项缩略图（等比缩放到指定高度）。
+    private static func thumbnail(for url: URL, height: CGFloat) -> NSImage? {
+        guard let image = NSImage(contentsOf: url), image.size.height > 0 else { return nil }
+        let aspect = image.size.width / image.size.height
+        let size = NSSize(width: max(1, min(height * aspect, 64)), height: height)
+        return NSImage(size: size, flipped: false) { rect in
+            image.draw(in: rect)
+            return true
+        }
     }
 
     // MARK: - Actions
