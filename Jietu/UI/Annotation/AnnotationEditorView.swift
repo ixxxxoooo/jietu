@@ -69,6 +69,8 @@ struct AnnotationEditorView: View {
     @State private var isRecognizing = false
     /// 是否开启实况文本（由工具栏 OCR 按钮触发）。
     @State private var isLiveTextActive = false
+    @State private var showColor = false
+    @State private var showWidth = false
 
     // MARK: - Preview / zoom
 
@@ -83,7 +85,7 @@ struct AnnotationEditorView: View {
 
     // MARK: - Layout
 
-    static let toolbarHeight: CGFloat = 104
+    static let toolbarHeight: CGFloat = 56
     static let padding: CGFloat = 10
     static let minWindowWidth: CGFloat = 900
     static let minWindowHeight: CGFloat = 430
@@ -323,31 +325,45 @@ struct AnnotationEditorView: View {
     }
 
     private var toolbar: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 4) {
-                ForEach(AnnotationTool.allCases) { item in
-                    toolButton(item)
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            mainBar
+            if showColor || showWidth {
+                optionsBar
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(minWidth: inline ? 0 : Self.minWindowWidth, maxWidth: .infinity, alignment: .leading)
+    }
 
-                separator
+    private var mainBar: some View {
+        HStack(spacing: 4) {
+            ForEach(AnnotationTool.allCases) { item in
+                toolButton(item)
+            }
 
-                iconButton("撤销", symbol: "arrow.uturn.backward") { undo() }
-                    .disabled(undoStack.isEmpty)
-                    .keyboardShortcut("z", modifiers: .command)
-                iconButton("重做", symbol: "arrow.uturn.forward") { redo() }
-                    .disabled(redoStack.isEmpty)
-                    .keyboardShortcut("z", modifiers: [.command, .shift])
-                iconButton("删除", symbol: "trash") { deleteSelected() }
-                    .disabled(selectedID == nil)
+            separator
 
-                Spacer(minLength: 8)
+            iconButton("撤销", symbol: "arrow.uturn.backward") { undo() }
+                .disabled(undoStack.isEmpty)
+                .keyboardShortcut("z", modifiers: .command)
+            iconButton("重做", symbol: "arrow.uturn.forward") { redo() }
+                .disabled(redoStack.isEmpty)
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+            iconButton("删除", symbol: "trash") { deleteSelected() }
+                .disabled(selectedID == nil)
 
-                zoomControls
+            separator
 
-                separator
+            colorButton
+            widthButton
 
-                iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
-                iconButton("保存", symbol: "square.and.arrow.down") { exportToSave() }
+            Spacer(minLength: 12)
+
+            zoomControls
+
+            separator
+
             iconButton(
                 "识别文字",
                 symbol: "text.viewfinder",
@@ -356,34 +372,41 @@ struct AnnotationEditorView: View {
                 if isLiveTextActive {
                     isLiveTextActive = false
                 } else {
-                    // 点 OCR = 自动切到选择工具并开启实况文本，可直接选字。
                     isLiveTextActive = true
                     tool = .select
                 }
             }
-                iconButton("OCR", symbol: "text.viewfinder") { exportOCR() }
-                    .disabled(isRecognizing)
-                iconButton("钉图", symbol: "pin") { exportToPin() }
-                iconButton("关闭", symbol: "xmark", tint: .red) { onClose() }
-                    .keyboardShortcut(.cancelAction)
-            }
+            iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
+            iconButton("保存", symbol: "square.and.arrow.down") { exportToSave() }
+            iconButton("钉图", symbol: "pin") { exportToPin() }
+            iconButton("关闭", symbol: "xmark", tint: .red) { onClose() }
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .fixedSize()
+        .background(FrostedBar())
+    }
 
-            HStack(spacing: 12) {
+    /// 点开颜色 / 粗细后出现的第二行（独立一条）。
+    @ViewBuilder
+    private var optionsBar: some View {
+        HStack(spacing: 14) {
+            if showWidth {
                 HStack(spacing: 8) {
-                    Text("\(Int(lineWidth))")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    Text(model_toolIsEraser ? "橡皮" : "\(Int(lineWidth))")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 24, alignment: .trailing)
+                        .frame(width: 34, alignment: .trailing)
                     Slider(value: $lineWidth, in: 1...24)
-                        .frame(width: 150)
+                        .frame(width: 170)
                         .tint(.white)
                         .onChange(of: lineWidth) { _, value in
                             applyToSelected { $0.withLineWidth(value) }
                         }
                 }
-
-                separator
-
+            }
+            if showColor {
                 HStack(spacing: 10) {
                     ForEach(RGBAColor.palette, id: \.self) { swatch in
                         Button {
@@ -392,7 +415,7 @@ struct AnnotationEditorView: View {
                         } label: {
                             Circle()
                                 .fill(swatch.swiftUIColor)
-                                .frame(width: 18, height: 18)
+                                .frame(width: 20, height: 20)
                                 .overlay(
                                     Circle().strokeBorder(
                                         color == swatch ? Color.white : Color.white.opacity(0.2),
@@ -403,33 +426,45 @@ struct AnnotationEditorView: View {
                         .buttonStyle(.plain)
                     }
                 }
-
-                contextualStyleControls
-
-                Spacer(minLength: 0)
             }
+            contextualStyleControls
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(
-            ZStack {
-                VisualEffectBackground(material: .hudWindow)
-                Color.black.opacity(0.45)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
-        )
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .frame(
-            minWidth: inline ? 0 : Self.minWindowWidth,
-            maxWidth: .infinity,
-            minHeight: Self.toolbarHeight,
-            maxHeight: Self.toolbarHeight
-        )
+        .padding(.vertical, 10)
+        .fixedSize()
+        .background(FrostedBar())
+    }
+
+    private var model_toolIsEraser: Bool { tool == .eraser }
+
+    private var colorButton: some View {
+        Button {
+            showColor.toggle()
+            if showColor { showWidth = false }
+        } label: {
+            Circle()
+                .fill(color.swiftUIColor)
+                .frame(width: 20, height: 20)
+                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1.2))
+                .frame(width: 30, height: 26)
+        }
+        .buttonStyle(.plain)
+        .help("颜色")
+    }
+
+    private var widthButton: some View {
+        Button {
+            showWidth.toggle()
+            if showWidth { showColor = false }
+        } label: {
+            Image(systemName: "lineweight")
+                .font(.system(size: 15, weight: .regular))
+                .frame(width: 30, height: 26)
+                .foregroundStyle(showWidth ? Theme.selectionGreen : Color.white.opacity(0.9))
+        }
+        .buttonStyle(.plain)
+        .help("线条粗细")
     }
 
     private var separator: some View {
