@@ -1090,6 +1090,7 @@ final class OverlayCanvasView: NSView {
             DispatchQueue.main.async {
                 guard let self else { return }
                 if let host = self.toolbarHost {
+                    host.layoutSubtreeIfNeeded()
                     host.setFrameSize(host.fittingSize)
                     self.updateToolbarPosition()
                 }
@@ -1122,6 +1123,8 @@ final class OverlayCanvasView: NSView {
         }
         origin.x = min(max(origin.x, bounds.minX + 8), max(bounds.minX + 8, bounds.maxX - size.width - 8))
         origin.y = min(origin.y, bounds.maxY - size.height - 8)
+        // 尺寸与位置一起设，保证展开第二行时仍是一整块、不脱节。
+        host.setFrameSize(size)
         host.frame = CGRect(origin: origin, size: size)
     }
 
