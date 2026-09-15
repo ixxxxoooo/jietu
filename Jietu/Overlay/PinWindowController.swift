@@ -123,7 +123,6 @@ final class PinContentView: NSView {
 
     private var liveTextOverlay: ImageAnalysisOverlayView?
     private let liveTextDelegate = PinLiveTextDelegate()
-    private let liveTextButton = NSButton()
 
     private let edgeTolerance: CGFloat = 7
 
@@ -134,7 +133,7 @@ final class PinContentView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 10
         layer?.masksToBounds = true
-        configureLiveTextButton()
+        attachLiveText()
     }
 
     @available(*, unavailable)
@@ -168,67 +167,23 @@ final class PinContentView: NSView {
         trackingArea = area
     }
 
-    override func mouseEntered(with event: NSEvent) {
-        liveTextButton.isHidden = false
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        liveTextButton.isHidden = true
-    }
-
     // MARK: - Live Text
 
-    private func configureLiveTextButton() {
-        liveTextButton.isBordered = false
-        liveTextButton.bezelStyle = .regularSquare
-        liveTextButton.image = NSImage(
-            systemSymbolName: "text.viewfinder",
-            accessibilityDescription: "识别文字"
-        )
-        liveTextButton.imagePosition = .imageOnly
-        liveTextButton.contentTintColor = .white
-        liveTextButton.target = self
-        liveTextButton.action = #selector(toggleLiveText)
-        liveTextButton.wantsLayer = true
-        liveTextButton.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.5).cgColor
-        liveTextButton.layer?.cornerRadius = 7
-        liveTextButton.layer?.masksToBounds = true
-        liveTextButton.isHidden = true
-        addSubview(liveTextButton)
-    }
-
-    override func layout() {
-        super.layout()
-        let size: CGFloat = 28
-        liveTextButton.frame = CGRect(
-            x: bounds.maxX - size - 10,
-            y: bounds.minY + 10,
-            width: size,
-            height: size
-        )
-    }
-
-    @objc private func toggleLiveText() {
-        if liveTextOverlay != nil {
-            liveTextOverlay?.removeFromSuperview()
-            liveTextOverlay = nil
-            liveTextButton.contentTintColor = .white
-            return
-        }
+    /// 直接铺一层系统实况文本覆盖层：它自带右下角的实况文本按钮与文本选择。
+    private func attachLiveText() {
         let overlay = ImageAnalysisOverlayView(liveTextDelegate)
         overlay.preferredInteractionTypes = .textSelection
         overlay.frame = bounds
         overlay.autoresizingMask = [.width, .height]
-        addSubview(overlay, positioned: .below, relativeTo: liveTextButton)
+        addSubview(overlay)
         liveTextOverlay = overlay
-        liveTextButton.contentTintColor = NSColor.systemGreen
 
         Task { @MainActor in
-            guard ImageAnalyzer.isSupported, let image = cgImage as CGImage? else { return }
+            guard ImageAnalyzer.isSupported else { return }
             let analyzer = ImageAnalyzer()
             let configuration = ImageAnalyzer.Configuration(.text)
             if let analysis = try? await analyzer.analyze(
-                image,
+                cgImage,
                 orientation: .up,
                 configuration: configuration
             ) {
@@ -236,152 +191,6 @@ final class PinContentView: NSView {
             }
         }
     }
-
-    override func cursorUpdate(with event: NSEvent) {
-        switch edge(at: convert(event.locationInWindow, from: nil)) {
-        case .left, .right, .topLeft, .topRight, .bottomLeft, .bottomRight, .top, .bottom:
-            NSCursor.crosshair.set()
-        case nil:
-            NSCursor.openHand.set()
-        }
-    }
-
-    // MARK: - Mouse
-
-    override func mouseDown(with event: NSEvent) {
-        if event.clickCount >= 2 {
-            onRequestClose?()
-            return
-        }
-        activeEdge = edge(at: convert(event.locationInWindow, from: nil))
-        startMouse = NSEvent.mouseLocation
-        startFrame = window?.frame ?? .zero
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard let window else { return }
-        let current = NSEvent.mouseLocation
-        if let activeEdge {
-            resize(window: window, edge: activeEdge, current: current)
-        } else {
-            window.setFrameOrigin(
-                NSPoint(
-                    x: startFrame.origin.x + (current.x - startMouse.x),
-                    y: startFrame.origin.y + (current.y - startMouse.y)
-                )
-            )
-        }
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        activeEdge = nil
-    }
-
-    override func rightMouseDown(with event: NSEvent) {
-        let menu = NSMenu()
-        let copy = NSMenuItem(title: "复制图像", action: #selector(handleCopy), keyEquivalent: "")
-        copy.target = self
-        menu.addItem(copy)
-        menu.addItem(.separator())
-        let close = NSMenuItem(title: "关闭", action: #selector(handleClose), keyEquivalent: "")
-        close.target = self
-        menu.addItem(close)
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
-    }
-
-    // MARK: - Zoom
-
-    override func scrollWheel(with event: NSEvent) {
-        let raw = event.hasPreciseScrollingDeltas
-            ? event.scrollingDeltaY / 8
-            : event.scrollingDeltaY
-        let factor = min(1.5, max(0.67, 1 + raw * 0.05))
-        zoom(by: factor, at: convert(event.locationInWindow, from: nil))
-    }
-
-    override func magnify(with event: NSEvent) {
-        zoom(by: 1 + event.magnification, at: convert(event.locationInWindow, from: nil))
-    }
-
-    /// 以光标为锚点缩放（保持宽高比）。
-    private func zoom(by factor: CGFloat, at point: CGPoint) {
-        guard let window, factor > 0, factor != 1 else { return }
-        let frame = window.frame
-        guard frame.width > 0, frame.height > 0 else { return }
-        let newWidth = max(80, frame.width * factor)
-        let newHeight = max(56, frame.height * factor)
-        let relX = point.x / frame.width
-        let relY = point.y / frame.height
-        let originX = frame.origin.x + (frame.width - newWidth) * relX
-        let originY = frame.origin.y + (frame.height - newHeight) * relY
-        window.setFrame(
-            NSRect(x: originX, y: originY, width: newWidth, height: newHeight),
-            display: true
-        )
-    }
-
-    // MARK: - Resize
-
-    private func edge(at point: CGPoint) -> Edge? {
-        let nearLeft = point.x <= edgeTolerance
-        let nearRight = point.x >= bounds.width - edgeTolerance
-        let nearBottom = point.y <= edgeTolerance
-        let nearTop = point.y >= bounds.height - edgeTolerance
-
-        if nearLeft && nearTop { return .topLeft }
-        if nearRight && nearTop { return .topRight }
-        if nearLeft && nearBottom { return .bottomLeft }
-        if nearRight && nearBottom { return .bottomRight }
-        if nearLeft { return .left }
-        if nearRight { return .right }
-        if nearBottom { return .bottom }
-        if nearTop { return .top }
-        return nil
-    }
-
-    /// 拖拽边缘 / 角改变大小，保持宽高比，未拖动的一侧固定。
-    private func resize(window: NSWindow, edge: Edge, current: NSPoint) {
-        let dx = current.x - startMouse.x
-        let dy = current.y - startMouse.y
-        let aspect = startFrame.height > 0 ? startFrame.width / startFrame.height : 1
-
-        let affectsLeft = edge == .left || edge == .topLeft || edge == .bottomLeft
-        let affectsRight = edge == .right || edge == .topRight || edge == .bottomRight
-        let affectsBottom = edge == .bottom || edge == .bottomLeft || edge == .bottomRight
-        let affectsTop = edge == .top || edge == .topLeft || edge == .topRight
-
-        var width = startFrame.width
-        var height = startFrame.height
-        if affectsRight { width = startFrame.width + dx }
-        if affectsLeft { width = startFrame.width - dx }
-        if affectsTop { height = startFrame.height + dy }
-        if affectsBottom { height = startFrame.height - dy }
-
-        // 以变化更大的轴为准，另一轴按宽高比推导。
-        if abs(dx) >= abs(dy) {
-            height = width / aspect
-        } else {
-            width = height * aspect
-        }
-        width = max(80, width)
-        height = max(56, width / aspect)
-
-        var origin = startFrame.origin
-        if affectsLeft {
-            origin.x = startFrame.maxX - width
-        } else if affectsRight {
-            origin.x = startFrame.minX
-        }
-        if affectsBottom {
-            origin.y = startFrame.maxY - height
-        } else if affectsTop {
-            origin.y = startFrame.minY
-        }
-
-        window.setFrame(NSRect(origin: origin, size: CGSize(width: width, height: height)), display: true)
-    }
-
-    // MARK: - Menu actions
 
     @objc private func handleCopy() {
         let pasteboard = NSPasteboard.general
