@@ -362,16 +362,15 @@ final class OverlayCanvasView: NSView {
         let size = Theme.selectionHandleSize
         for handle in SelectionHandle.allCases {
             let center = handle.center(in: selection)
+            // 圆形控制点。
             path.addPath(
                 CGPath(
-                    roundedRect: CGRect(
+                    ellipseIn: CGRect(
                         x: center.x - size / 2,
                         y: center.y - size / 2,
                         width: size,
                         height: size
                     ),
-                    cornerWidth: 1.5,
-                    cornerHeight: 1.5,
                     transform: nil
                 )
             )
