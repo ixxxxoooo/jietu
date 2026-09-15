@@ -54,7 +54,10 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
         )
         window.title = "标注"
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 560, height: 400)
+        window.contentMinSize = NSSize(
+            width: AnnotationEditorView.minWindowWidth,
+            height: AnnotationEditorView.minWindowHeight
+        )
         window.contentView = hosting
         window.center()
         window.delegate = self

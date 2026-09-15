@@ -40,10 +40,17 @@ struct AnnotationEditorView: View {
     @State private var hasUserZoomed = false
     @State private var hasInitialized = false
 
+    @State private var ocrText = ""
+    @State private var isOCRPresented = false
+    @State private var isRecognizing = false
+
     // MARK: - Layout
 
     static let toolbarHeight: CGFloat = 44
     static let padding: CGFloat = 10
+    /// 最小窗口尺寸：不能小于工具栏一排按钮所需宽度，避免工具栏被挤压。
+    static let minWindowWidth: CGFloat = 1010
+    static let minWindowHeight: CGFloat = 430
     private static let minZoom: CGFloat = 0.1
     private static let maxZoom: CGFloat = 8
 
@@ -89,13 +96,16 @@ struct AnnotationEditorView: View {
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .frame(minWidth: 560, minHeight: 400)
+        .frame(minWidth: Self.minWindowWidth, minHeight: Self.minWindowHeight)
         .onAppear { ensurePreviewBase() }
         .onChange(of: bufferScale) { _, _ in ensurePreviewBase() }
         .alert("输入文字", isPresented: $isTextPromptPresented) {
             TextField("文字", text: $textInput)
             Button("确定") { commitText() }
             Button("取消", role: .cancel) { textInput = "" }
+        }
+        .sheet(isPresented: $isOCRPresented) {
+            OCRResultView(text: ocrText) { isOCRPresented = false }
         }
     }
 
@@ -163,12 +173,16 @@ struct AnnotationEditorView: View {
 
             iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
             iconButton("保存", symbol: "square.and.arrow.down") { exportToSave() }
+            iconButton("OCR", symbol: "text.viewfinder") { exportOCR() }
+                .disabled(isRecognizing)
             iconButton("钉图", symbol: "pin") { exportToPin() }
             iconButton("关闭", symbol: "xmark") { onClose() }
                 .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, 10)
-        .frame(height: Self.toolbarHeight)
+        // 固定最小宽度：窗口再窄也不会把工具栏挤成一团。
+        .frame(minWidth: Self.minWindowWidth, maxWidth: .infinity, minHeight: Self.toolbarHeight, maxHeight: Self.toolbarHeight)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var zoomControls: some View {
@@ -370,6 +384,23 @@ struct AnnotationEditorView: View {
         onPin(rendered)
     }
 
+    /// OCR：识别当前成图里的文字，复制到剪贴板并弹窗展示。
+    private func exportOCR() {
+        guard let rendered = renderedImage(), !isRecognizing else { return }
+        isRecognizing = true
+        Task { @MainActor in
+            let text = await OCRService.recognizeText(in: rendered)
+            isRecognizing = false
+            ocrText = text
+            if !text.isEmpty {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(text, forType: .string)
+            }
+            isOCRPresented = true
+        }
+    }
+
     // MARK: - Preview rendering
 
     private var renderedPreview: CGImage? {
@@ -461,6 +492,7 @@ struct AnnotationEditorView: View {
     // MARK: - Window sizing
 
     /// 编辑器初始窗口尺寸：默认按原始大小，超过屏幕 90% 时等比缩小。
+    /// 宽度不小于 `minWindowWidth`，避免工具栏被挤压。
     static func initialWindowSize(for image: CGImage, screen: NSScreen?) -> CGSize {
         let scale = max(1, screen?.backingScaleFactor ?? 2)
         let natural = CGSize(
@@ -469,7 +501,7 @@ struct AnnotationEditorView: View {
         )
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let maxCanvas = CGSize(
-            width: visible.width * 0.9,
+            width: max(minWindowWidth, visible.width * 0.9),
             height: visible.height * 0.9 - toolbarHeight
         )
         let fit = min(
@@ -477,8 +509,8 @@ struct AnnotationEditorView: View {
             min(maxCanvas.width / max(1, natural.width), maxCanvas.height / max(1, natural.height))
         )
         return CGSize(
-            width: max(560, natural.width * fit),
-            height: max(400, natural.height * fit + toolbarHeight)
+            width: max(minWindowWidth, natural.width * fit),
+            height: max(minWindowHeight, natural.height * fit + toolbarHeight)
         )
     }
 }
@@ -487,5 +519,53 @@ extension RGBAColor {
     /// UI 层的 SwiftUI 颜色桥接。
     var swiftUIColor: Color {
         Color(red: red, green: green, blue: blue, opacity: alpha)
+    }
+}
+
+/// OCR 结果弹窗：只读文本 + 复制 / 关闭。
+///
+/// @author ixxxxoooo
+struct OCRResultView: View {
+    let text: String
+    var onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("文字识别结果", systemImage: "text.viewfinder")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+            }
+            if text.isEmpty {
+                Text("没有识别到文字")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                TextEditor(text: .constant(text))
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(minWidth: 460, minHeight: 260)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                    )
+            }
+            HStack {
+                Text("已复制到剪贴板")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("复制") {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(text, forType: .string)
+                }
+                .disabled(text.isEmpty)
+                Button("关闭") { onClose() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(18)
+        .frame(width: 520, height: 380)
     }
 }
