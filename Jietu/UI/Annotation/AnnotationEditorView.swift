@@ -51,9 +51,16 @@ struct AnnotationEditorView: View {
     @State private var dragMode: DragMode = .none
     @State private var draft: Annotation?
 
-    @State private var isTextPromptPresented = false
-    @State private var textInput = ""
     @State private var editingTextID: UUID?
+
+    /// 内联文字编辑。
+    @State private var inlineText = ""
+    @State private var inlineOriginView: CGPoint = .zero
+    @State private var inlineFontSize: CGFloat = 22
+    @FocusState private var inlineFieldFocused: Bool
+
+    @State private var showColorPopover = false
+    @State private var showWidthPopover = false
 
     @State private var ocrText = ""
     @State private var isOCRPresented = false
@@ -134,11 +141,6 @@ struct AnnotationEditorView: View {
         }
         .onDisappear { removeScrollMonitor() }
         .onChange(of: bufferScale) { _, _ in ensurePreviewBase() }
-        .alert("输入文字", isPresented: $isTextPromptPresented) {
-            TextField("文字", text: $textInput)
-            Button("确定") { commitText() }
-            Button("取消", role: .cancel) { editingTextID = nil }
-        }
         .sheet(isPresented: $isOCRPresented) {
             OCRResultView(text: ocrText) { isOCRPresented = false }
         }
@@ -164,6 +166,8 @@ struct AnnotationEditorView: View {
                             .allowsHitTesting(false)
                     )
                 selectionOverlay
+                selectionControls
+                textEditorOverlay
             } else {
                 ProgressView()
                     .frame(width: 240, height: 160)
@@ -220,7 +224,76 @@ struct AnnotationEditorView: View {
         .allowsHitTesting(false)
     }
 
-    // MARK: - Toolbar
+    /// 选中框右侧的操作按钮：关闭 / 编辑文字。
+    @ViewBuilder
+    private var selectionControls: some View {
+        if let selected = selectedAnnotation, editingTextID == nil {
+            let box = selected.localBounds
+            let rightMid = viewPoint(selected.toWorld(CGPoint(x: box.maxX, y: box.midY)))
+            VStack(spacing: 6) {
+                selectionButton("xmark", "删除") { deleteSelected() }
+                if case .text = selected.kind {
+                    selectionButton("pencil", "编辑文字") { startTextEditing(id: selected.id) }
+                }
+            }
+            .position(x: rightMid.x + 20, y: rightMid.y)
+        }
+    }
+
+    private func selectionButton(
+        _ symbol: String,
+        _ title: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .bold))
+                .frame(width: 22, height: 22)
+                .foregroundStyle(.white)
+                .background(Circle().fill(Color.accentColor))
+        }
+        .buttonStyle(.plain)
+        .help(title)
+    }
+
+    /// 内联文字编辑：直接在图片原位置输入，不再弹窗。
+    @ViewBuilder
+    private var textEditorOverlay: some View {
+        if editingTextID != nil {
+            let font = inlineFontSize * pointsPerPixel
+            let measured = Annotation.textSize(
+                string: inlineText.isEmpty ? "文字" : inlineText,
+                fontSize: inlineFontSize
+            )
+            let width = max(90, measured.width * pointsPerPixel + 16)
+            let height = max(24, font * 1.4 + 8)
+
+            TextField("文字", text: $inlineText)
+                .textFieldStyle(.plain)
+                .font(.system(size: max(11, font)))
+                .foregroundStyle(color.swiftUIColor)
+                .padding(.horizontal, 6)
+                .frame(width: width, height: height)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.black.opacity(0.35))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(Color.accentColor, lineWidth: 1)
+                )
+                .position(
+                    x: inlineOriginView.x + width / 2,
+                    y: inlineOriginView.y + height / 2
+                )
+                .focused($inlineFieldFocused)
+                .onSubmit { commitInlineText() }
+                .onExitCommand { cancelInlineText() }
+                .onAppear {
+                    DispatchQueue.main.async { inlineFieldFocused = true }
+                }
+        }
+    }
 
     private var toolbar: some View {
         HStack(spacing: 8) {
@@ -230,22 +303,8 @@ struct AnnotationEditorView: View {
 
             Divider().frame(height: 20)
 
-            ForEach(RGBAColor.palette, id: \.self) { swatch in
-                colorButton(swatch)
-            }
-
-            Divider().frame(height: 20)
-
-            HStack(spacing: 6) {
-                Image(systemName: "lineweight")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                Slider(value: $lineWidth, in: 1...16)
-                    .frame(width: 64)
-                    .onChange(of: lineWidth) { _, value in
-                        applyToSelected { $0.withLineWidth(value) }
-                    }
-            }
+            colorControl
+            widthControl
 
             contextualStyleControls
 
@@ -343,22 +402,91 @@ struct AnnotationEditorView: View {
         .help(item.title)
     }
 
-    private func colorButton(_ swatch: RGBAColor) -> some View {
-        Button {
-            color = swatch
-            applyToSelected { $0.withColor(swatch) }
-        } label: {
+    /// 颜色收敛成一个按钮，点击再展开选色。
+    private var colorControl: some View {
+        Button { showColorPopover = true } label: {
             Circle()
-                .fill(swatch.swiftUIColor)
-                .frame(width: 16, height: 16)
-                .overlay(
-                    Circle().strokeBorder(
-                        color == swatch ? Theme.brand : Color.primary.opacity(0.25),
-                        lineWidth: color == swatch ? 2 : 1
-                    )
-                )
+                .fill(color.swiftUIColor)
+                .frame(width: 18, height: 18)
+                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1.2))
         }
         .buttonStyle(.plain)
+        .help("颜色")
+        .popover(isPresented: $showColorPopover, arrowEdge: .bottom) {
+            HStack(spacing: 8) {
+                ForEach(RGBAColor.palette, id: \.self) { swatch in
+                    Button {
+                        color = swatch
+                        applyToSelected { $0.withColor(swatch) }
+                        showColorPopover = false
+                    } label: {
+                        Circle()
+                            .fill(swatch.swiftUIColor)
+                            .frame(width: 24, height: 24)
+                            .overlay(
+                                Circle().strokeBorder(
+                                    color == swatch
+                                        ? Theme.brand : Color.primary.opacity(0.2),
+                                    lineWidth: color == swatch ? 2 : 1
+                                )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(12)
+        }
+    }
+
+    /// 线宽收敛成一个按钮，点击展开滑杆 + 预设。
+    private var widthControl: some View {
+        Button { showWidthPopover = true } label: {
+            Image(systemName: "lineweight")
+                .font(.system(size: 13))
+                .foregroundStyle(.white)
+                .frame(width: 24, height: 24)
+        }
+        .buttonStyle(.plain)
+        .help("粗细")
+        .popover(isPresented: $showWidthPopover, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("粗细")
+                    Spacer()
+                    Text("\(Int(lineWidth))")
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                Slider(value: $lineWidth, in: 1...16)
+                    .frame(width: 200)
+                    .onChange(of: lineWidth) { _, value in
+                        applyToSelected { $0.withLineWidth(value) }
+                    }
+                HStack(spacing: 6) {
+                    ForEach([1, 2, 3, 5, 8, 12, 16], id: \.self) { value in
+                        let width = CGFloat(value)
+                        Button {
+                            lineWidth = width
+                            applyToSelected { $0.withLineWidth(width) }
+                        } label: {
+                            Text("\(value)")
+                                .font(.system(size: 11))
+                                .frame(width: 24, height: 22)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                        .fill(
+                                            Color.primary.opacity(
+                                                abs(lineWidth - width) < 0.01 ? 0.22 : 0.08
+                                            )
+                                        )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(12)
+        }
     }
 
     private func iconButton(
@@ -415,6 +543,11 @@ struct AnnotationEditorView: View {
     }
 
     private func beginDrag(startPx: CGPoint, startView: CGPoint) {
+        // 开始新的绘制 / 选择前，先落定正在进行的文字编辑。
+        if editingTextID != nil {
+            commitInlineText()
+        }
+
         // 1) 选中标注的控制点
         if let selected = selectedAnnotation,
             let handle = hitHandle(for: selected, at: startView)
@@ -472,12 +605,16 @@ struct AnnotationEditorView: View {
 
     private func endDrag(currentPx: CGPoint) {
         if case .creating = dragMode, tool == .text {
-            // 文本：先弹输入框，确定时再用 draft 落盘。
-            if draft != nil {
-                editingTextID = nil
-                textInput = ""
-                isTextPromptPresented = true
+            // 文本：落一个空文本对象，随即进入内联编辑（不弹窗）。
+            if let draft, case .text(let origin, _, let size) = draft.kind {
+                annotations.append(draft)
+                selectedID = draft.id
+                editingTextID = draft.id
+                inlineText = ""
+                inlineFontSize = size
+                inlineOriginView = viewPoint(origin)
             }
+            self.draft = nil
             dragMode = .none
             return
         }
@@ -565,23 +702,41 @@ struct AnnotationEditorView: View {
         self.selectedID = nil
     }
 
-    private func commitText() {
-        let trimmed = textInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        defer { textInput = ""; editingTextID = nil }
-        guard !trimmed.isEmpty else { return }
+    /// 进入文字内联编辑。
+    private func startTextEditing(id: UUID) {
+        guard let annotation = annotations.first(where: { $0.id == id }),
+            case .text(let origin, let string, let size) = annotation.kind
+        else { return }
+        selectedID = id
+        editingTextID = id
+        inlineText = string
+        inlineFontSize = size
+        inlineOriginView = viewPoint(origin)
+    }
 
-        if let editingTextID, let index = annotations.firstIndex(where: { $0.id == editingTextID }) {
+    /// 提交内联文字：空文本视为取消并删除该对象。
+    private func commitInlineText() {
+        guard let id = editingTextID else { return }
+        let trimmed = inlineText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            annotations.removeAll { $0.id == id }
+        } else if let index = annotations.firstIndex(where: { $0.id == id }) {
             pushUndo()
             annotations[index] = annotations[index].withText(trimmed)
-            self.editingTextID = nil
-            return
         }
-        guard let draft else { return }
-        pushUndo()
-        let text = draft.withText(trimmed)
-        annotations.append(text)
-        selectedID = text.id
-        self.draft = nil
+        editingTextID = nil
+        inlineText = ""
+        inlineFieldFocused = false
+    }
+
+    /// 取消内联编辑：新建的空文本对象直接丢弃。
+    private func cancelInlineText() {
+        if let id = editingTextID {
+            annotations.removeAll { $0.id == id }
+        }
+        editingTextID = nil
+        inlineText = ""
+        inlineFieldFocused = false
     }
 
     private func topmostAnnotation(at point: CGPoint) -> Annotation? {
@@ -589,15 +744,13 @@ struct AnnotationEditorView: View {
         return annotations.last { $0.contains(point, tolerance: tolerance) }
     }
 
-    /// 双击：文字直接进编辑态。
+    /// 双击：文字直接进内联编辑态。
     private func handleDoubleClick(at location: CGPoint) {
         let point = imagePoint(from: location)
         guard let hit = topmostAnnotation(at: point) else { return }
         selectedID = hit.id
-        if case .text(_, let string, _) = hit.kind {
-            editingTextID = hit.id
-            textInput = string
-            isTextPromptPresented = true
+        if case .text = hit.kind {
+            startTextEditing(id: hit.id)
         }
     }
 
