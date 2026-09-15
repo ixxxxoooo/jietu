@@ -24,7 +24,8 @@ final class OverlayCoordinator {
     var onFinish: ((Outcome) -> Void)?
     /// 就地工具栏的下载 / 钉图。
     var onSaveImage: ((CGImage) -> Void)?
-    var onPinImage: ((CGImage) -> Void)?
+    /// 钉图（参数二是屏幕坐标矩形，用于原地钉）。
+    var onPinImage: ((CGImage, CGRect) -> Void)?
 
     var isPresenting: Bool { !controllers.isEmpty }
 
@@ -61,9 +62,11 @@ final class OverlayCoordinator {
             controller.onSaveImage = { [weak self] image in
                 self?.onSaveImage?(image)
             }
-            controller.onPinImage = { [weak self] image in
-                self?.onPinImage?(image)
-                self?.finish(.cancelled, reason: "pin")
+            controller.onPinImage = { [weak self] image, localRect in
+                guard let self else { return }
+                let rect = self.screenRect(forLocalRect: localRect, snapshot: snapshot)
+                self.onPinImage?(image, rect)
+                self.finish(.cancelled, reason: "pin")
             }
             controllers.append(controller)
         }

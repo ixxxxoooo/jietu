@@ -29,7 +29,7 @@ final class OverlayWindowController {
         get { canvas.onSaveImage }
         set { canvas.onSaveImage = newValue }
     }
-    var onPinImage: ((CGImage) -> Void)? {
+    var onPinImage: ((CGImage, CGRect) -> Void)? {
         get { canvas.onPinImage }
         set { canvas.onPinImage = newValue }
     }

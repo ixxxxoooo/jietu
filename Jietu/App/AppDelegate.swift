@@ -132,8 +132,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlays.onSaveImage = { [weak self] image in
             self?.save(image)
         }
-        overlays.onPinImage = { image in
-            PinWindowController.pin(image: image, on: NSScreen.main)
+        overlays.onPinImage = { image, screenRect in
+            PinWindowController.pin(image: image, on: NSScreen.main, targetFrame: screenRect)
         }
     }
 

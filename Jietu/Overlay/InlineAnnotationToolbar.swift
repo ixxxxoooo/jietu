@@ -35,8 +35,6 @@ struct InlineMainToolbar: View {
         .eraser,
     ]
 
-    static let size = CGSize(width: 560, height: 46)
-
     var body: some View {
         HStack(spacing: 4) {
             ForEach(Self.tools) { item in
@@ -63,7 +61,8 @@ struct InlineMainToolbar: View {
             iconButton("确认", symbol: "checkmark", tint: .green) { model.onConfirm?() }
         }
         .padding(.horizontal, 14)
-        .frame(width: Self.size.width, height: Self.size.height)
+        .padding(.vertical, 10)
+        .fixedSize()
         .background(FrostedBar())
     }
 

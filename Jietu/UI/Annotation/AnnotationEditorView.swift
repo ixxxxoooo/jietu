@@ -689,35 +689,67 @@ struct AnnotationEditorView: View {
         annotations[index] = transform(annotations[index])
     }
 
-    /// 沿轨迹擦除：移除路径上命中的标注。`from` 为 nil 表示单击点擦。
-    private func erase(along from: CGPoint?, to point: CGPoint) {
-        let tolerance = max(8, 12 / max(0.0001, pointsPerPixel))
-        var removed = false
-
-        if let from {
-            let distance = Annotation.distance(from, point)
-            let steps = max(1, Int(distance / max(1, tolerance * 0.5)))
-            for index in 0...steps {
-                let t = CGFloat(index) / CGFloat(steps)
-                let sample = CGPoint(
-                    x: from.x + (point.x - from.x) * t,
-                    y: from.y + (point.y - from.y) * t
-                )
-                if removeAnnotations(at: sample, tolerance: tolerance) { removed = true }
-            }
-        } else {
-            removed = removeAnnotations(at: point, tolerance: tolerance)
-        }
-
-        if removed, let selectedID, !annotations.contains(where: { $0.id == selectedID }) {
-            self.selectedID = nil
+    /// 擦除采样点（沿拖拽路径密集取样；`from` 为 nil 时就是单击点）。
+    private func eraseSamples(from: CGPoint?, to point: CGPoint) -> [CGPoint] {
+        guard let from else { return [point] }
+        let distance = Annotation.distance(from, point)
+        let steps = max(1, Int(distance / max(1, 6 / max(0.0001, pointsPerPixel))))
+        return (0...steps).map { index in
+            let t = CGFloat(index) / CGFloat(steps)
+            return CGPoint(
+                x: from.x + (point.x - from.x) * t,
+                y: from.y + (point.y - from.y) * t
+            )
         }
     }
 
-    private func removeAnnotations(at point: CGPoint, tolerance: CGFloat) -> Bool {
-        let before = annotations.count
-        annotations.removeAll { $0.contains(point, tolerance: tolerance) }
-        return annotations.count != before
+    /// 只擦「划过的部分」：把画笔轨迹在擦除处切断，重新拼成若干段。
+    private func erase(along from: CGPoint?, to point: CGPoint) {
+        let samples = eraseSamples(from: from, to: point)
+        guard !samples.isEmpty else { return }
+        let baseRadius = max(6, 10 / max(0.0001, pointsPerPixel))
+
+        var result: [Annotation] = []
+        for annotation in annotations {
+            guard case .pen(let points) = annotation.kind else {
+                result.append(annotation)
+                continue
+            }
+            let radius = max(baseRadius, annotation.lineWidth / 2 + 2)
+
+            var segments: [[CGPoint]] = []
+            var current: [CGPoint] = []
+            for candidate in points {
+                if samples.contains(where: { Annotation.distance($0, candidate) <= radius }) {
+                    if current.count >= 2 { segments.append(current) }
+                    current = []
+                } else {
+                    current.append(candidate)
+                }
+            }
+            if current.count >= 2 { segments.append(current) }
+
+            if segments.isEmpty { continue }
+            if segments.count == 1, segments[0].count == points.count {
+                result.append(annotation)
+                continue
+            }
+            for segment in segments {
+                result.append(
+                    Annotation(
+                        kind: .pen(points: segment),
+                        color: annotation.color,
+                        lineWidth: annotation.lineWidth,
+                        rotation: annotation.rotation
+                    )
+                )
+            }
+        }
+
+        annotations = result
+        if let selectedID, !annotations.contains(where: { $0.id == selectedID }) {
+            self.selectedID = nil
+        }
     }
 
     private func deleteSelected() {

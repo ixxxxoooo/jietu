@@ -62,9 +62,9 @@ final class OverlayCanvasView: NSView {
     var onCommitAnnotated: ((CGImage, CGRect) -> Void)?
     /// 进入就地标注时通知 Coordinator（用于同步其它显示器的状态）。
     var onInlineEditingChanged: ((Bool) -> Void)?
-    /// 就地工具栏的「下载 / 钉图」回调（传入已烘焙标注的图）。
+    /// 就地工具栏的「下载 / 钉图」回调（钉图额外带选区 local rect，用于原地钉）。
     var onSaveImage: ((CGImage) -> Void)?
-    var onPinImage: ((CGImage) -> Void)?
+    var onPinImage: ((CGImage, CGRect) -> Void)?
 
     private enum Phase {
         case selecting
@@ -1245,7 +1245,7 @@ final class OverlayCanvasView: NSView {
         }
         model.onPin = { [weak self] in
             guard let self, let image = self.currentAnnotatedImage() else { return }
-            self.onPinImage?(image)
+            self.onPinImage?(image, self.selection ?? .zero)
         }
         toolbarModel = model
 
@@ -1298,7 +1298,8 @@ final class OverlayCanvasView: NSView {
 
     private func layoutToolbars() {
         guard let selection, let main = mainToolbarHost else { return }
-        let mainSize = InlineMainToolbar.size
+        main.layoutSubtreeIfNeeded()
+        let mainSize = main.fittingSize
         var origin = CGPoint(
             x: selection.midX - mainSize.width / 2,
             y: selection.minY - mainSize.height - 10
@@ -1326,42 +1327,78 @@ final class OverlayCanvasView: NSView {
 
     // MARK: Eraser
 
-    /// 沿轨迹擦除：移除路径上命中的标注。`from` 为 nil 表示单击点擦。
-    private func erase(along from: CGPoint?, to point: CGPoint) {
-        let tolerance = max(8, 12 * snapshot.effectiveScale)
-        var removed = false
-
-        if let from {
-            let distance = Annotation.distance(from, point)
-            let steps = max(1, Int(distance / max(1, tolerance * 0.5)))
-            for index in 0...steps {
-                let t = CGFloat(index) / CGFloat(steps)
-                let sample = CGPoint(
-                    x: from.x + (point.x - from.x) * t,
-                    y: from.y + (point.y - from.y) * t
-                )
-                if removeAnnotations(at: sample, tolerance: tolerance) { removed = true }
-            }
-        } else {
-            removed = removeAnnotations(at: point, tolerance: tolerance)
-        }
-
-        if removed {
-            updateAnnotationLayer()
-            updateInlineSelectionLayers()
+    /// 擦除采样点：沿拖拽路径密集取样（`from` 为 nil 时就是单击点）。
+    private func eraseSamples(from: CGPoint?, to point: CGPoint) -> [CGPoint] {
+        guard let from else { return [point] }
+        let distance = Annotation.distance(from, point)
+        let steps = max(1, Int(distance / 4))
+        return (0...steps).map { index in
+            let t = CGFloat(index) / CGFloat(steps)
+            return CGPoint(
+                x: from.x + (point.x - from.x) * t,
+                y: from.y + (point.y - from.y) * t
+            )
         }
     }
 
-    private func removeAnnotations(at point: CGPoint, tolerance: CGFloat) -> Bool {
-        let before = annotations.count
-        annotations.removeAll { $0.contains(point, tolerance: tolerance) }
+    /// 只擦「划过的部分」：把画笔轨迹在擦除处切断，重新拼成若干段。
+    private func erase(along from: CGPoint?, to point: CGPoint) {
+        let samples = eraseSamples(from: from, to: point)
+        guard !samples.isEmpty else { return }
+        let baseRadius = max(6, 10 * snapshot.effectiveScale)
+
+        var changed = false
+        var result: [Annotation] = []
+        for annotation in annotations {
+            guard case .pen(let points) = annotation.kind else {
+                result.append(annotation)
+                continue
+            }
+            let radius = max(baseRadius, annotation.lineWidth / 2 + 2)
+
+            var segments: [[CGPoint]] = []
+            var current: [CGPoint] = []
+            for candidate in points {
+                if samples.contains(where: { Annotation.distance($0, candidate) <= radius }) {
+                    if current.count >= 2 { segments.append(current) }
+                    current = []
+                } else {
+                    current.append(candidate)
+                }
+            }
+            if current.count >= 2 { segments.append(current) }
+
+            if segments.isEmpty {
+                changed = true
+                continue
+            }
+            if segments.count == 1, segments[0].count == points.count {
+                result.append(annotation)
+                continue
+            }
+            changed = true
+            for segment in segments {
+                result.append(
+                    Annotation(
+                        kind: .pen(points: segment),
+                        color: annotation.color,
+                        lineWidth: annotation.lineWidth,
+                        rotation: annotation.rotation
+                    )
+                )
+            }
+        }
+
+        guard changed else { return }
+        annotations = result
         if let selectedID, !annotations.contains(where: { $0.id == selectedID }) {
             self.selectedID = nil
         }
-        return annotations.count != before
+        updateAnnotationLayer()
+        updateInlineSelectionLayers()
     }
 
-    // MARK: Inline geometry
+    // MARK: Inline geometry    // MARK: Inline geometry
 
     /// 视图坐标（原点左下）→ 选区裁剪后的图像像素坐标（原点左上）。
     private func annotationPoint(from point: CGPoint) -> CGPoint {
