@@ -126,7 +126,7 @@ enum CaptureSelfTest {
                     switch outcome {
                     case .cancelled:
                         print("overlay outcome=cancelled")
-                    case .captured(let image, let displayID, _):
+                    case .captured(let image, let displayID, _, _):
                         print("overlay outcome=captured \(image.width)x\(image.height) display=\(displayID)")
                         try? FileManager.default.createDirectory(
                             at: outputDirectory,
@@ -138,7 +138,8 @@ enum CaptureSelfTest {
                     }
                 }
                 coordinator.present(
-                    session: CaptureSession(snapshots: snapshots, windows: windows)
+                    session: CaptureSession(snapshots: snapshots, windows: windows),
+                    inlineMode: false
                 )
                 print("overlay presented for \(snapshots.count) display(s), holding \(duration)s")
 

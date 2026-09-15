@@ -152,7 +152,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     "captured \(snapshots.count) display(s), \(windows.count) window(s) on screen"
                 )
                 overlays.present(
-                    session: CaptureSession(snapshots: snapshots, windows: windows)
+                    session: CaptureSession(snapshots: snapshots, windows: windows),
+                    inlineMode: settings.editorMode == .inline
                 )
             } catch {
                 presentCaptureFailure(error)
@@ -239,8 +240,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch outcome {
         case .cancelled:
             break
-        case .captured(let image, let displayID, let screenRect):
-            handleCaptured(image, onDisplay: displayID, screenRect: screenRect)
+        case .captured(let image, let displayID, let screenRect, let annotated):
+            if annotated {
+                // 已在遮罩里就地标注完成，直接走交付流程。
+                deliver(image, onDisplay: displayID)
+            } else {
+                handleCaptured(image, onDisplay: displayID, screenRect: screenRect)
+            }
         }
     }
 

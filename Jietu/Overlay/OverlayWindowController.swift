@@ -15,6 +15,15 @@ final class OverlayWindowController {
         set { canvas.onCommit = newValue }
     }
 
+    /// 就地标注确认后的最终图 + 选区。
+    var onCommitAnnotated: ((CGImage, CGRect) -> Void)? {
+        get { canvas.onCommitAnnotated }
+        set { canvas.onCommitAnnotated = newValue }
+    }
+
+    /// 是否正在就地标注（Esc 归属判断）。
+    var isInlineEditing: Bool { canvas.isAnnotationPhase }
+
     /// 本遮罩覆盖的显示器 AppKit 全局范围，用来判断鼠标落在哪块屏。
     var screenFrame: CGRect { window.frame }
 
@@ -32,7 +41,8 @@ final class OverlayWindowController {
         session: CaptureSession,
         screen: NSScreen,
         displayIndex: Int,
-        displayCount: Int
+        displayCount: Int,
+        inlineMode: Bool
     ) {
         self.snapshot = snapshot
         canvas = OverlayCanvasView(
@@ -41,6 +51,7 @@ final class OverlayWindowController {
             displayIndex: displayIndex,
             displayCount: displayCount
         )
+        canvas.inlineMode = inlineMode
 
         // 注意：不要用 `NSWindow(contentRect:...screen:)` 直接传 screen.frame。
         // 实测在缩放/副屏上 AppKit 会把原点乘以 backingScale（523 → 1046），

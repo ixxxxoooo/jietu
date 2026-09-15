@@ -5,7 +5,13 @@ import os
 final class OverlayCoordinator {
     enum Outcome {
         case cancelled
-        case captured(image: CGImage, displayID: CGDirectDisplayID, screenRect: CGRect)
+        /// `annotated` 为 true 表示已在遮罩里就地标注过，不再走编辑器。
+        case captured(
+            image: CGImage,
+            displayID: CGDirectDisplayID,
+            screenRect: CGRect,
+            annotated: Bool
+        )
     }
 
     private let logger = Logger(subsystem: "com.liwenjiao.jietu", category: "overlay")
@@ -19,7 +25,7 @@ final class OverlayCoordinator {
 
     var isPresenting: Bool { !controllers.isEmpty }
 
-    func present(session: CaptureSession) {
+    func present(session: CaptureSession, inlineMode: Bool) {
         guard !isPresenting else { return }
         guard !session.snapshots.isEmpty else { return }
 
@@ -37,13 +43,17 @@ final class OverlayCoordinator {
                 session: session,
                 screen: screen,
                 displayIndex: index + 1,
-                displayCount: session.snapshots.count
+                displayCount: session.snapshots.count,
+                inlineMode: inlineMode
             )
             controller.onCancel = { [weak self] in
                 self?.finish(.cancelled, reason: "canvas:cancel")
             }
             controller.onCommit = { [weak self] localRect in
                 self?.commit(snapshot: snapshot, localRect: localRect)
+            }
+            controller.onCommitAnnotated = { [weak self] image, rect in
+                self?.commitAnnotated(image: image, snapshot: snapshot, localRect: rect)
             }
             controllers.append(controller)
         }
@@ -54,10 +64,13 @@ final class OverlayCoordinator {
         }
 
         // Esc 兜底：焦点可能落在另一块屏的遮罩窗上。
-        // 注意：这里绝不能记录按键内容。
+        // 注意：这里绝不能记录按键内容。就地标注阶段交给画布自己处理 Esc。
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.isPresenting else { return event }
             if event.keyCode == 53 {
+                if self.controllers.contains(where: { $0.isInlineEditing }) {
+                    return event
+                }
                 self.finish(.cancelled, reason: "escapeMonitor")
                 return nil
             }
@@ -89,18 +102,39 @@ final class OverlayCoordinator {
             finish(.cancelled, reason: "crop-failed")
             return
         }
-        // 选区的屏幕坐标，供「就地编辑」把编辑窗口放到选区附近。
+        let screenRect = screenRect(forLocalRect: localRect, snapshot: snapshot)
+        finish(
+            .captured(
+                image: image,
+                displayID: snapshot.displayID,
+                screenRect: screenRect,
+                annotated: false
+            ),
+            reason: "commit"
+        )
+    }
+
+    /// 就地标注确认：画布已经给了烘焙好标注的最终图。
+    private func commitAnnotated(image: CGImage, snapshot: DisplaySnapshot, localRect: CGRect) {
+        let screenRect = screenRect(forLocalRect: localRect, snapshot: snapshot)
+        finish(
+            .captured(
+                image: image,
+                displayID: snapshot.displayID,
+                screenRect: screenRect,
+                annotated: true
+            ),
+            reason: "commit-annotated"
+        )
+    }
+
+    private func screenRect(forLocalRect localRect: CGRect, snapshot: DisplaySnapshot) -> CGRect {
         let screen = NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID }
             ?? NSScreen.main
         let origin = screen.map {
             DisplayGeometry.appKitPoint(fromLocal: localRect.origin, screen: $0)
         } ?? localRect.origin
-        let screenRect = CGRect(origin: origin, size: localRect.size)
-
-        finish(
-            .captured(image: image, displayID: snapshot.displayID, screenRect: screenRect),
-            reason: "commit"
-        )
+        return CGRect(origin: origin, size: localRect.size)
     }
 
     private func finish(_ outcome: Outcome, reason: String) {

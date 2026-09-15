@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import os
 
 /// 遮罩画布：选区状态机 + 全部视觉层。
@@ -52,6 +53,35 @@ final class OverlayCanvasView: NSView {
     /// 遮罩刚出现时，窗口出现在光标之下会送来一次「按住状态」的杂散 mouseDown
     /// （实测 pressedMouseButtons=1）。用一小段静默期挡掉。
     private var inputArmedAt: TimeInterval = 0
+
+    // MARK: - Inline annotation
+
+    /// 就地编辑模式：选区定下来后不立刻截图，而是在选框下方弹出工具栏就地标注。
+    var inlineMode = false
+    /// 就地标注完成：参数是已经裁好、并烘焙了标注的最终图，以及选区（local）。
+    var onCommitAnnotated: ((CGImage, CGRect) -> Void)?
+    /// 进入就地标注时通知 Coordinator（用于同步其它显示器的状态）。
+    var onInlineEditingChanged: ((Bool) -> Void)?
+
+    private enum Phase {
+        case selecting
+        case annotating
+    }
+
+    private var phase: Phase = .selecting
+    /// 是否正处于就地标注阶段（供 Coordinator 判断 Esc 归属）。
+    var isAnnotationPhase: Bool { phase == .annotating }
+    private var annotations: [Annotation] = []
+    private var annotationDraft: Annotation?
+    private var previewBase: CGImage?
+    private var previewScale: CGFloat = 1
+    private var toolbarModel: InlineToolbarModel?
+    private var toolbarHost: NSView?
+    private var textField: NSTextField?
+    private var inlineDragging = false
+    private var inlineStart: CGPoint = .zero
+
+    private let annotationLayer = CALayer()
 
     // MARK: - Layers
 
@@ -142,6 +172,13 @@ final class OverlayCanvasView: NSView {
         imageLayer.magnificationFilter = .nearest
         imageLayer.frame = bounds
         root.addSublayer(imageLayer)
+
+        // 就地标注层：叠在冻结图之上、压暗层之下（选区被挖空，所以标注可见）。
+        annotationLayer.frame = bounds
+        annotationLayer.contentsGravity = .resize
+        annotationLayer.magnificationFilter = .nearest
+        annotationLayer.isHidden = true
+        root.addSublayer(annotationLayer)
 
         dimLayer.fillColor = NSColor.black
             .withAlphaComponent(Theme.overlayDimAlpha).cgColor
@@ -270,15 +307,17 @@ final class OverlayCanvasView: NSView {
         let scale = window?.backingScaleFactor ?? snapshot.nominalScaleFactor
         for layer in [
             imageLayer, dimLayer, windowHighlightLayer, selectionBorderOuterLayer,
-            selectionBorderInnerLayer, handlesLayer, crosshairLayer,
+            selectionBorderInnerLayer, handlesLayer, crosshairLayer, annotationLayer,
         ] {
             layer.frame = bounds
         }
         imageLayer.contentsScale = scale
+        annotationLayer.contentsScale = scale
         for textLayer in [sizeLabelLayer, windowLabelLayer, hintLayer, magnifierLabelLayer] {
             textLayer.contentsScale = scale
         }
         updateAllLayers()
+        updateToolbarPosition()
     }
 
     override func viewDidChangeBackingProperties() {
@@ -666,6 +705,10 @@ final class OverlayCanvasView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard isInputArmed else { return }
+        if phase == .annotating {
+            inlineMouseDown(convert(event.locationInWindow, from: nil))
+            return
+        }
         requestFocusIfNeeded()
         let point = convert(event.locationInWindow, from: nil)
         cursorPoint = point
@@ -703,6 +746,10 @@ final class OverlayCanvasView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         guard isInputArmed else { return }
+        if phase == .annotating {
+            inlineMouseDragged(convert(event.locationInWindow, from: nil))
+            return
+        }
         let point = convert(event.locationInWindow, from: nil)
         cursorPoint = point
         let lockAspect = event.modifierFlags.contains(.shift)
@@ -752,6 +799,10 @@ final class OverlayCanvasView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         guard isInputArmed else { return }
+        if phase == .annotating {
+            inlineMouseUp(convert(event.locationInWindow, from: nil))
+            return
+        }
         let point = convert(event.locationInWindow, from: nil)
         cursorPoint = point
 
@@ -783,6 +834,12 @@ final class OverlayCanvasView: NSView {
             break
         }
 
+        // 就地模式：鼠标一松开（拖拽结束）就弹出标注工具栏。
+        if inlineMode, isSettled, phase == .selecting, selection != nil {
+            enterAnnotating()
+            return
+        }
+
         if isSettled, let selection {
             Self.rememberedSelection[snapshot.displayID] = selection
         }
@@ -798,6 +855,22 @@ final class OverlayCanvasView: NSView {
 
     override func keyDown(with event: NSEvent) {
         guard isInputArmed else { return }
+        if phase == .annotating {
+            switch event.keyCode {
+            case 53: // Esc
+                cancelInline()
+            case 36, 76: // Return
+                confirmInline()
+            case 51, 117: // Delete
+                if !annotations.isEmpty {
+                    annotations.removeLast()
+                    updateAnnotationLayer()
+                }
+            default:
+                super.keyDown(with: event)
+            }
+            return
+        }
         switch event.keyCode {
         case 53: // kVK_Escape
             onCancel?()
@@ -812,10 +885,296 @@ final class OverlayCanvasView: NSView {
         }
     }
 
+    // MARK: - Inline annotation
+
+    /// 选区定下来后进入就地标注：工具栏出现在选框下方，直接在冻结画面上标注。
+    private func enterAnnotating() {
+        guard inlineMode, let selection, selection.width > 1, selection.height > 1 else { return }
+        phase = .annotating
+        annotations.removeAll()
+        annotationDraft = nil
+        interaction = .settled
+        onInlineEditingChanged?(true)
+
+        selectionBorderOuterLayer.isHidden = true
+        selectionBorderInnerLayer.isHidden = true
+        handlesLayer.path = nil
+        sizeLabelLayer.isHidden = true
+        windowHighlightLayer.isHidden = true
+        crosshairLayer.path = nil
+
+        preparePreviewBase()
+        annotationLayer.isHidden = false
+        updateAnnotationLayer()
+        showToolbar()
+    }
+
+    private func exitAnnotating() {
+        hideToolbar()
+        textField?.removeFromSuperview()
+        textField = nil
+        annotations.removeAll()
+        annotationDraft = nil
+        annotationLayer.contents = nil
+        annotationLayer.isHidden = true
+        phase = .selecting
+        onInlineEditingChanged?(false)
+        updateAllLayers()
+    }
+
+    private func cancelInline() {
+        exitAnnotating()
+        selection = nil
+        interaction = .idle
+        updateAllLayers()
+    }
+
+    private func confirmInline() {
+        guard let selection, let crop = CaptureOutput.crop(snapshot, toLocalRect: selection) else {
+            cancelInline()
+            return
+        }
+        commitPendingInlineText()
+        let final = AnnotationRenderer.render(base: crop, annotations: annotations) ?? crop
+        let rect = selection
+        exitAnnotating()
+        onCommitAnnotated?(final, rect)
+    }
+
+    private func preparePreviewBase() {
+        guard let selection, let crop = CaptureOutput.crop(snapshot, toLocalRect: selection) else {
+            previewBase = nil
+            previewScale = 1
+            return
+        }
+        let longest = max(crop.width, crop.height)
+        previewScale = longest > 1600 ? 1600 / CGFloat(longest) : 1
+        previewBase = Self.rasterize(crop, scale: previewScale)
+    }
+
+    private static func rasterize(_ image: CGImage, scale: CGFloat) -> CGImage? {
+        let width = max(1, Int((CGFloat(image.width) * scale).rounded()))
+        let height = max(1, Int((CGFloat(image.height) * scale).rounded()))
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { return nil }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
+    }
+
+    private func updateAnnotationLayer() {
+        guard let previewBase, let selection else {
+            annotationLayer.contents = nil
+            return
+        }
+        var list = annotations
+        if let annotationDraft { list.append(annotationDraft) }
+        let scaled = list.map { $0.scaled(by: previewScale) }
+        let image = AnnotationRenderer.render(base: previewBase, annotations: scaled) ?? previewBase
+        annotationLayer.frame = selection
+        annotationLayer.contents = image
+    }
+
+    // MARK: Inline toolbar
+
+    private func showToolbar() {
+        let model = InlineToolbarModel()
+        model.canConfirm = true
+        model.onConfirm = { [weak self] in self?.confirmInline() }
+        model.onCancel = { [weak self] in self?.cancelInline() }
+        toolbarModel = model
+
+        let host = NSHostingView(rootView: InlineAnnotationToolbar(model: model))
+        host.translatesAutoresizingMaskIntoConstraints = true
+        addSubview(host)
+        toolbarHost = host
+        updateToolbarPosition()
+    }
+
+    private func hideToolbar() {
+        toolbarHost?.removeFromSuperview()
+        toolbarHost = nil
+        toolbarModel = nil
+    }
+
+    private func updateToolbarPosition() {
+        guard let host = toolbarHost, let selection else { return }
+        host.layoutSubtreeIfNeeded()
+        var size = host.fittingSize
+        if size.width < 10 || size.height < 10 {
+            size = NSSize(width: 560, height: 56)
+        }
+        var origin = CGPoint(
+            x: selection.midX - size.width / 2,
+            y: selection.minY - size.height - 10
+        )
+        if origin.y < bounds.minY + 8 {
+            origin.y = selection.maxY + 10
+        }
+        origin.x = min(max(origin.x, bounds.minX + 8), max(bounds.minX + 8, bounds.maxX - size.width - 8))
+        origin.y = min(origin.y, bounds.maxY - size.height - 8)
+        host.frame = CGRect(origin: origin, size: size)
+    }
+
+    // MARK: Inline geometry
+
+    /// 视图坐标（原点左下）→ 选区裁剪后的图像像素坐标（原点左上）。
+    private func annotationPoint(from point: CGPoint) -> CGPoint {
+        guard let selection else { return .zero }
+        let scale = snapshot.effectiveScale
+        return CGPoint(
+            x: (point.x - selection.minX) * scale,
+            y: (selection.maxY - point.y) * scale
+        )
+    }
+
+    private func viewPoint(fromAnnotation point: CGPoint) -> CGPoint {
+        guard let selection else { return .zero }
+        let scale = snapshot.effectiveScale
+        return CGPoint(x: selection.minX + point.x / scale, y: selection.maxY - point.y / scale)
+    }
+
+    private func makeInlineDraft(start: CGPoint, current: CGPoint) -> Annotation? {
+        guard let model = toolbarModel else { return nil }
+        let rect = CGRect(
+            x: min(start.x, current.x),
+            y: min(start.y, current.y),
+            width: abs(start.x - current.x),
+            height: abs(start.y - current.y)
+        )
+        switch model.tool {
+        case .rectangle: return Annotation(kind: .rectangle(rect), color: model.color, lineWidth: model.lineWidth)
+        case .ellipse: return Annotation(kind: .ellipse(rect), color: model.color, lineWidth: model.lineWidth)
+        case .highlight: return Annotation(kind: .highlight(rect), color: model.color, lineWidth: model.lineWidth)
+        case .pixelate: return Annotation(kind: .pixelate(rect, block: 12), color: model.color, lineWidth: model.lineWidth)
+        case .arrow: return Annotation(kind: .arrow(from: start, to: current, control: nil), color: model.color, lineWidth: model.lineWidth)
+        case .pen: return Annotation(kind: .pen(points: [start, current]), color: model.color, lineWidth: model.lineWidth)
+        case .counter:
+            return Annotation(kind: .counter(center: start, value: inlineCounterValue, leader: nil), color: model.color, lineWidth: model.lineWidth)
+        case .text: return nil
+        case .select: return nil
+        }
+    }
+
+    private func isValidInlineDraft(_ annotation: Annotation) -> Bool {
+        switch annotation.kind {
+        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _):
+            return rect.width >= 3 && rect.height >= 3
+        case .arrow(let from, let to, _):
+            return hypot(to.x - from.x, to.y - from.y) >= 3
+        case .counter, .pen, .text:
+            return true
+        }
+    }
+
+    private func inlineMouseDown(_ point: CGPoint) {
+        commitPendingInlineText()
+        inlineStart = annotationPoint(from: point)
+        inlineDragging = true
+        annotationDraft = makeInlineDraft(start: inlineStart, current: inlineStart)
+        updateAnnotationLayer()
+    }
+
+    private func inlineMouseDragged(_ point: CGPoint) {
+        guard inlineDragging, let model = toolbarModel else { return }
+        let current = annotationPoint(from: point)
+        if model.tool == .pen, case .pen(var points) = annotationDraft?.kind {
+            points.append(current)
+            annotationDraft?.kind = .pen(points: points)
+        } else {
+            annotationDraft = makeInlineDraft(start: inlineStart, current: current)
+        }
+        updateAnnotationLayer()
+    }
+
+    private func inlineMouseUp(_ point: CGPoint) {
+        guard inlineDragging, let model = toolbarModel else { return }
+        inlineDragging = false
+        let current = annotationPoint(from: point)
+
+        if model.tool == .text {
+            annotationDraft = nil
+            updateAnnotationLayer()
+            beginInlineText(at: inlineStart)
+            return
+        }
+        if let draft = annotationDraft, isValidInlineDraft(draft) {
+            annotations.append(draft)
+            if case .counter = draft.kind { inlineCounterValue += 1 }
+        }
+        annotationDraft = nil
+        updateAnnotationLayer()
+    }
+
+    // MARK: Inline text field
+
+    private var inlineTextOrigin: CGPoint = .zero
+    private var inlineCounterValue = 1
+
+    private func beginInlineText(at cropPoint: CGPoint) {
+        guard let model = toolbarModel else { return }
+        commitPendingInlineText()
+        inlineTextOrigin = cropPoint
+        let view = viewPoint(fromAnnotation: cropPoint)
+        let font = NSFont.systemFont(ofSize: max(12, model.lineWidth * 6))
+        let field = NSTextField(
+            frame: CGRect(x: view.x, y: view.y - 16, width: 220, height: 30)
+        )
+        field.font = font
+        field.textColor = .white
+        field.backgroundColor = NSColor.black.withAlphaComponent(0.45)
+        field.drawsBackground = true
+        field.isBordered = true
+        field.focusRingType = .none
+        field.target = self
+        field.action = #selector(handleInlineTextCommit)
+        addSubview(field)
+        textField = field
+        window?.makeFirstResponder(field)
+    }
+
+    @objc private func handleInlineTextCommit() {
+        commitPendingInlineText()
+    }
+
+    private func commitPendingInlineText() {
+        guard let field = textField, let model = toolbarModel else { return }
+        let string = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let origin = inlineTextOrigin
+        field.removeFromSuperview()
+        textField = nil
+        guard !string.isEmpty else { return }
+        annotations.append(
+            Annotation(
+                kind: .text(origin: origin, string: string, fontSize: max(12, model.lineWidth * 6)),
+                color: model.color,
+                lineWidth: model.lineWidth
+            )
+        )
+        updateAnnotationLayer()
+    }
+
     // MARK: - Actions
 
     private func commit() {
+        if phase == .annotating {
+            confirmInline()
+            return
+        }
         guard let selection, selection.width >= 1, selection.height >= 1 else { return }
+        if inlineMode {
+            enterAnnotating()
+            return
+        }
         Self.rememberedSelection[snapshot.displayID] = selection
         onCommit?(selection)
     }
