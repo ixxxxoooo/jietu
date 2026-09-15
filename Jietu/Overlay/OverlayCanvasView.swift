@@ -327,6 +327,9 @@ final class OverlayCanvasView: NSView {
     }
 
     /// 鼠标下窗口在本显示器内的矩形（已裁进画布），没有则 nil。
+    ///
+    /// 只在「还没有选区」时用于悬停预览；一旦点选/框选成型就收起高亮，
+    /// 选中的窗口不再有蓝色染色（与框选保持一致）。
     private var hoveredWindowLocalRect: CGRect? {
         guard !isSettled, selection == nil, let hoveredWindow else { return nil }
         let rect = DisplayGeometry.localRect(
@@ -756,6 +759,7 @@ final class OverlayCanvasView: NSView {
         switch interaction {
         case .pressing:
             // 没拖动 = 单击：命中窗口就选整窗，否则回到空闲。
+            // 选中后不再有蓝色高亮，只保留选区边框（与框选一致）。
             if let hoveredWindow {
                 selection = DisplayGeometry.localRect(
                     fromCGRect: hoveredWindow.frameInCGPoints,
@@ -786,6 +790,7 @@ final class OverlayCanvasView: NSView {
         }
         updateAllLayers()
         updateHoveredWindow(at: point)
+        updateWindowHighlight()
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -825,6 +830,7 @@ final class OverlayCanvasView: NSView {
         interaction = .settled
         updateAllLayers()
         updateHoveredWindow(at: cursorPoint ?? .zero)
+        updateWindowHighlight()
     }
 
     private func nudge(keyCode: UInt16, large: Bool) {

@@ -55,6 +55,44 @@ final class CaptureEngine {
         return snapshots
     }
 
+    /// 捕获单个窗口（窗口截图模式）。
+    ///
+    /// 用 `SCContentFilter(desktopIndependentWindow:)` 直接按窗口抓，
+    /// 不需要弹遮罩，也不会把遮挡它的窗口拍进去。
+    func captureWindow(_ window: WindowInfo) async throws -> CGImage {
+        guard ScreenCapturePermission.isGranted else {
+            throw CaptureError.permissionDenied
+        }
+
+        let content = try await shareableContent()
+        guard let scWindow = content.windows.first(where: { $0.windowID == window.windowID }) else {
+            throw CaptureError.windowNotCapturable(window.windowID)
+        }
+
+        // 窗口坐标是 CG（原点主屏左上），先翻成 AppKit 才能匹配 NSScreen。
+        let center = CGPoint(
+            x: window.frameInCGPoints.midX,
+            y: DisplayGeometry.referenceHeight - window.frameInCGPoints.midY
+        )
+        let scale = NSScreen.screens.first { $0.frame.contains(center) }?.backingScaleFactor ?? 2
+
+        let configuration = SCScreenshotConfiguration()
+        configuration.width = max(1, Int((window.frameInCGPoints.width * scale).rounded()))
+        configuration.height = max(1, Int((window.frameInCGPoints.height * scale).rounded()))
+        configuration.showsCursor = false
+        configuration.dynamicRange = .sdr
+
+        let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+        let output = try await SCScreenshotManager.captureScreenshot(
+            contentFilter: filter,
+            configuration: configuration
+        )
+        guard let image = output.sdrImage ?? output.hdrImage else {
+            throw CaptureError.windowNotCapturable(window.windowID)
+        }
+        return image
+    }
+
     private func shareableContent() async throws -> SCShareableContent {
         do {
             // onScreenWindowsOnly: false —— 否则全屏空间里的窗口拿不到。

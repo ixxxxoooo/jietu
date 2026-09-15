@@ -7,6 +7,8 @@ enum CaptureError: LocalizedError {
     case noDisplays
     case displayNotShareable(CGDirectDisplayID)
     case emptyImage(CGDirectDisplayID)
+    case windowNotCapturable(CGWindowID)
+    case noWindowUnderCursor
 
     var errorDescription: String? {
         switch self {
@@ -20,6 +22,10 @@ enum CaptureError: LocalizedError {
             return "显示器 \(id) 当前不可捕获"
         case .emptyImage(let id):
             return "显示器 \(id) 返回了空图像"
+        case .windowNotCapturable(let id):
+            return "窗口 \(id) 当前不可捕获"
+        case .noWindowUnderCursor:
+            return "鼠标下没有可截取的窗口"
         }
     }
 
@@ -27,10 +33,12 @@ enum CaptureError: LocalizedError {
         switch self {
         case .permissionDenied:
             return "请在「系统设置 › 隐私与安全性 › 屏幕录制」中勾选 Jietu，然后重启 Jietu。"
-        case .noShareableContent, .displayNotShareable, .emptyImage:
+        case .noShareableContent, .displayNotShareable, .emptyImage, .windowNotCapturable:
             return "通常是权限刚授予但进程尚未重启，请重启 Jietu 后重试。"
         case .noDisplays:
             return "请确认显示器已正确连接。"
+        case .noWindowUnderCursor:
+            return "请把鼠标移到要截取的窗口上再试一次。"
         }
     }
 }

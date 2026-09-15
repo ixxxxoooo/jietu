@@ -29,8 +29,8 @@ enum Theme {
     static let selectionHandleHitTolerance: CGFloat = 9
     /// 超过这个位移才算框选，否则算单击。
     static let dragActivationDistance: CGFloat = 3
-    /// 小于这个尺寸的框选视为误触。
-    static let minimumSelectionSize: CGFloat = 6
+    /// 小于这个尺寸的框选视为误触。与 `SelectionGeometry.minimumSide` 同源。
+    static let minimumSelectionSize: CGFloat = SelectionGeometry.minimumSide
 
     static let magnifierSize: CGFloat = 128
     static let magnifierZoom: CGFloat = 8
@@ -39,7 +39,7 @@ enum Theme {
     static let quickAccessCornerRadius: CGFloat = 12
     static let quickAccessInset: CGFloat = 20
     /// 给 SwiftUI 阴影留的空间。窗口自身阴影是直角矩形，必须关掉换成这个。
-    static let quickAccessShadowPadding: CGFloat = 20
+    static let quickAccessShadowPadding: CGFloat = 14
 
     // MARK: - Motion
 

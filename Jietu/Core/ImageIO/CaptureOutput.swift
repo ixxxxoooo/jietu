@@ -73,10 +73,24 @@ enum CaptureOutput {
 
     // MARK: - Disk
 
-    /// 保存为 PNG，文件名形如 `Jietu 2026-09-15 at 20.01.23.png`（同名自动加序号）。
-    static func save(_ image: CGImage, toDirectory directory: URL, date: Date = Date()) throws -> URL {
+    /// 保存为图片，文件名形如 `Jietu 2026-09-15 at 20.01.23.png`（同名自动加序号）。
+    static func save(
+        _ image: CGImage,
+        toDirectory directory: URL,
+        format: SaveFormat = .png,
+        quality: Double = 0.9,
+        date: Date = Date()
+    ) throws -> URL {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        guard let data = pngData(image) else {
+
+        let data: Data?
+        switch format {
+        case .png:
+            data = pngData(image)
+        case .jpeg:
+            data = jpegData(image, quality: quality)
+        }
+        guard let data else {
             throw CaptureOutputError.encodingFailed
         }
 
@@ -85,10 +99,10 @@ enum CaptureOutput {
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         let base = "Jietu \(formatter.string(from: date))"
 
-        var url = directory.appendingPathComponent("\(base).png")
+        var url = directory.appendingPathComponent("\(base).\(format.fileExtension)")
         var counter = 1
         while FileManager.default.fileExists(atPath: url.path) {
-            url = directory.appendingPathComponent("\(base)-\(counter).png")
+            url = directory.appendingPathComponent("\(base)-\(counter).\(format.fileExtension)")
             counter += 1
         }
         try data.write(to: url, options: .atomic)

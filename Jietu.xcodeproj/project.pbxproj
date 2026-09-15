@@ -9,7 +9,18 @@
 /* Begin PBXFileReference section */
 		AA4444444444444444444444 /* Jietu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Jietu.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA4444444444444444444445 /* Config */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Config; sourceTree = "<group>"; };
+		AB100000000000000000000B /* JietuTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JietuTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXContainerItemProxy section */
+		AB1000000000000000000007 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA1111111111111111111111 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA5555555555555555555555;
+			remoteInfo = Jietu;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AA6666666666666666666666 /* Jietu */ = {
@@ -17,10 +28,22 @@
 			path = Jietu;
 			sourceTree = "<group>";
 		};
+		AB1000000000000000000001 /* JietuTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = JietuTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		AA8888888888888888888888 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB1000000000000000000004 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -34,6 +57,7 @@
 			isa = PBXGroup;
 			children = (
 				AA6666666666666666666666 /* Jietu */,
+				AB1000000000000000000001 /* JietuTests */,
 				AA4444444444444444444445 /* Config */,
 				AA3333333333333333333333 /* Products */,
 			);
@@ -43,6 +67,7 @@
 			isa = PBXGroup;
 			children = (
 				AA4444444444444444444444 /* Jietu.app */,
+				AB100000000000000000000B /* JietuTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +95,27 @@
 			productReference = AA4444444444444444444444 /* Jietu.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AB1000000000000000000002 /* JietuTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AB100000000000000000000A /* Build configuration list for PBXNativeTarget "JietuTests" */;
+			buildPhases = (
+				AB1000000000000000000003 /* Sources */,
+				AB1000000000000000000004 /* Frameworks */,
+				AB1000000000000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AB1000000000000000000006 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AB1000000000000000000001 /* JietuTests */,
+			);
+			name = JietuTests;
+			productName = JietuTests;
+			productReference = AB100000000000000000000B /* JietuTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +128,10 @@
 				TargetAttributes = {
 					AA5555555555555555555555 = {
 						CreatedOnToolsVersion = 27.0;
+					};
+					AB1000000000000000000002 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = AA5555555555555555555555;
 					};
 				};
 			};
@@ -100,12 +150,20 @@
 			projectRoot = "";
 			targets = (
 				AA5555555555555555555555 /* Jietu */,
+				AB1000000000000000000002 /* JietuTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		AA9999999999999999999999 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB1000000000000000000005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +180,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AB1000000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AB1000000000000000000006 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA5555555555555555555555 /* Jietu */;
+			targetProxy = AB1000000000000000000007 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AADDDDDDDDDDDDDDDDDDDDDD /* Debug */ = {
@@ -249,7 +322,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Config/Jietu.entitlements;
-				CODE_SIGN_IDENTITY = "Jietu Development";
+				CODE_SIGN_IDENTITY = "Jietu";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -277,7 +350,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Config/Jietu.entitlements;
-				CODE_SIGN_IDENTITY = "Jietu Development";
+				CODE_SIGN_IDENTITY = "Jietu";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -299,6 +372,62 @@
 			};
 			name = Release;
 		};
+		AB1000000000000000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_IDENTITY = "Jietu";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.liwenjiao.jietu.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Jietu.app/Contents/MacOS/Jietu";
+			};
+			name = Debug;
+		};
+		AB1000000000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_IDENTITY = "Jietu";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.liwenjiao.jietu.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Jietu.app/Contents/MacOS/Jietu";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -316,6 +445,15 @@
 			buildConfigurations = (
 				AAFFFFFFFFFFFFFFFFFFFFFF /* Debug */,
 				AB0000000000000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AB100000000000000000000A /* Build configuration list for PBXNativeTarget "JietuTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB1000000000000000000008 /* Debug */,
+				AB1000000000000000000009 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

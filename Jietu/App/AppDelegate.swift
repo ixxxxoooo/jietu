@@ -11,6 +11,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let quickAccess = QuickAccessPanelController()
     private var menuBar: MenuBarController?
     private var onboarding: OnboardingWindowController?
+    private var settingsWindow: SettingsWindowController?
+    private var annotationEditors: [AnnotationEditorWindowController] = []
+    private var hotkeyRegistrationID: UInt32?
+    /// 当前已生效的区域截图热键，注册失败时用它回滚。
+    private var activeHotkey: Hotkey?
 
     /// 启动时已有权限 = 当前进程可直接截图。
     ///
@@ -32,9 +37,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpMenuBar()
         setUpHotkeys()
         setUpQuickAccess()
+        setUpLaunchAtLogin()
 
         if !ScreenCapturePermission.isGranted {
             logger.notice("screen recording permission missing, showing onboarding")
+            // 关键：必须主动调用一次申请 API，macOS 才会把本 App 注册进
+            // 「系统设置 › 隐私与安全性 › 屏幕录制」列表；否则用户根本找不到可勾选项。
+            _ = ScreenCapturePermission.request()
             showOnboarding()
         }
     }
@@ -48,32 +57,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setUpMenuBar() {
         let menuBar = MenuBarController()
         menuBar.onCaptureArea = { [weak self] in self?.handleAreaCapture() }
+        menuBar.onCaptureWindow = { [weak self] in self?.handleWindowCapture() }
+        menuBar.onCaptureFullScreen = { [weak self] in self?.handleFullScreenCapture() }
+        menuBar.onCaptureTimed = { [weak self] seconds in self?.handleTimedCapture(after: seconds) }
+        menuBar.onOpenRecent = { url in
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+        menuBar.onClearRecents = { [weak self] in self?.settings.clearRecentCaptures() }
+        menuBar.onOpenFolder = { [weak self] in self?.openSaveFolder() }
         menuBar.onOpenSystemSettings = { ScreenCapturePermission.openSystemSettings() }
         menuBar.onOpenOnboarding = { [weak self] in self?.showOnboarding() }
+        menuBar.onOpenSettings = { [weak self] in self?.showSettings() }
         menuBar.onQuit = { NSApp.terminate(nil) }
+        menuBar.recentProvider = { [weak self] in self?.settings.recentCaptureURLs ?? [] }
         menuBar.refresh()
         self.menuBar = menuBar
     }
 
     private func setUpHotkeys() {
-        hotkeys.unregisterAll()
-        let hotkey = settings.hotkeyAreaCapture
+        applyAreaCaptureHotkey(settings.hotkeyAreaCapture)
+    }
+
+    /// 注销旧热键并注册新热键。
+    ///
+    /// Carbon 热键不能原地修改，设置页改了组合键只能走这条路径重注册。
+    /// 注册失败（多半是被别的 App 占用）时会回滚到上一个可用组合键并返回 false。
+    @discardableResult
+    private func applyAreaCaptureHotkey(_ hotkey: Hotkey) -> Bool {
+        let previous = activeHotkey
+
+        if let hotkeyRegistrationID {
+            hotkeys.unregister(hotkeyRegistrationID)
+            self.hotkeyRegistrationID = nil
+        }
+
         let id = hotkeys.register(hotkey) { [weak self] in
             self?.handleAreaCapture()
         }
-        if id == nil {
-            logger.error("failed to register hotkey \(hotkey.displayString, privacy: .public)")
-        } else {
+        if let id {
+            hotkeyRegistrationID = id
+            activeHotkey = hotkey
             logger.notice("registered hotkey \(hotkey.displayString, privacy: .public)")
+            return true
         }
+
+        logger.error("failed to register hotkey \(hotkey.displayString, privacy: .public)")
+        // 回滚：把上一个可用的组合键重新注册回来，避免用户彻底失去快捷键。
+        if let previous {
+            hotkeyRegistrationID = hotkeys.register(previous) { [weak self] in
+                self?.handleAreaCapture()
+            }
+        }
+        return false
     }
 
     private func setUpQuickAccess() {
+        quickAccess.autoCloseDelay = settings.quickAccessAutoCloseDelay
+        quickAccess.position = settings.quickAccessPosition
         quickAccess.onCopy = { image in
             CaptureOutput.copyToPasteboard(image)
         }
         quickAccess.onSave = { [weak self] image in
             self?.save(image)
+        }
+        quickAccess.onAnnotate = { [weak self] image in
+            self?.openAnnotationEditor(image)
+        }
+        quickAccess.onPin = { image in
+            PinWindowController.pin(image: image, on: NSScreen.main)
         }
         overlays.onFinish = { [weak self] outcome in
             self?.handleOverlayOutcome(outcome)
@@ -109,6 +160,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// 全屏截图：直接抓鼠标所在显示器，不弹遮罩。
+    private func handleFullScreenCapture() {
+        guard !overlays.isPresenting else { return }
+        guard hasUsableScreenCapturePermission else {
+            showOnboarding()
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                let snapshots = try await capture.captureAllDisplays()
+                guard let snapshot = snapshotUnderMouse(snapshots) ?? snapshots.first else {
+                    throw CaptureError.noDisplays
+                }
+                deliver(snapshot.image, onDisplay: snapshot.displayID)
+            } catch {
+                presentCaptureFailure(error)
+            }
+        }
+    }
+
+    /// 窗口截图：抓鼠标当前悬停的那个窗口，不弹遮罩。
+    private func handleWindowCapture() {
+        guard !overlays.isPresenting else { return }
+        guard hasUsableScreenCapturePermission else {
+            showOnboarding()
+            return
+        }
+
+        let mouse = NSEvent.mouseLocation
+        let cgPoint = CGPoint(x: mouse.x, y: DisplayGeometry.referenceHeight - mouse.y)
+        let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
+        guard let window = WindowHitTester.frontmost(atCGPoint: cgPoint, in: windows) else {
+            presentCaptureFailure(CaptureError.noWindowUnderCursor)
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                let image = try await capture.captureWindow(window)
+                deliver(image, onDisplay: displayID(containing: window))
+            } catch {
+                presentCaptureFailure(error)
+            }
+        }
+    }
+
+    /// 定时截图：延时后走区域截图流程。
+    private func handleTimedCapture(after seconds: TimeInterval) {
+        guard !overlays.isPresenting else { return }
+        logger.notice("timed capture scheduled in \(seconds)s")
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(seconds))
+            handleAreaCapture()
+        }
+    }
+
+    private func snapshotUnderMouse(_ snapshots: [DisplaySnapshot]) -> DisplaySnapshot? {
+        let mouse = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }),
+            let id = screen.jietu_displayID
+        else { return nil }
+        return snapshots.first { $0.displayID == id }
+    }
+
+    private func displayID(containing window: WindowInfo) -> CGDirectDisplayID {
+        let center = CGPoint(
+            x: window.frameInCGPoints.midX,
+            y: DisplayGeometry.referenceHeight - window.frameInCGPoints.midY
+        )
+        return NSScreen.screens.first { $0.frame.contains(center) }?.jietu_displayID
+            ?? NSScreen.main?.jietu_displayID
+            ?? 0
+    }
+
     private func handleOverlayOutcome(_ outcome: OverlayCoordinator.Outcome) {
         switch outcome {
         case .cancelled:
@@ -131,6 +257,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             save(image)
         }
 
+        quickAccess.autoCloseDelay = settings.quickAccessAutoCloseDelay
+        quickAccess.position = settings.quickAccessPosition
         quickAccess.present(
             image: image,
             onDisplay: displayID,
@@ -138,13 +266,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    /// 打开标注编辑器。
+    ///
+    /// 编辑器持有自己的生命周期，关闭时从数组里移除。发起标注的那张浮窗
+    /// 已由 `QuickAccessPanelController` 自行关闭。
+    private func openAnnotationEditor(_ image: CGImage) {
+        let controller = AnnotationEditorWindowController(image: image)
+        controller.onCopy = { rendered in
+            CaptureOutput.copyToPasteboard(rendered)
+        }
+        controller.onSave = { [weak self] rendered in
+            self?.save(rendered)
+        }
+        controller.onPin = { rendered in
+            PinWindowController.pin(image: rendered, on: NSScreen.main)
+        }
+        controller.onClose = { [weak self, weak controller] in
+            guard let self else { return }
+            self.annotationEditors.removeAll { $0 === controller }
+        }
+        annotationEditors.append(controller)
+        controller.present()
+    }
+
     private func save(_ image: CGImage) {
         do {
-            let url = try CaptureOutput.save(image, toDirectory: settings.saveDirectory)
+            let url = try CaptureOutput.save(
+                image,
+                toDirectory: settings.saveDirectory,
+                format: settings.saveFormat,
+                quality: settings.jpegQuality
+            )
+            settings.recordCapture(url)
             logger.notice("saved capture to \(url.path, privacy: .public)")
         } catch {
             logger.error("save failed: \(error.localizedDescription)")
         }
+    }
+
+    /// 打开截图保存目录（不存在则先创建）。
+    private func openSaveFolder() {
+        let directory = settings.saveDirectory
+        do {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            NSWorkspace.shared.open(directory)
+        } catch {
+            logger.error("open save folder failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// 启动时把「登录时启动」状态同步给系统，避免设置与系统实际状态不一致。
+    private func setUpLaunchAtLogin() {
+        LaunchAtLogin.setEnabled(settings.launchAtLogin)
     }
 
     // MARK: - Support
@@ -154,6 +330,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onboarding = OnboardingWindowController()
         }
         onboarding?.present()
+    }
+
+    private func showSettings() {
+        if settingsWindow == nil {
+            let controller = SettingsWindowController(settings: settings)
+            controller.onHotkeyChange = { [weak self] hotkey in
+                guard let self else { return }
+                guard self.applyAreaCaptureHotkey(hotkey) else {
+                    // 回滚设置里的组合键，并提示占用。
+                    if let active = self.activeHotkey, self.settings.hotkeyAreaCapture != active {
+                        self.settings.hotkeyAreaCapture = active
+                    }
+                    self.presentHotkeyFailure(hotkey)
+                    return
+                }
+            }
+            settingsWindow = controller
+        }
+        settingsWindow?.present()
+    }
+
+    /// 热键被占用时的提示。
+    private func presentHotkeyFailure(_ hotkey: Hotkey) {
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "快捷键 \(hotkey.displayString) 注册失败"
+        alert.informativeText = "该组合键可能已被系统或其它 App 占用，已恢复为原来的快捷键。"
+        alert.addButton(withTitle: "好")
+        alert.runModal()
     }
 
     private func presentCaptureFailure(_ error: Error) {

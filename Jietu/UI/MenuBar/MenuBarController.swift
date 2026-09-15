@@ -1,22 +1,37 @@
 import AppKit
 
 /// 状态栏常驻入口。用 AppKit `NSStatusItem` 而非 SwiftUI `MenuBarExtra`，
-/// 因为后续需要动态子菜单（最近截图）和随状态变化的图标。
-final class MenuBarController {
+/// 因为需要动态子菜单（最近截图）和随状态变化的图标。
+///
+/// @author ixxxxoooo
+final class MenuBarController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
 
+    private let permissionItem = NSMenuItem()
+    private let recentMenu = NSMenu()
+
     var onCaptureArea: (() -> Void)?
+    var onCaptureWindow: (() -> Void)?
+    var onCaptureFullScreen: (() -> Void)?
+    var onCaptureTimed: ((TimeInterval) -> Void)?
+    var onOpenRecent: ((URL) -> Void)?
+    var onClearRecents: (() -> Void)?
+    var onOpenFolder: (() -> Void)?
     var onOpenSystemSettings: (() -> Void)?
     var onOpenOnboarding: (() -> Void)?
+    var onOpenSettings: (() -> Void)?
     var onQuit: (() -> Void)?
 
-    private let permissionItem = NSMenuItem()
+    /// 最近截图提供者，菜单每次弹出时拉取一次。
+    var recentProvider: (() -> [URL])?
 
-    init() {
+    override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        super.init()
         configureStatusButton()
         buildMenu()
+        menu.delegate = self
         statusItem.menu = menu
     }
 
@@ -40,48 +55,139 @@ final class MenuBarController {
     }
 
     private func buildMenu() {
-        let captureItem = NSMenuItem(
-            title: "区域截图",
-            action: #selector(handleCaptureArea),
-            keyEquivalent: ""
-        )
-        captureItem.target = self
-        menu.addItem(captureItem)
+        menu.addItem(item("区域截图", #selector(handleCaptureArea), symbol: "viewfinder"))
+        menu.addItem(item("窗口截图", #selector(handleCaptureWindow), symbol: "macwindow"))
+        menu.addItem(item("全屏截图", #selector(handleCaptureFullScreen), symbol: "rectangle.fill"))
+        menu.addItem(timedCaptureItem())
+
+        menu.addItem(.separator())
+
+        menu.addItem(recentCaptureItem())
+        menu.addItem(item("打开截图文件夹", #selector(handleOpenFolder), symbol: "folder"))
 
         menu.addItem(.separator())
 
         permissionItem.isEnabled = false
         menu.addItem(permissionItem)
-
-        let settingsItem = NSMenuItem(
-            title: "打开「屏幕录制」系统设置…",
-            action: #selector(handleOpenSystemSettings),
-            keyEquivalent: ""
+        menu.addItem(
+            item("打开「屏幕录制」系统设置…", #selector(handleOpenSystemSettings), symbol: nil)
         )
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-
-        let onboardingItem = NSMenuItem(
-            title: "权限引导…",
-            action: #selector(handleOpenOnboarding),
-            keyEquivalent: ""
-        )
-        onboardingItem.target = self
-        menu.addItem(onboardingItem)
+        menu.addItem(item("权限引导…", #selector(handleOpenOnboarding), symbol: nil))
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(
-            title: "退出 Jietu",
-            action: #selector(handleQuit),
-            keyEquivalent: "q"
-        )
-        quitItem.target = self
-        menu.addItem(quitItem)
+        let preferences = item("偏好设置…", #selector(handleOpenSettings), symbol: "gearshape")
+        preferences.keyEquivalent = ","
+        menu.addItem(preferences)
+
+        menu.addItem(.separator())
+
+        let quit = item("退出 Jietu", #selector(handleQuit), symbol: nil)
+        quit.keyEquivalent = "q"
+        menu.addItem(quit)
     }
+
+    private func item(
+        _ title: String,
+        _ action: Selector,
+        symbol: String?
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        if let symbol {
+            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        }
+        return item
+    }
+
+    private func timedCaptureItem() -> NSMenuItem {
+        let parent = NSMenuItem(title: "定时截图", action: nil, keyEquivalent: "")
+        parent.image = NSImage(systemSymbolName: "timer", accessibilityDescription: nil)
+        let submenu = NSMenu()
+        for seconds in [3.0, 5.0, 10.0] {
+            let entry = NSMenuItem(
+                title: "\(Int(seconds)) 秒后",
+                action: #selector(handleCaptureTimed(_:)),
+                keyEquivalent: ""
+            )
+            entry.target = self
+            entry.representedObject = seconds
+            submenu.addItem(entry)
+        }
+        parent.submenu = submenu
+        return parent
+    }
+
+    private func recentCaptureItem() -> NSMenuItem {
+        let parent = NSMenuItem(title: "最近截图", action: nil, keyEquivalent: "")
+        parent.image = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: nil)
+        parent.submenu = recentMenu
+        return parent
+    }
+
+    // MARK: - NSMenuDelegate
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        rebuildRecentMenu()
+    }
+    private func rebuildRecentMenu() {
+        recentMenu.removeAllItems()
+        let urls = recentProvider?() ?? []
+
+        if urls.isEmpty {
+            let empty = NSMenuItem(title: "暂无", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            recentMenu.addItem(empty)
+            return
+        }
+
+        for url in urls {
+            let entry = NSMenuItem(
+                title: url.lastPathComponent,
+                action: #selector(handleOpenRecent(_:)),
+                keyEquivalent: ""
+            )
+            entry.target = self
+            entry.representedObject = url
+            recentMenu.addItem(entry)
+        }
+
+        recentMenu.addItem(.separator())
+        let clear = NSMenuItem(title: "清除记录", action: #selector(handleClearRecents), keyEquivalent: "")
+        clear.target = self
+        recentMenu.addItem(clear)
+    }
+
+    // MARK: - Actions
 
     @objc private func handleCaptureArea() {
         onCaptureArea?()
+    }
+
+    @objc private func handleCaptureWindow() {
+        onCaptureWindow?()
+    }
+
+    @objc private func handleCaptureFullScreen() {
+        onCaptureFullScreen?()
+    }
+
+    @objc private func handleCaptureTimed(_ sender: NSMenuItem) {
+        guard let seconds = sender.representedObject as? TimeInterval else { return }
+        onCaptureTimed?(seconds)
+    }
+
+    @objc private func handleOpenRecent(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        onOpenRecent?(url)
+    }
+
+    @objc private func handleClearRecents() {
+        onClearRecents?()
+    }
+
+    @objc private func handleOpenFolder() {
+        onOpenFolder?()
     }
 
     @objc private func handleOpenSystemSettings() {
@@ -90,6 +196,10 @@ final class MenuBarController {
 
     @objc private func handleOpenOnboarding() {
         onOpenOnboarding?()
+    }
+
+    @objc private func handleOpenSettings() {
+        onOpenSettings?()
     }
 
     @objc private func handleQuit() {

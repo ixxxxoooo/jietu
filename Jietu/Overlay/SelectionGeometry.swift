@@ -34,7 +34,10 @@ enum SelectionHandle: CaseIterable {
 
 enum SelectionGeometry {
     /// 小于这个尺寸就不算一次有效框选，退回到「点击」语义。
-    static let minimumSide: CGFloat = 4
+    ///
+    /// 与 `Theme.minimumSelectionSize` 共用同一来源：`resized` 用它兜底，
+    /// `mouseUp` 用它判有效，两边不一致会出现「能拖出来、松手就没了」的抖动。
+    static let minimumSide: CGFloat = 6
 
     /// 拖拽框选：由锚点和当前点得到一个规范化矩形。
     static func rect(from anchor: CGPoint, to point: CGPoint) -> CGRect {
