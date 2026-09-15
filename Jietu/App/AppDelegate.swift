@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private var onboarding: OnboardingWindowController?
     private var settingsWindow: SettingsWindowController?
+    private var historyPanel: HistoryPanelController?
     private var annotationEditors: [AnnotationEditorWindowController] = []
     private var hotkeyRegistrationID: UInt32?
     /// 浮窗存在期间注册的「空格 → 打开编辑器」热键。
@@ -67,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menuBar.onClearRecents = { [weak self] in self?.settings.clearRecentCaptures() }
         menuBar.onOpenFolder = { [weak self] in self?.openSaveFolder() }
+        menuBar.onOpenHistory = { [weak self] in self?.showHistory() }
         menuBar.onOpenSystemSettings = { ScreenCapturePermission.openSystemSettings() }
         menuBar.onOpenOnboarding = { [weak self] in self?.showOnboarding() }
         menuBar.onOpenSettings = { [weak self] in self?.showSettings() }
@@ -387,6 +389,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             logger.notice("saved capture to \(url.path, privacy: .public)")
         } catch {
             logger.error("save failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// 托盘历史面板。
+    private func showHistory() {
+        if historyPanel == nil {
+            let controller = HistoryPanelController()
+            controller.itemsProvider = { [weak self] in self?.historyItems() ?? [] }
+            controller.onSelect = { [weak self] url in
+                guard let self,
+                    let image = NSImage(contentsOf: url),
+                    let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                else { return }
+                self.openAnnotationEditor(cgImage)
+            }
+            historyPanel = controller
+        }
+        historyPanel?.toggle()
+    }
+
+    private func historyItems() -> [HistoryItem] {
+        settings.recentCaptureURLs.map { url in
+            let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey])
+                .contentModificationDate) ?? Date()
+            return HistoryItem(
+                id: url.path,
+                url: url,
+                date: date,
+                image: NSImage(contentsOf: url)
+            )
         }
     }
 

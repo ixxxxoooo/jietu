@@ -18,6 +18,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onOpenRecent: ((URL) -> Void)?
     var onClearRecents: (() -> Void)?
     var onOpenFolder: (() -> Void)?
+    var onOpenHistory: (() -> Void)?
     var onOpenSystemSettings: (() -> Void)?
     var onOpenOnboarding: (() -> Void)?
     var onOpenSettings: (() -> Void)?
@@ -63,6 +64,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         menu.addItem(recentCaptureItem())
+        menu.addItem(item("截图历史…", #selector(handleOpenHistory), symbol: "clock"))
         menu.addItem(item("打开截图文件夹", #selector(handleOpenFolder), symbol: "folder"))
 
         menu.addItem(.separator())
@@ -200,6 +202,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func handleOpenFolder() {
         onOpenFolder?()
+    }
+
+    @objc private func handleOpenHistory() {
+        onOpenHistory?()
     }
 
     @objc private func handleOpenSystemSettings() {
