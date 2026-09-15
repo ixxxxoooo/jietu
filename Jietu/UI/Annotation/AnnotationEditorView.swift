@@ -676,7 +676,8 @@ struct AnnotationEditorView: View {
         case .pen:
             return Annotation(kind: .pen(points: [start, current]), color: color, lineWidth: lineWidth)
         case .counter:
-            let labelOrigin = CGPoint(x: start.x + 26, y: start.y - 58)
+            let radius = max(12, lineWidth * 4)
+            let labelOrigin = CGPoint(x: start.x + radius + 24, y: start.y - radius - 44)
             return Annotation(
                 kind: .callout(
                     center: start,

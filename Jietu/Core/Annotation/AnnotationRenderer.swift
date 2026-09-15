@@ -261,7 +261,8 @@ enum AnnotationRenderer {
         imageHeight: Int
     ) {
         let color = annotation.color
-        let radius: CGFloat = 12
+        // 圆点沿用之前的大小。
+        let radius = max(12, annotation.lineWidth * 4)
         let dotCenter = contextPoint(center, imageHeight: imageHeight)
         let labelRect = Annotation.calloutLabelRect(
             origin: labelOrigin,
@@ -271,28 +272,40 @@ enum AnnotationRenderer {
         let contextLabelRect = contextRect(labelRect, imageHeight: imageHeight)
         let corner: CGFloat = 10
 
-        // 小尾巴：从气泡边缘指向序号圆点（iMessage 那种气泡）。
-        let edge = CGPoint(
-            x: min(max(center.x, labelRect.minX), labelRect.maxX),
-            y: min(max(center.y, labelRect.minY), labelRect.maxY)
-        )
-        let edgeContext = contextPoint(edge, imageHeight: imageHeight)
-        let dx = dotCenter.x - edgeContext.x
-        let dy = dotCenter.y - edgeContext.y
-        let length = max(1, hypot(dx, dy))
-        let ux = dx / length
-        let uy = dy / length
-        let tailLength = min(14, length)
-        let tip = CGPoint(x: edgeContext.x + ux * tailLength, y: edgeContext.y + uy * tailLength)
-        let halfBase: CGFloat = 7
-        let baseA = CGPoint(x: edgeContext.x - uy * halfBase, y: edgeContext.y + ux * halfBase)
-        let baseB = CGPoint(x: edgeContext.x + uy * halfBase, y: edgeContext.y - ux * halfBase)
         context.setFillColor(color.cgColor)
-        context.beginPath()
-        context.move(to: baseA)
-        context.addLine(to: tip)
-        context.addLine(to: baseB)
-        context.closePath()
+
+        // 尾巴：贴在最靠近圆点的那条边上，尖端指向圆点（无缝隙）。
+        let rectCenter = CGPoint(x: labelRect.midX, y: labelRect.midY)
+        let dx = center.x - rectCenter.x
+        let dy = center.y - rectCenter.y
+        let tailLength: CGFloat = 14
+        let halfBase: CGFloat = 7
+        var baseA = CGPoint.zero
+        var baseB = CGPoint.zero
+        var tip = CGPoint.zero
+
+        if abs(dx) >= abs(dy) {
+            // 左右边
+            let edgeX = dx < 0 ? labelRect.minX : labelRect.maxX
+            let edgeY = min(max(center.y, labelRect.minY + halfBase + 2), labelRect.maxY - halfBase - 2)
+            baseA = CGPoint(x: edgeX, y: edgeY - halfBase)
+            baseB = CGPoint(x: edgeX, y: edgeY + halfBase)
+            tip = CGPoint(x: edgeX + (dx < 0 ? -tailLength : tailLength), y: edgeY)
+        } else {
+            // 上下边
+            let edgeY = dy < 0 ? labelRect.minY : labelRect.maxY
+            let edgeX = min(max(center.x, labelRect.minX + halfBase + 2), labelRect.maxX - halfBase - 2)
+            baseA = CGPoint(x: edgeX - halfBase, y: edgeY)
+            baseB = CGPoint(x: edgeX + halfBase, y: edgeY)
+            tip = CGPoint(x: edgeX, y: edgeY + (dy < 0 ? -tailLength : tailLength))
+        }
+
+        let triangle = CGMutablePath()
+        triangle.move(to: contextPoint(baseA, imageHeight: imageHeight))
+        triangle.addLine(to: contextPoint(tip, imageHeight: imageHeight))
+        triangle.addLine(to: contextPoint(baseB, imageHeight: imageHeight))
+        triangle.closeSubpath()
+        context.addPath(triangle)
         context.fillPath()
 
         // 气泡本体。
@@ -316,7 +329,6 @@ enum AnnotationRenderer {
         }
 
         // 序号圆点。
-        context.setFillColor(color.cgColor)
         context.fillEllipse(
             in: CGRect(
                 x: dotCenter.x - radius,
