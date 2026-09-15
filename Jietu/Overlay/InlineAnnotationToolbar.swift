@@ -40,8 +40,10 @@ struct InlineAnnotationToolbar: View {
             mainBar
                 .frame(width: 560)
             if model.showColor || model.showWidth {
+                // 对齐到颜色 / 粗细两个按钮下方（靠右）。
                 optionsBar
                     .fixedSize(horizontal: true, vertical: false)
+                    .frame(width: 560, alignment: .trailing)
             }
         }
         .animation(.easeOut(duration: 0.12), value: model.showColor)

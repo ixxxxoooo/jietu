@@ -208,14 +208,14 @@ final class OverlayCanvasView: NSView {
 
         // 就地选择态：虚线包围盒 + 控制点。
         inlineSelectionBorderLayer.fillColor = nil
-        inlineSelectionBorderLayer.strokeColor = NSColor.controlAccentColor.cgColor
+        inlineSelectionBorderLayer.strokeColor = NSColor(Theme.selectionGreen).cgColor
         inlineSelectionBorderLayer.lineWidth = 1.2
         inlineSelectionBorderLayer.lineDashPattern = [5, 3]
         inlineSelectionBorderLayer.isHidden = true
         root.addSublayer(inlineSelectionBorderLayer)
 
         inlineHandlesLayer.fillColor = NSColor.white.cgColor
-        inlineHandlesLayer.strokeColor = NSColor.controlAccentColor.cgColor
+        inlineHandlesLayer.strokeColor = NSColor(Theme.selectionGreen).cgColor
         inlineHandlesLayer.lineWidth = 1.2
         inlineHandlesLayer.isHidden = true
         root.addSublayer(inlineHandlesLayer)
@@ -1266,8 +1266,7 @@ final class OverlayCanvasView: NSView {
         }
         origin.x = min(max(origin.x, bounds.minX + 8), max(bounds.minX + 8, bounds.maxX - size.width - 8))
         origin.y = min(origin.y, bounds.maxY - size.height - 8)
-        // 尺寸与位置一起设，保证展开第二行时仍是一整块、不脱节。
-        host.setFrameSize(size)
+        // 一步设置尺寸与位置，避免中间态导致主工具栏跳动。
         host.frame = CGRect(origin: origin, size: size)
     }
 
