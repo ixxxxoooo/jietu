@@ -9,6 +9,8 @@ import SwiftUI
 /// @author ixxxxoooo
 final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
     private let image: CGImage
+    /// 就地编辑时选区在屏幕上的矩形，用来把窗口放到选区附近。
+    private let anchor: CGRect?
     private var window: NSWindow?
     private var previousActivationPolicy: NSApplication.ActivationPolicy = .accessory
 
@@ -16,8 +18,9 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
     var onSave: ((CGImage) -> Void)?
     var onClose: (() -> Void)?
 
-    init(image: CGImage) {
+    init(image: CGImage, anchor: CGRect? = nil) {
         self.image = image
+        self.anchor = anchor
         super.init()
     }
 
@@ -62,7 +65,7 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
             height: AnnotationEditorView.minWindowHeight
         )
         window.contentView = hosting
-        window.center()
+        positionWindow(window, size: size)
         window.delegate = self
         self.window = window
 
@@ -105,6 +108,24 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
 
     private func restoreActivationPolicy() {
         NSApp.setActivationPolicy(previousActivationPolicy)
+    }
+
+    /// 就地编辑：把窗口放到选区附近；否则居中。
+    private func positionWindow(_ window: NSWindow, size: CGSize) {
+        guard let anchor, anchor.width > 1, anchor.height > 1 else {
+            window.center()
+            return
+        }
+        let screen = NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main
+        let visible = screen?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        var origin = CGPoint(
+            x: anchor.midX - size.width / 2,
+            y: anchor.midY - size.height / 2
+        )
+        origin.x = min(max(origin.x, visible.minX), visible.maxX - size.width)
+        origin.y = min(max(origin.y, visible.minY), visible.maxY - size.height)
+        window.setFrame(NSRect(origin: origin, size: size), display: false)
     }
 
     func windowWillClose(_ notification: Notification) {

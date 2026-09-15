@@ -5,7 +5,7 @@ import os
 final class OverlayCoordinator {
     enum Outcome {
         case cancelled
-        case captured(image: CGImage, displayID: CGDirectDisplayID)
+        case captured(image: CGImage, displayID: CGDirectDisplayID, screenRect: CGRect)
     }
 
     private let logger = Logger(subsystem: "com.liwenjiao.jietu", category: "overlay")
@@ -89,8 +89,16 @@ final class OverlayCoordinator {
             finish(.cancelled, reason: "crop-failed")
             return
         }
+        // 选区的屏幕坐标，供「就地编辑」把编辑窗口放到选区附近。
+        let screen = NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID }
+            ?? NSScreen.main
+        let origin = screen.map {
+            DisplayGeometry.appKitPoint(fromLocal: localRect.origin, screen: $0)
+        } ?? localRect.origin
+        let screenRect = CGRect(origin: origin, size: localRect.size)
+
         finish(
-            .captured(image: image, displayID: snapshot.displayID),
+            .captured(image: image, displayID: snapshot.displayID, screenRect: screenRect),
             reason: "commit"
         )
     }

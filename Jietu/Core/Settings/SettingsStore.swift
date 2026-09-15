@@ -42,6 +42,25 @@ enum QuickAccessPosition: String, CaseIterable, Identifiable {
     }
 }
 
+/// 标注编辑方式。
+///
+/// @author ixxxxoooo
+enum EditorMode: String, CaseIterable, Identifiable {
+    /// 就地编辑：截完直接在当前截图上编辑，工具栏就地出现，`✓/✗` 决定。
+    case inline
+    /// 独立窗口：截完先显示浮窗，点开后在单独窗口里编辑。
+    case window
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .inline: return "就地编辑"
+        case .window: return "独立窗口"
+        }
+    }
+}
+
 @Observable
 final class SettingsStore {
     private enum Key {
@@ -56,6 +75,7 @@ final class SettingsStore {
         static let saveFormat = "behavior.saveFormat"
         static let jpegQuality = "behavior.jpegQuality"
         static let quickAccessPosition = "behavior.quickAccessPosition"
+        static let editorMode = "behavior.editorMode"
     }
 
     /// 最近截图最多保留的条数。
@@ -108,6 +128,11 @@ final class SettingsStore {
         didSet { defaults.set(quickAccessPosition.rawValue, forKey: Key.quickAccessPosition) }
     }
 
+    /// 标注编辑方式（就地 / 独立窗口）。
+    var editorMode: EditorMode {
+        didSet { defaults.set(editorMode.rawValue, forKey: Key.editorMode) }
+    }
+
     /// 最近保存的截图路径（新的在前）。
     private(set) var recentCapturePaths: [String] {
         didSet { defaults.set(recentCapturePaths, forKey: Key.recentCapturePaths) }
@@ -148,6 +173,8 @@ final class SettingsStore {
         self.quickAccessPosition =
             (defaults.string(forKey: Key.quickAccessPosition)
                 .flatMap(QuickAccessPosition.init(rawValue:))) ?? .bottomRight
+        self.editorMode =
+            (defaults.string(forKey: Key.editorMode).flatMap(EditorMode.init(rawValue:))) ?? .inline
 
         if let path = defaults.string(forKey: Key.saveDirectoryPath) {
             self.saveDirectory = URL(fileURLWithPath: path, isDirectory: true)

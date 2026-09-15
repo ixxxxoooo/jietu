@@ -239,7 +239,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch outcome {
         case .cancelled:
             break
-        case .captured(let image, let displayID):
+        case .captured(let image, let displayID, let screenRect):
+            handleCaptured(image, onDisplay: displayID, screenRect: screenRect)
+        }
+    }
+
+    /// 截图完成后的分流：就地编辑 / 浮窗预览。
+    private func handleCaptured(
+        _ image: CGImage,
+        onDisplay displayID: CGDirectDisplayID,
+        screenRect: CGRect
+    ) {
+        switch settings.editorMode {
+        case .inline:
+            if settings.playShutterSound {
+                CaptureOutput.playShutterSound()
+            }
+            openAnnotationEditor(image, anchor: screenRect)
+        case .window:
             deliver(image, onDisplay: displayID)
         }
     }
@@ -268,10 +285,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 打开标注编辑器。
     ///
-    /// 编辑器持有自己的生命周期，关闭时从数组里移除。发起标注的那张浮窗
-    /// 已由 `QuickAccessPanelController` 自行关闭。
-    private func openAnnotationEditor(_ image: CGImage) {
-        let controller = AnnotationEditorWindowController(image: image)
+    /// - Parameter anchor: 选区在屏幕上的矩形（就地编辑时把窗口放到选区附近）。
+    private func openAnnotationEditor(_ image: CGImage, anchor: CGRect? = nil) {
+        let controller = AnnotationEditorWindowController(image: image, anchor: anchor)
         controller.onCopy = { rendered in
             CaptureOutput.copyToPasteboard(rendered)
         }
