@@ -1362,7 +1362,7 @@ final class OverlayCanvasView: NSView {
         withObservationTracking {
             _ = model.showColor
             _ = model.showWidth
-            _ = model.tool
+            _ = model.isLiveTextActive
         } onChange: { [weak self] in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -1377,7 +1377,7 @@ final class OverlayCanvasView: NSView {
 
     /// 实况文本：选中「选择」工具时铺一层可拖选复制文字的覆盖层。
     private func updateLiveTextOverlay() {
-        let wantsLiveText = (toolbarModel?.tool == .select) && cropImage != nil && selection != nil
+        let wantsLiveText = (toolbarModel?.isLiveTextActive ?? false) && cropImage != nil && selection != nil
         if wantsLiveText {
             if liveTextHost == nil, let image = cropImage {
                 let host = NSHostingView(rootView: LiveTextOverlay(image: image))

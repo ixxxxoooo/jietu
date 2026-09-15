@@ -67,6 +67,8 @@ struct AnnotationEditorView: View {
     @State private var ocrText = ""
     @State private var isOCRPresented = false
     @State private var isRecognizing = false
+    /// 是否开启实况文本（由工具栏 OCR 按钮触发）。
+    @State private var isLiveTextActive = false
 
     // MARK: - Preview / zoom
 
@@ -181,7 +183,7 @@ struct AnnotationEditorView: View {
                             .strokeBorder(Color.black.opacity(0.25), lineWidth: 1)
                             .allowsHitTesting(false)
                     )
-                if tool == .select {
+                if isLiveTextActive {
                     LiveTextOverlay(image: baseImage)
                         .frame(width: displayedSize.width, height: displayedSize.height)
                 }
@@ -346,6 +348,13 @@ struct AnnotationEditorView: View {
 
                 iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
                 iconButton("保存", symbol: "square.and.arrow.down") { exportToSave() }
+            iconButton(
+                "识别文字",
+                symbol: "text.viewfinder",
+                tint: isLiveTextActive ? Theme.selectionGreen : .white
+            ) {
+                isLiveTextActive.toggle()
+            }
                 iconButton("OCR", symbol: "text.viewfinder") { exportOCR() }
                     .disabled(isRecognizing)
                 iconButton("钉图", symbol: "pin") { exportToPin() }

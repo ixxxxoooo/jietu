@@ -16,6 +16,8 @@ final class InlineToolbarModel {
     /// 展开状态由模型持有，便于宿主视图观察并自适应高度。
     var showColor = false
     var showWidth = false
+    /// 实况文本是否开启（OCR 按钮触发）。
+    var isLiveTextActive = false
 
     var onUndo: (() -> Void)?
     var onRedo: (() -> Void)?
@@ -58,6 +60,13 @@ struct InlineMainToolbar: View {
 
             iconButton("下载", symbol: "square.and.arrow.down") { model.onSave?() }
             iconButton("钉图", symbol: "pin") { model.onPin?() }
+            iconButton(
+                "识别文字",
+                symbol: "text.viewfinder",
+                tint: model.isLiveTextActive ? Theme.selectionGreen : .white
+            ) {
+                model.isLiveTextActive.toggle()
+            }
             iconButton("取消", symbol: "xmark", tint: .red) { model.onCancel?() }
             iconButton("确认", symbol: "checkmark", tint: .green) { model.onConfirm?() }
         }
