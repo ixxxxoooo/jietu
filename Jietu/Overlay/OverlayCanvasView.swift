@@ -1239,9 +1239,6 @@ final class OverlayCanvasView: NSView {
             handles.append(
                 (.counterLeader, leader ?? CGPoint(x: center.x + 48, y: center.y - 48))
             )
-        case .callout(let center, _, let labelOrigin, _, _):
-            handles.append((.counterLeader, labelOrigin))
-            handles.append((.arrowEnd, center))
         default:
             break
         }
@@ -1305,19 +1302,9 @@ final class OverlayCanvasView: NSView {
         return annotations.last { $0.contains(cropPoint, tolerance: tolerance) }
     }
 
-    private func isTextEditable(_ annotation: Annotation) -> Bool {
-        switch annotation.kind {
-        case .text, .callout: return true
-        default: return false
-        }
-    }
-
     private func textOrigin(of annotation: Annotation) -> CGPoint {
-        switch annotation.kind {
-        case .text(let origin, _, _): return origin
-        case .callout(_, _, let labelOrigin, _, _): return labelOrigin
-        default: return annotation.center
-        }
+        if case .text(let origin, _, _) = annotation.kind { return origin }
+        return annotation.center
     }
 
     // MARK: Inline toolbar
@@ -1475,16 +1462,8 @@ final class OverlayCanvasView: NSView {
         case .arrow: return Annotation(kind: .arrow(from: start, to: current, control: nil), color: model.color, lineWidth: model.lineWidth)
         case .pen: return Annotation(kind: .pen(points: [start, current]), color: model.color, lineWidth: model.lineWidth)
         case .counter:
-            let radius = max(12, model.lineWidth * 4)
-            let labelOrigin = CGPoint(x: start.x + radius + 24, y: start.y - radius - 44)
             return Annotation(
-                kind: .callout(
-                    center: start,
-                    value: inlineCounterValue,
-                    labelOrigin: labelOrigin,
-                    string: "",
-                    fontSize: max(14, model.lineWidth * 3)
-                ),
+                kind: .counter(center: start, value: inlineCounterValue, leader: nil),
                 color: model.color,
                 lineWidth: model.lineWidth
             )
@@ -1540,7 +1519,7 @@ final class OverlayCanvasView: NSView {
         // 2) 命中已有标注 → 选中并移动（不区分当前工具，和编辑窗口一致）
         if let hit = inlineAnnotation(at: crop) {
             selectedID = hit.id
-            if clickCount >= 2, isTextEditable(hit) {
+            if clickCount >= 2, case .text = hit.kind {
                 beginInlineText(at: textOrigin(of: hit), editing: hit)
                 inlineEditDrag = .none
                 updateInlineSelectionLayers()
@@ -1630,14 +1609,7 @@ final class OverlayCanvasView: NSView {
                 pushUndo()
                 annotations.append(draft)
                 selectedID = draft.id
-                if case .callout(_, _, let labelOrigin, _, _) = draft.kind {
-                    inlineCounterValue += 1
-                    // 自动弹出文字框输入说明。
-                    beginInlineText(at: labelOrigin, editing: draft)
-                    updateAnnotationLayer()
-                    updateInlineSelectionLayers()
-                    return
-                }
+                if case .counter = draft.kind { inlineCounterValue += 1 }
             }
             annotationDraft = nil
             updateAnnotationLayer()
@@ -1671,42 +1643,15 @@ final class OverlayCanvasView: NSView {
         let scale = max(1, snapshot.effectiveScale)
         let view = viewPoint(fromAnnotation: cropPoint)
         let font = NSFont.systemFont(ofSize: max(11, model.lineWidth * 6 / scale))
-        let field: NSTextField
-        if let editing, case .callout(_, _, let labelOrigin, let s, let fs) = editing.kind {
-            // 气泡就地编辑：输入框直接做成气泡的样子，盖在气泡位置。
-            let rect = Annotation.calloutLabelRect(origin: labelOrigin, string: s, fontSize: fs)
-            let topLeft = viewPoint(rect.origin)
-            let size = CGSize(width: max(120, rect.width / scale), height: max(26, rect.height / scale))
-            field = NSTextField(
-                frame: CGRect(
-                    x: topLeft.x,
-                    y: topLeft.y - size.height,
-                    width: size.width,
-                    height: size.height
-                )
-            )
-            field.isBordered = false
-            field.drawsBackground = true
-            field.backgroundColor = NSColor(
-                srgbRed: model.color.red,
-                green: model.color.green,
-                blue: model.color.blue,
-                alpha: 1
-            )
-            field.wantsLayer = true
-            field.layer?.cornerRadius = 8
-            field.layer?.masksToBounds = true
-            field.font = NSFont.systemFont(ofSize: max(11, fs / scale), weight: .medium)
-        } else {
-            field = NSTextField(
-                frame: CGRect(x: view.x, y: view.y - 16, width: 220, height: 30)
-            )
-            field.isBordered = true
-            field.drawsBackground = true
-            field.backgroundColor = NSColor.black.withAlphaComponent(0.45)
-            field.font = font
-        }
+        _ = scale
+        let field = NSTextField(
+            frame: CGRect(x: view.x, y: view.y - 16, width: 220, height: 30)
+        )
         field.stringValue = existing
+        field.isBordered = true
+        field.drawsBackground = true
+        field.backgroundColor = NSColor.black.withAlphaComponent(0.45)
+        field.font = font
         field.textColor = .white
         field.focusRingType = .none
         field.target = self
@@ -1731,12 +1676,8 @@ final class OverlayCanvasView: NSView {
 
         guard !string.isEmpty else {
             if let editingID {
-                let isCallout = annotations.first { $0.id == editingID }
-                    .map { if case .callout = $0.kind { return true } else { return false } } ?? false
-                if !isCallout {
-                    pushUndo()
-                    annotations.removeAll { $0.id == editingID }
-                }
+                pushUndo()
+                annotations.removeAll { $0.id == editingID }
             }
             updateAnnotationLayer()
             updateInlineSelectionLayers()

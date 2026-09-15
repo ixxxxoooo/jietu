@@ -283,9 +283,8 @@ struct AnnotationEditorView: View {
     /// 内联文字编辑：直接在图片原位置输入，不再弹窗。
     @ViewBuilder
     private var textEditorOverlay: some View {
-        if let id = editingTextID {
-            let isCallout = annotations.first { $0.id == id }
-                .map { if case .callout = $0.kind { return true } else { return false } } ?? false
+        if editingTextID != nil {
+            let isCallout = false
             let font = inlineFontSize * pointsPerPixel
             let measured = Annotation.textSize(
                 string: inlineText.isEmpty ? "文字" : inlineText,
@@ -385,7 +384,7 @@ struct AnnotationEditorView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .fixedSize()
-        .background(FrostedBar())
+        .background(toolbarBar)
     }
 
     /// 点开颜色 / 粗细后出现的第二行（独立一条）。
@@ -396,11 +395,10 @@ struct AnnotationEditorView: View {
                 HStack(spacing: 8) {
                     Text(model_toolIsEraser ? "橡皮" : "\(Int(lineWidth))")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                         .frame(width: 34, alignment: .trailing)
                     Slider(value: $lineWidth, in: 1...24)
                         .frame(width: 170)
-                        .tint(.white)
                         .onChange(of: lineWidth) { _, value in
                             applyToSelected { $0.withLineWidth(value) }
                         }
@@ -418,7 +416,8 @@ struct AnnotationEditorView: View {
                                 .frame(width: 20, height: 20)
                                 .overlay(
                                     Circle().strokeBorder(
-                                        color == swatch ? Color.white : Color.white.opacity(0.2),
+                                        color == swatch
+                                            ? Theme.brand : Color.primary.opacity(0.25),
                                         lineWidth: color == swatch ? 2 : 1
                                     )
                                 )
@@ -433,7 +432,17 @@ struct AnnotationEditorView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .fixedSize()
-        .background(FrostedBar())
+        .background(toolbarBar)
+    }
+
+    /// 普通窗口风格的工具栏底：不透明系统底 + 细描边（不用磨砂）。
+    private var toolbarBar: some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(Color(nsColor: .controlBackgroundColor))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+            )
     }
 
     private var model_toolIsEraser: Bool { tool == .eraser }
@@ -461,7 +470,7 @@ struct AnnotationEditorView: View {
             Image(systemName: "lineweight")
                 .font(.system(size: 15, weight: .regular))
                 .frame(width: 30, height: 26)
-                .foregroundStyle(showWidth ? Theme.selectionGreen : Color.white.opacity(0.9))
+                .foregroundStyle(showWidth ? Theme.brand : Color.primary)
         }
         .buttonStyle(.plain)
         .help("线条粗细")
@@ -469,7 +478,7 @@ struct AnnotationEditorView: View {
 
     private var separator: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.14))
+            .fill(Color.primary.opacity(0.12))
             .frame(width: 1, height: 20)
             .padding(.horizontal, 4)
     }
@@ -532,7 +541,7 @@ struct AnnotationEditorView: View {
     private func iconButton(
         _ title: String,
         symbol: String,
-        tint: Color = .white,
+        tint: Color = .primary,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -677,14 +686,7 @@ struct AnnotationEditorView: View {
                 pushUndo()
                 annotations.append(draft)
                 selectedID = draft.id
-                if case .callout(_, _, let labelOrigin, _, _) = draft.kind {
-                    counterValue += 1
-                    editingTextID = draft.id
-                    inlineText = ""
-                    inlineFontSize = textFontSize(of: draft)
-                    inlineOriginView = viewPoint(labelOrigin)
-                    return
-                }
+                if case .counter = draft.kind { counterValue += 1 }
             }
         case .erasing:
             lastErasePoint = nil
@@ -711,16 +713,8 @@ struct AnnotationEditorView: View {
         case .pen:
             return Annotation(kind: .pen(points: [start, current]), color: color, lineWidth: lineWidth)
         case .counter:
-            let radius = max(12, lineWidth * 4)
-            let labelOrigin = CGPoint(x: start.x + radius + 24, y: start.y - radius - 44)
             return Annotation(
-                kind: .callout(
-                    center: start,
-                    value: counterValue,
-                    labelOrigin: labelOrigin,
-                    string: "",
-                    fontSize: max(14, lineWidth * 3)
-                ),
+                kind: .counter(center: start, value: counterValue, leader: nil),
                 color: color,
                 lineWidth: lineWidth
             )
@@ -841,39 +835,19 @@ struct AnnotationEditorView: View {
     /// 进入文字内联编辑。
     private func startTextEditing(id: UUID) {
         guard let annotation = annotations.first(where: { $0.id == id }) else { return }
-        switch annotation.kind {
-        case .text(let origin, let string, let size):
-            selectedID = id
-            editingTextID = id
-            inlineText = string
-            inlineFontSize = size
-            inlineOriginView = viewPoint(origin)
-        case .callout(_, _, let labelOrigin, let string, let size):
-            selectedID = id
-            editingTextID = id
-            inlineText = string
-            inlineFontSize = size
-            inlineOriginView = viewPoint(labelOrigin)
-        default:
-            break
-        }
-    }
-
-    private func textFontSize(of annotation: Annotation) -> CGFloat {
-        switch annotation.kind {
-        case .text(_, _, let size): return size
-        case .callout(_, _, _, _, let size): return size
-        default: return 22
-        }
+        guard case .text(let origin, let string, let size) = annotation.kind else { return }
+        selectedID = id
+        editingTextID = id
+        inlineText = string
+        inlineFontSize = size
+        inlineOriginView = viewPoint(origin)
     }
 
     /// 提交内联文字：空文本视为取消并删除该对象。
     private func commitInlineText() {
         guard let id = editingTextID else { return }
         let trimmed = inlineText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isCallout = annotations.first { $0.id == id }
-            .map { if case .callout = $0.kind { return true } else { return false } } ?? false
-        if trimmed.isEmpty, !isCallout {
+        if trimmed.isEmpty {
             annotations.removeAll { $0.id == id }
         } else if let index = annotations.firstIndex(where: { $0.id == id }) {
             pushUndo()
@@ -904,11 +878,8 @@ struct AnnotationEditorView: View {
         let point = imagePoint(from: location)
         guard let hit = topmostAnnotation(at: point) else { return }
         selectedID = hit.id
-        switch hit.kind {
-        case .text, .callout:
+        if case .text = hit.kind {
             startTextEditing(id: hit.id)
-        default:
-            break
         }
     }
 
@@ -946,9 +917,6 @@ struct AnnotationEditorView: View {
         case .counter(let center, _, let leader):
             let leaderPoint = leader ?? CGPoint(x: center.x + 48, y: center.y - 48)
             handles.append((.counterLeader, leaderPoint))
-        case .callout(let center, _, let labelOrigin, _, _):
-            handles.append((.counterLeader, labelOrigin))
-            handles.append((.arrowEnd, center))
         default:
             break
         }
