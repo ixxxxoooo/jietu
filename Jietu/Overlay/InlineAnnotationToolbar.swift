@@ -12,7 +12,7 @@ final class InlineToolbarModel {
     var lineWidth: CGFloat = 8
     var canUndo = false
     var canRedo = false
-    /// 第二行展开状态由模型持有，便于宿主视图观察并自适应高度。
+    /// 展开状态由模型持有，便于宿主视图观察并自适应高度。
     var showColor = false
     var showWidth = false
 
@@ -24,67 +24,60 @@ final class InlineToolbarModel {
 
 /// 截图选区下方就地弹出的标注工具栏。
 ///
-/// 默认只有一行：工具 + 撤销/重做 + 颜色 + 粗细 + ✗/✓。
-/// 颜色、粗细点开后才在第二行展开具体选项。
+/// 主工具栏一条，颜色/粗细点开后是**下方另一条独立的小工具栏**（中间留空隙）。
+/// 与编辑窗口工具一致：含选择工具，可拖拽 / 旋转 / 改端点。
 ///
 /// @author ixxxxoooo
 struct InlineAnnotationToolbar: View {
     @Bindable var model: InlineToolbarModel
 
     private static let tools: [AnnotationTool] = [
-        .rectangle, .ellipse, .arrow, .pen, .highlight, .pixelate, .text, .counter,
+        .select, .rectangle, .ellipse, .arrow, .pen, .highlight, .pixelate, .text, .counter,
     ]
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 4) {
-                ForEach(Self.tools) { item in
-                    toolButton(item)
-                }
-
-                separator
-
-                iconButton("撤销", symbol: "arrow.uturn.backward") { model.onUndo?() }
-                    .disabled(!model.canUndo)
-                iconButton("重做", symbol: "arrow.uturn.forward") { model.onRedo?() }
-                    .disabled(!model.canRedo)
-
-                separator
-
-                colorButton
-                widthButton
-
-                Spacer(minLength: 12)
-
-                iconButton("取消", symbol: "xmark", tint: .red) { model.onCancel?() }
-                iconButton("确认", symbol: "checkmark", tint: .green) { model.onConfirm?() }
-            }
-
+            mainBar
             if model.showColor || model.showWidth {
-                expandedOptions
+                optionsBar
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(
-            ZStack {
-                VisualEffectBackground(material: .hudWindow)
-                Color.black.opacity(0.45)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
-        )
-        .frame(width: 470)
+        .frame(width: 520)
         .animation(.easeOut(duration: 0.12), value: model.showColor)
         .animation(.easeOut(duration: 0.12), value: model.showWidth)
     }
 
-    /// 只有点了颜色 / 粗细才出现的第二行。
+    private var mainBar: some View {
+        HStack(spacing: 4) {
+            ForEach(Self.tools) { item in
+                toolButton(item)
+            }
+
+            separator
+
+            iconButton("撤销", symbol: "arrow.uturn.backward") { model.onUndo?() }
+                .disabled(!model.canUndo)
+            iconButton("重做", symbol: "arrow.uturn.forward") { model.onRedo?() }
+                .disabled(!model.canRedo)
+
+            separator
+
+            colorButton
+            widthButton
+
+            Spacer(minLength: 12)
+
+            iconButton("取消", symbol: "xmark", tint: .red) { model.onCancel?() }
+            iconButton("确认", symbol: "checkmark", tint: .green) { model.onConfirm?() }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(FrostedBar())
+    }
+
+    /// 点开颜色 / 粗细后出现的第二行——**独立的一条**，与主工具栏中间有缝隙。
     @ViewBuilder
-    private var expandedOptions: some View {
+    private var optionsBar: some View {
         HStack(spacing: 14) {
             if model.showWidth {
                 HStack(spacing: 8) {
@@ -120,6 +113,9 @@ struct InlineAnnotationToolbar: View {
             }
             Spacer(minLength: 0)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(FrostedBar())
     }
 
     private var separator: some View {
@@ -187,5 +183,22 @@ struct InlineAnnotationToolbar: View {
         }
         .buttonStyle(.plain)
         .help(title)
+    }
+}
+
+/// 磨砂深色圆角条。
+///
+/// @author ixxxxoooo
+struct FrostedBar: View {
+    var body: some View {
+        ZStack {
+            VisualEffectBackground(material: .hudWindow)
+            Color.black.opacity(0.45)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+        )
     }
 }

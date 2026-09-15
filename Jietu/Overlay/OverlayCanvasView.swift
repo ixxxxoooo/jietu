@@ -72,6 +72,22 @@ final class OverlayCanvasView: NSView {
     /// 是否正处于就地标注阶段（供 Coordinator 判断 Esc 归属）。
     var isAnnotationPhase: Bool { phase == .annotating }
     private var redoAnnotations: [Annotation] = []
+    private var selectedID: UUID?
+
+    /// 选择工具下的拖拽类型。
+    private enum InlineEditDrag {
+        case none
+        case moving(id: UUID, start: CGPoint, original: Annotation)
+        case resizing(id: UUID, handle: ShapeHandle, original: Annotation)
+        case rotating(id: UUID, startAngle: CGFloat, original: Annotation)
+        case endpoint(id: UUID, handle: ShapeHandle, original: Annotation)
+    }
+
+    private var inlineEditDrag: InlineEditDrag = .none
+    /// 正在编辑的已有文字对象（nil 表示新建）。
+    private var inlineEditingTextID: UUID?
+    private let inlineSelectionBorderLayer = CAShapeLayer()
+    private let inlineHandlesLayer = CAShapeLayer()
     private var annotations: [Annotation] = []
     private var annotationDraft: Annotation?
     private var previewBase: CGImage?
@@ -190,6 +206,20 @@ final class OverlayCanvasView: NSView {
         ]
         root.addSublayer(annotationLayer)
 
+        // 就地选择态：虚线包围盒 + 控制点。
+        inlineSelectionBorderLayer.fillColor = nil
+        inlineSelectionBorderLayer.strokeColor = NSColor.controlAccentColor.cgColor
+        inlineSelectionBorderLayer.lineWidth = 1.2
+        inlineSelectionBorderLayer.lineDashPattern = [5, 3]
+        inlineSelectionBorderLayer.isHidden = true
+        root.addSublayer(inlineSelectionBorderLayer)
+
+        inlineHandlesLayer.fillColor = NSColor.white.cgColor
+        inlineHandlesLayer.strokeColor = NSColor.controlAccentColor.cgColor
+        inlineHandlesLayer.lineWidth = 1.2
+        inlineHandlesLayer.isHidden = true
+        root.addSublayer(inlineHandlesLayer)
+
         dimLayer.fillColor = NSColor.black
             .withAlphaComponent(Theme.overlayDimAlpha).cgColor
         dimLayer.fillRule = .evenOdd
@@ -232,6 +262,7 @@ final class OverlayCanvasView: NSView {
         for layer in [
             dimLayer, windowHighlightLayer, selectionBorderOuterLayer,
             selectionBorderInnerLayer, handlesLayer, crosshairLayer,
+            inlineSelectionBorderLayer, inlineHandlesLayer,
         ] {
             layer.actions = noActions
         }
@@ -335,6 +366,7 @@ final class OverlayCanvasView: NSView {
         for layer in [
             imageLayer, dimLayer, windowHighlightLayer, selectionBorderOuterLayer,
             selectionBorderInnerLayer, handlesLayer, crosshairLayer,
+            inlineSelectionBorderLayer, inlineHandlesLayer,
         ] {
             layer.frame = bounds
         }
@@ -734,7 +766,10 @@ final class OverlayCanvasView: NSView {
     override func mouseDown(with event: NSEvent) {
         guard isInputArmed else { return }
         if phase == .annotating {
-            inlineMouseDown(convert(event.locationInWindow, from: nil))
+            inlineMouseDown(
+                convert(event.locationInWindow, from: nil),
+                clickCount: event.clickCount
+            )
             return
         }
         requestFocusIfNeeded()
@@ -919,6 +954,8 @@ final class OverlayCanvasView: NSView {
         annotations.removeAll()
         redoAnnotations.removeAll()
         annotationDraft = nil
+        selectedID = nil
+        inlineEditingTextID = nil
         interaction = .settled
         onInlineEditingChanged?(true)
 
@@ -945,10 +982,14 @@ final class OverlayCanvasView: NSView {
         textField = nil
         annotations.removeAll()
         annotationDraft = nil
+        selectedID = nil
+        inlineEditingTextID = nil
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         annotationLayer.contents = nil
         annotationLayer.isHidden = true
+        inlineSelectionBorderLayer.isHidden = true
+        inlineHandlesLayer.isHidden = true
         CATransaction.commit()
         phase = .selecting
         onInlineEditingChanged?(false)
@@ -1058,6 +1099,176 @@ final class OverlayCanvasView: NSView {
         updateAnnotationLayer()
     }
 
+    // MARK: Inline selection / editing
+
+    private var selectedAnnotation: Annotation? {
+        guard let selectedID else { return nil }
+        return annotations.first { $0.id == selectedID }
+    }
+
+    private func updateAnnotation(_ id: UUID, _ transform: (Annotation) -> Annotation) {
+        guard let index = annotations.firstIndex(where: { $0.id == id }) else { return }
+        annotations[index] = transform(annotations[index])
+    }
+
+    /// 选中态的控制点（crop 像素坐标）。
+    private func inlineHandles(for annotation: Annotation) -> [(ShapeHandle, CGPoint)] {
+        var handles: [(ShapeHandle, CGPoint)] = []
+        if abs(annotation.rotation) < 0.001 {
+            switch annotation.kind {
+            case .rectangle, .ellipse, .highlight, .pixelate, .pen, .text:
+                handles.append(contentsOf: ShapeGeometry.resizeHandles(for: annotation))
+            default:
+                break
+            }
+        }
+        switch annotation.kind {
+        case .arrow(let from, let to, let control):
+            handles.append((.arrowStart, from))
+            handles.append((.arrowEnd, to))
+            handles.append(
+                (.arrowControl, control ?? CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2))
+            )
+        case .counter(let center, _, let leader):
+            handles.append(
+                (.counterLeader, leader ?? CGPoint(x: center.x + 48, y: center.y - 48))
+            )
+        default:
+            break
+        }
+        handles.append((.rotate, ShapeGeometry.rotateHandle(for: annotation, distance: 28)))
+        return handles
+    }
+
+    private func updateInlineSelectionLayers() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+
+        guard phase == .annotating, let selected = selectedAnnotation else {
+            inlineSelectionBorderLayer.isHidden = true
+            inlineHandlesLayer.isHidden = true
+            inlineSelectionBorderLayer.path = nil
+            inlineHandlesLayer.path = nil
+            return
+        }
+
+        let corners = selected.rotatedCorners().map { viewPoint($0) }
+        let border = CGMutablePath()
+        border.addLines(between: corners)
+        border.closeSubpath()
+        inlineSelectionBorderLayer.path = border
+        inlineSelectionBorderLayer.isHidden = false
+
+        let path = CGMutablePath()
+        let radius = Self.inlineHandleRadius
+        for (_, point) in inlineHandles(for: selected) {
+            let center = viewPoint(point)
+            path.addEllipse(
+                in: CGRect(
+                    x: center.x - radius,
+                    y: center.y - radius,
+                    width: radius * 2,
+                    height: radius * 2
+                )
+            )
+        }
+        inlineHandlesLayer.path = path
+        inlineHandlesLayer.isHidden = false
+    }
+
+    private static let inlineHandleRadius: CGFloat = 4.5
+
+    private func inlineHitHandle(_ annotation: Annotation, at cropPoint: CGPoint) -> ShapeHandle? {
+        let tolerance = 11 * snapshot.effectiveScale
+        var best: (ShapeHandle, CGFloat)?
+        for (handle, point) in inlineHandles(for: annotation) {
+            let distance = Annotation.distance(cropPoint, point)
+            if distance <= tolerance, best == nil || distance < best!.1 {
+                best = (handle, distance)
+            }
+        }
+        return best?.0
+    }
+
+    private func inlineAnnotation(at cropPoint: CGPoint) -> Annotation? {
+        let tolerance = max(6, 8 * snapshot.effectiveScale)
+        return annotations.last { $0.contains(cropPoint, tolerance: tolerance) }
+    }
+
+    private func inlineSelectMouseDown(_ cropPoint: CGPoint, clickCount: Int) {
+        commitPendingInlineText()
+
+        if let selected = selectedAnnotation,
+            let handle = inlineHitHandle(selected, at: cropPoint)
+        {
+            redoAnnotations.removeAll()
+            switch handle {
+            case .rotate:
+                let angle = atan2(
+                    cropPoint.y - selected.center.y,
+                    cropPoint.x - selected.center.x
+                )
+                inlineEditDrag = .rotating(id: selected.id, startAngle: angle, original: selected)
+            case .arrowStart, .arrowEnd, .arrowControl, .counterLeader:
+                inlineEditDrag = .endpoint(id: selected.id, handle: handle, original: selected)
+            default:
+                inlineEditDrag = .resizing(id: selected.id, handle: handle, original: selected)
+            }
+            return
+        }
+
+        if let hit = inlineAnnotation(at: cropPoint) {
+            selectedID = hit.id
+            if clickCount >= 2, case .text = hit.kind {
+                beginInlineText(at: textOrigin(of: hit), editing: hit)
+                inlineEditDrag = .none
+                updateInlineSelectionLayers()
+                return
+            }
+            redoAnnotations.removeAll()
+            inlineEditDrag = .moving(id: hit.id, start: cropPoint, original: hit)
+            updateInlineSelectionLayers()
+            return
+        }
+
+        selectedID = nil
+        inlineEditDrag = .none
+        updateInlineSelectionLayers()
+    }
+
+    private func inlineSelectMouseDragged(_ cropPoint: CGPoint) {
+        switch inlineEditDrag {
+        case .none:
+            break
+        case .moving(let id, let start, let original):
+            let delta = CGSize(width: cropPoint.x - start.x, height: cropPoint.y - start.y)
+            updateAnnotation(id) { _ in original.translated(by: delta) }
+        case .resizing(let id, let handle, let original):
+            updateAnnotation(id) { _ in
+                original.resized(handle: handle, to: cropPoint, lockAspect: false)
+            }
+        case .rotating(let id, let startAngle, let original):
+            let angle = atan2(cropPoint.y - original.center.y, cropPoint.x - original.center.x)
+            updateAnnotation(id) { _ in original.rotated(by: angle - startAngle) }
+        case .endpoint(let id, let handle, let original):
+            updateAnnotation(id) { _ in original.withEndpoint(handle, to: cropPoint) }
+        }
+        updateAnnotationLayer()
+        updateInlineSelectionLayers()
+    }
+
+    private func inlineSelectMouseUp() {
+        if case .none = inlineEditDrag { return }
+        inlineEditDrag = .none
+        updateInlineSelectionLayers()
+    }
+
+    private func textOrigin(of annotation: Annotation) -> CGPoint {
+        if case .text(let origin, _, _) = annotation.kind { return origin }
+        return annotation.center
+    }
+
     // MARK: Inline toolbar
 
     private func showToolbar() {
@@ -1146,6 +1357,10 @@ final class OverlayCanvasView: NSView {
         return CGPoint(x: selection.minX + point.x / scale, y: selection.maxY - point.y / scale)
     }
 
+    private func viewPoint(_ point: CGPoint) -> CGPoint {
+        viewPoint(fromAnnotation: point)
+    }
+
     private func makeInlineDraft(start: CGPoint, current: CGPoint) -> Annotation? {
         guard let model = toolbarModel else { return nil }
         let rect = CGRect(
@@ -1179,7 +1394,11 @@ final class OverlayCanvasView: NSView {
         }
     }
 
-    private func inlineMouseDown(_ point: CGPoint) {
+    private func inlineMouseDown(_ point: CGPoint, clickCount: Int) {
+        if toolbarModel?.tool == .select {
+            inlineSelectMouseDown(annotationPoint(from: point), clickCount: clickCount)
+            return
+        }
         commitPendingInlineText()
         inlineStart = annotationPoint(from: point)
         inlineDragging = true
@@ -1188,6 +1407,10 @@ final class OverlayCanvasView: NSView {
     }
 
     private func inlineMouseDragged(_ point: CGPoint) {
+        if toolbarModel?.tool == .select {
+            inlineSelectMouseDragged(annotationPoint(from: point))
+            return
+        }
         guard inlineDragging, let model = toolbarModel else { return }
         let current = annotationPoint(from: point)
         if model.tool == .pen, case .pen(var points) = annotationDraft?.kind {
@@ -1200,6 +1423,10 @@ final class OverlayCanvasView: NSView {
     }
 
     private func inlineMouseUp(_ point: CGPoint) {
+        if toolbarModel?.tool == .select {
+            inlineSelectMouseUp()
+            return
+        }
         guard inlineDragging, let model = toolbarModel else { return }
         inlineDragging = false
         let current = annotationPoint(from: point)
@@ -1224,15 +1451,25 @@ final class OverlayCanvasView: NSView {
     private var inlineTextOrigin: CGPoint = .zero
     private var inlineCounterValue = 1
 
-    private func beginInlineText(at cropPoint: CGPoint) {
+    private func beginInlineText(at cropPoint: CGPoint, editing: Annotation? = nil) {
         guard let model = toolbarModel else { return }
         commitPendingInlineText()
         inlineTextOrigin = cropPoint
+        inlineEditingTextID = editing?.id
+
+        let existing: String
+        if case .text(_, let string, _)? = editing?.kind {
+            existing = string
+        } else {
+            existing = ""
+        }
+
         let view = viewPoint(fromAnnotation: cropPoint)
         let font = NSFont.systemFont(ofSize: max(12, model.lineWidth * 6))
         let field = NSTextField(
             frame: CGRect(x: view.x, y: view.y - 16, width: 220, height: 30)
         )
+        field.stringValue = existing
         field.font = font
         field.textColor = .white
         field.backgroundColor = NSColor.black.withAlphaComponent(0.45)
@@ -1254,18 +1491,36 @@ final class OverlayCanvasView: NSView {
         guard let field = textField, let model = toolbarModel else { return }
         let string = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let origin = inlineTextOrigin
+        let editingID = inlineEditingTextID
         field.removeFromSuperview()
         textField = nil
-        guard !string.isEmpty else { return }
-        annotations.append(
-            Annotation(
-                kind: .text(origin: origin, string: string, fontSize: max(12, model.lineWidth * 6)),
-                color: model.color,
-                lineWidth: model.lineWidth
+        inlineEditingTextID = nil
+
+        guard !string.isEmpty else {
+            if let editingID { annotations.removeAll { $0.id == editingID } }
+            updateAnnotationLayer()
+            updateInlineSelectionLayers()
+            return
+        }
+
+        if let editingID, let index = annotations.firstIndex(where: { $0.id == editingID }) {
+            annotations[index] = annotations[index].withText(string)
+        } else {
+            annotations.append(
+                Annotation(
+                    kind: .text(
+                        origin: origin,
+                        string: string,
+                        fontSize: max(12, model.lineWidth * 6)
+                    ),
+                    color: model.color,
+                    lineWidth: model.lineWidth
+                )
             )
-        )
+        }
         redoAnnotations.removeAll()
         updateAnnotationLayer()
+        updateInlineSelectionLayers()
     }
 
     // MARK: - Actions
