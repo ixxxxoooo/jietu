@@ -118,7 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             CaptureOutput.copyToPasteboard(image)
         }
         quickAccess.onSave = { [weak self] image in
-            self?.save(image)
+            self?.saveAs(image)
         }
         quickAccess.onAnnotate = { [weak self] image in
             self?.openAnnotationEditor(image)
@@ -304,7 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             CaptureOutput.copyToPasteboard(rendered)
         }
         controller.onSave = { [weak self] rendered in
-            self?.save(rendered)
+            self?.saveAs(rendered)
         }
         controller.onClose = { [weak self, weak controller] in
             guard let self else { return }
@@ -322,6 +322,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 format: settings.saveFormat,
                 quality: settings.jpegQuality
             )
+            settings.recordCapture(url)
+            logger.notice("saved capture to \(url.path, privacy: .public)")
+        } catch {
+            logger.error("save failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// 「存储为…」：弹系统保存面板让用户选择位置。
+    private func saveAs(_ image: CGImage) {
+        let panel = NSSavePanel()
+        panel.directoryURL = settings.saveDirectory
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = settings.saveFormat == .png ? [.png] : [.jpeg]
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        panel.nameFieldStringValue =
+            "Jietu \(formatter.string(from: Date())).\(settings.saveFormat.fileExtension)"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data: Data?
+            switch settings.saveFormat {
+            case .png: data = CaptureOutput.pngData(image)
+            case .jpeg: data = CaptureOutput.jpegData(image, quality: settings.jpegQuality)
+            }
+            guard let data else { throw CaptureOutputError.encodingFailed }
+            try data.write(to: url, options: .atomic)
             settings.recordCapture(url)
             logger.notice("saved capture to \(url.path, privacy: .public)")
         } catch {

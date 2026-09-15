@@ -45,6 +45,10 @@ struct QuickAccessView: View {
                 .frame(width: Self.cardWidth, height: Self.cardHeight)
                 .blur(radius: isHovering ? 16 : 0)
                 .background(Color.black.opacity(0.28))
+                // 手势只挂在图片上：按钮在更上层，点按钮不会触发这里。
+                .contentShape(Rectangle())
+                .onTapGesture { onAnnotate() }
+                .onDrag { dragProvider() }
 
             controls
         }
@@ -57,9 +61,6 @@ struct QuickAccessView: View {
                     lineWidth: isHovering ? 2 : 0.5
                 )
         )
-        .contentShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
-        .onTapGesture { onAnnotate() }
-        .onDrag { dragProvider() }
         .shadow(color: .black.opacity(0.34), radius: 12, y: 5)
         .help("点击打开标注编辑器，拖拽到其它 App 或文件夹可导出")
         .animation(.easeOut(duration: 0.14), value: isHovering)
