@@ -124,6 +124,8 @@ struct AnnotationEditorView: View {
     @State private var isLiveTextActive = false
     @State private var showColor = false
     @State private var showWidth = false
+    /// 子工具栏实测尺寸（用来把它居中到按钮下）。
+    @State private var optionsSize: CGSize = .zero
 
     // MARK: - Preview / zoom
 
@@ -187,6 +189,22 @@ struct AnnotationEditorView: View {
             }
         }
         .background(inline ? Color.clear : Color(nsColor: .windowBackgroundColor))
+        // 颜色 / 粗细子工具栏：**悬浮**在被点的按钮下方（原地模式上方），
+        // 不占布局、也不会把画布挤下去。
+        .overlayPreferenceValue(OptionsAnchorKey.self) { anchors in
+            GeometryReader { proxy in
+                if let anchor = anchors[showColor ? .color : .width] {
+                    let rect = proxy[anchor]
+                    optionsBar
+                        .fixedSize()
+                        .onGeometryChange(for: CGSize.self) { $0.size } action: { optionsSize = $0 }
+                        .position(
+                            x: optionsBarCenterX(anchorMidX: rect.midX, in: proxy.size),
+                            y: optionsBarCenterY(buttonFrame: rect)
+                        )
+                }
+            }
+        }
         .frame(
             minWidth: inline ? 320 : Self.minWindowWidth,
             minHeight: inline ? 200 : Self.minWindowHeight
@@ -472,17 +490,9 @@ struct AnnotationEditorView: View {
     }
 
     private var toolbar: some View {
-        VStack(spacing: 0) {
-            mainBar
-            if showColor || showWidth {
-                Rectangle()
-                    .fill(Theme.Colors.separator)
-                    .frame(height: Theme.Size.hairline)
-                optionsBar
-            }
-        }
-        // 原地模式窗口是透明的，工具栏得自己兜一层底，否则跟着系统主题切换时看不清。
-        .background(inline ? Color(nsColor: .windowBackgroundColor) : Color.clear)
+        mainBar
+            // 原地模式窗口是透明的，工具栏得自己兜一层底，否则跟着系统主题切换时看不清。
+            .background(inline ? Color(nsColor: .windowBackgroundColor) : Color.clear)
     }
 
     private var mainBar: some View {
@@ -614,6 +624,7 @@ struct AnnotationEditorView: View {
                 .overlay(Circle().strokeBorder(Theme.Colors.border, lineWidth: 1))
                 .frame(width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
         }
+        .anchorPreference(key: OptionsAnchorKey.self, value: .bounds) { [.color: $0] }
     }
 
     private var widthButton: some View {
@@ -621,6 +632,22 @@ struct AnnotationEditorView: View {
             showWidth.toggle()
             if showWidth { showColor = false }
         }
+        .anchorPreference(key: OptionsAnchorKey.self, value: .bounds) { [.width: $0] }
+    }
+
+    /// 子工具栏横向居中到被点的按钮，并夹在窗口内。
+    private func optionsBarCenterX(anchorMidX: CGFloat, in container: CGSize) -> CGFloat {
+        let half = max(1, optionsSize.width) / 2
+        return min(max(anchorMidX, half + 8), max(half + 8, container.width - half - 8))
+    }
+
+    /// 非原地：贴在按钮下方；原地模式工具栏在底部，改贴上方。
+    private func optionsBarCenterY(buttonFrame: CGRect) -> CGFloat {
+        let half = max(1, optionsSize.height) / 2
+        let gap = Theme.Spacing.sm
+        return inline
+            ? buttonFrame.minY - gap - half
+            : buttonFrame.maxY + gap + half
     }
 
     private var separator: some View {
@@ -1429,5 +1456,26 @@ struct OCRResultView: View {
         }
         .padding(18)
         .frame(width: 520, height: 380)
+    }
+}
+
+
+/// 编辑器里颜色 / 粗细按钮的锚点，供悬浮子工具栏定位。
+///
+/// @author ixxxxoooo
+enum OptionsAnchor: Hashable {
+    case color
+    case width
+}
+
+/// @author ixxxxoooo
+struct OptionsAnchorKey: PreferenceKey {
+    static var defaultValue: [OptionsAnchor: Anchor<CGRect>] { [:] }
+
+    static func reduce(
+        value: inout [OptionsAnchor: Anchor<CGRect>],
+        nextValue: () -> [OptionsAnchor: Anchor<CGRect>]
+    ) {
+        value.merge(nextValue()) { _, new in new }
     }
 }
