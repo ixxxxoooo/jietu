@@ -47,6 +47,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         #endif
 
+        // 单实例守卫：多开会让热键重复注册、浮窗／菜单栏各来一份。
+        if handOffToExistingInstance() { return }
+
         setUpMenuBar()
         setUpHotkeys()
         setUpQuickAccess()
@@ -207,6 +210,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlays.onRegionPicked = { [weak self] snapshot, localRect in
             self?.startScrollingCapture(snapshot: snapshot, localRect: localRect)
         }
+    }
+
+    /// 已经有同 bundle id 的实例在跑？把前台交给它，然后自己退出。
+    ///
+    /// 走 LaunchServices 正常启动本来就只会有一个实例；这条守卫是兜底：
+    /// 直接运行二进制、或用 `open -n` 之类的强制多开时，由这里收敛回一个。
+    ///
+    /// - Returns: `true` 表示已交接给既有实例，本进程应当立即停下。
+    private func handOffToExistingInstance() -> Bool {
+        // 跑单元测试时宿主就是同一个 App bundle，而 App 通常正开着；
+        // 这里必须放行，否则测试根本起不来。
+        guard !Self.isRunningTests else { return false }
+        guard let bundleID = Bundle.main.bundleIdentifier, !bundleID.isEmpty else { return false }
+        let selfPID = ProcessInfo.processInfo.processIdentifier
+        let others = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0.processIdentifier != selfPID && !$0.isTerminated }
+        guard let existing = others.first else { return false }
+
+        logger.notice("another instance is already running, handing off")
+        existing.activate(options: [.activateIgnoringOtherApps])
+        DispatchQueue.main.async { NSApp.terminate(nil) }
+        return true
+    }
+
+    /// 当前进程是不是 XCTest 宿主。
+    private static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || NSClassFromString("XCTestCase") != nil
     }
 
     // MARK: - Capture flow

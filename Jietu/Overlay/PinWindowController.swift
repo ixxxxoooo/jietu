@@ -21,7 +21,7 @@ final class PinWindowController: NSObject {
     /// 钉一张截图。多张可共存。
     ///
     /// - Parameter targetFrame: 指定屏幕坐标位置与大小（用于「原地钉图」）；
-    ///   为 nil 时按原始大小钉在屏幕右上角。
+    ///   为 nil 时按原始大小钉在**屏幕正中**。
     static func pin(image: CGImage, on screen: NSScreen?, targetFrame: CGRect? = nil) {
         let controller = PinWindowController(image: image, screen: screen, targetFrame: targetFrame)
         controllers.append(controller)
@@ -49,11 +49,11 @@ final class PinWindowController: NSObject {
                 min(maxSize.width / naturalSize.width, maxSize.height / naturalSize.height)
             )
             let size = CGSize(width: naturalSize.width * scale, height: naturalSize.height * scale)
-            // 每多钉一张就向右下错开一点，避免完全重叠。
+            // 钉在屏幕正中；每多钉一张向右下错开一点，避免完全重叠。
             let offset = CGFloat(PinWindowController.controllers.count % 6) * 24
             let origin = CGPoint(
-                x: visible.maxX - size.width - 24 - offset,
-                y: visible.maxY - size.height - 24 - offset
+                x: visible.midX - size.width / 2 + offset,
+                y: visible.midY - size.height / 2 - offset
             )
             frame = NSRect(origin: origin, size: size)
         }

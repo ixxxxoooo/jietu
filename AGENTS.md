@@ -42,6 +42,20 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
   签名身份，「屏幕录制」授权会出现「API 说已授权、列表里却看不到这个 App」的怪状态。
   关掉后主可执行文件是完整二进制（~6.5MB）。
 
+## 单实例
+
+Debug / Release 各自只有一个实例：
+
+- 走 LaunchServices 正常启动（`open` / 状态栏 / 登录项）本来就只会有一个实例；
+- `AppDelegate.handOffToExistingInstance()` 兜底：已有同 bundle id 实例时，
+  把前台交给它再退出自己（直接运行二进制、或用 `open -n` 强制多开时靠这条收敛）。
+  **跑单元测试时这条守卫会跳过**（测试宿主就是同一个 App bundle，App 通常正开着）。
+- 刻意**不用** `LSMultipleInstancesProhibited`：它没法绕过，会让 `xcodebuild test`
+  的测试宿主起不来。
+
+**不要用 `open -n`**——`-n` 就是「强制开新实例」，正是多实例的来源。「重启 Jietu」
+走的是「起一个后台 shell 等旧进程退出、再 `open`」，所以重启前后都只有一个实例。
+
 ## 权限排查（屏幕录制）
 
 - 判断权限**别只看系统设置的列表**：自签名 / Debug 构建可能不在列表里，但授权照样生效。

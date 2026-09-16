@@ -45,16 +45,24 @@ enum ScreenCapturePermission {
     }
 
     /// ScreenCaptureKit 在用户授权的那个进程里不会生效，必须重启进程才能开始工作。
+    ///
+    /// 重启方式是「**等自己退出后再 `open`**」，而不是 `open -n`：
+    /// `-n` 是强制开新实例，那是多实例的来源；不带 `-n` 走 LaunchServices，天然单实例。
+    /// 也不能直接 `open`——旧进程还活着时它只会把旧实例拉到前台，等于没重启。
     static func relaunchApp() {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let path = Bundle.main.bundlePath
+        let script = "while /bin/kill -0 \(pid) 2>/dev/null; do sleep 0.2; done; /usr/bin/open \"\(path)\""
+
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        task.arguments = ["-n", Bundle.main.bundlePath]
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = ["-c", script]
         do {
             try task.run()
         } catch {
             NSLog("[Jietu] relaunch failed: \(error.localizedDescription)")
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             NSApp.terminate(nil)
         }
     }

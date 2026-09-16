@@ -66,6 +66,9 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
         let size = inline
             ? inlineWindowSize(for: image)
             : AnnotationEditorView.initialWindowSize(for: image, screen: NSScreen.main)
+        // 窗口尺寸由这里说了算：不关掉的话 SwiftUI 的 intrinsic size 会在居中之后
+        // 再把窗口撑一次，窗口就偏了（用户手动拖边缩放不受影响）。
+        hosting.sizingOptions = []
         hosting.frame = NSRect(origin: .zero, size: size)
 
         let window: NSWindow
@@ -108,6 +111,35 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         NSApp.activate()
+
+        // 首帧布局之后 SwiftUI 可能还会调一次窗口尺寸；再校一次，位置才准。
+        if !inline {
+            DispatchQueue.main.async { [weak window] in
+                guard let window else { return }
+                Self.center(window, contentSize: size)
+            }
+        }
+    }
+
+    /// 按内容尺寸把窗口居中到当前屏幕。
+    ///
+    /// 不用 `window.center()`：它会按窗口**当时的** frame 居中，而 SwiftUI 首次布局
+    /// 可能已经改过一次尺寸，结果就偏了。这里显式算 frame，位置是确定的。
+    static func center(_ window: NSWindow, contentSize: CGSize) {
+        let screen = NSScreen.main
+        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let frameSize = window.frameRect(
+            forContentRect: NSRect(origin: .zero, size: contentSize)
+        ).size
+        window.setFrame(
+            NSRect(
+                x: visible.midX - frameSize.width / 2,
+                y: visible.midY - frameSize.height / 2,
+                width: frameSize.width,
+                height: frameSize.height
+            ),
+            display: false
+        )
     }
 
     /// 原地编辑窗口尺寸：图片原始大小 + 底部工具栏。
@@ -187,7 +219,7 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
     /// 原地编辑：把窗口放到选区附近；否则居中。
     private func positionWindow(_ window: NSWindow, size: CGSize) {
         guard let anchor, anchor.width > 1, anchor.height > 1 else {
-            window.center()
+            Self.center(window, contentSize: size)
             return
         }
         let screen = NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main
