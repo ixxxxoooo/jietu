@@ -1,6 +1,12 @@
 import SwiftUI
 
-/// 设置页里跨面板复用的几个小组件；其余交给系统 `Form` 分组。
+// 设置页里跨面板复用的少数几件东西；其余一律交给系统 `Form` 的 stock 控件。
+//
+// 规则：**一条设置行就是一个 stock 控件**（`Toggle` / `Picker` / `LabeledContent`），
+// label 用两段式（第一段标题、其余成次级副标题）。只有「尾部是自定义控件」
+// （录制器、滑块、按钮组）的行才用 `SettingsRow`。
+
+/// 设置行：标题 / 副标题 + 尾部自定义控件。
 ///
 /// 不用 `LabeledContent`：它的可选中文本框会吃掉快捷键录制器需要的点击。
 ///
@@ -55,21 +61,6 @@ extension SettingsRow where Icon == EmptyView {
     }
 }
 
-/// 设置行首的图标槽，固定宽高让每一列的标题对齐同一条 x。
-///
-/// @author ixxxxoooo
-struct SettingsIcon: View {
-    let systemImage: String
-    var tint: Color = Theme.Colors.icon
-
-    var body: some View {
-        Image(systemName: systemImage)
-            .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(tint)
-            .frame(width: Theme.Size.settingsRowIcon, height: Theme.Size.settingsRowIcon)
-    }
-}
-
 /// 分组标题：比行标题小、次级墨色。
 ///
 /// @author ixxxxoooo
@@ -83,7 +74,7 @@ struct SettingsSectionHeader: View {
     }
 }
 
-/// 卡片底 + 描边，用于把一组说明内容围起来（权限状态、默认样式摘要）。
+/// 卡片底 + 描边，用于把一组说明内容围起来（权限引导的状态卡）。
 ///
 /// @author ixxxxoooo
 struct SettingsCard<Content: View>: View {
@@ -100,58 +91,24 @@ struct SettingsCard<Content: View>: View {
     }
 }
 
+/// dev 渠道标记：说明当前是 Debug 构建，系统设置里要授权的就是这一条。
+///
+/// @author ixxxxoooo
+struct DevChannelBadge: View {
+    var body: some View {
+        Text("dev")
+            .font(Theme.Typography.compactKeyCap)
+            .foregroundStyle(Theme.Colors.accent)
+            .padding(.horizontal, Theme.Spacing.sm)
+            .frame(height: Theme.Size.recorderKeyCap)
+            .background(Capsule().fill(Theme.Colors.accent.opacity(0.15)))
+            .help("开发渠道：\(AppIdentity.bundleIdentifier)")
+    }
+}
+
 extension View {
     /// 同时压暗并禁用；只用 `.disabled` 的话标题还是全亮，看不出被禁。
     func settingsEnabled(_ isEnabled: Bool) -> some View {
         disabled(!isEnabled).opacity(isEnabled ? 1 : 0.45)
-    }
-}
-
-/// 带主题色图标的设置行：图标 + 标题 / 副标题 + 尾部任意控件。
-///
-/// 设置页每个分区用一个 `Theme.Colors.Accent`，侧边栏与内容区因此配色一致。
-///
-/// @author ixxxxoooo
-struct SettingsControlRow<Trailing: View>: View {
-    let icon: String
-    var tint: Color = Theme.Colors.icon
-    let title: String
-    var subtitle: String?
-    var subtitleLineLimit = 2
-    /// 关掉时压暗并禁用（例如 JPEG 质量只在 JPEG 下生效）。
-    var isActive = true
-    @ViewBuilder var trailing: Trailing
-
-    var body: some View {
-        SettingsRow(
-            title: title,
-            subtitle: subtitle,
-            subtitleLineLimit: subtitleLineLimit,
-            icon: { SettingsIcon(systemImage: icon, tint: tint) },
-            trailing: { trailing }
-        )
-        .settingsEnabled(isActive)
-    }
-}
-
-/// 带主题色图标的开关行。
-///
-/// @author ixxxxoooo
-struct SettingsToggleRow: View {
-    let icon: String
-    var tint: Color = Theme.Colors.icon
-    let title: String
-    var subtitle: String?
-    @Binding var isOn: Bool
-
-    var body: some View {
-        SettingsRow(
-            title: title,
-            subtitle: subtitle,
-            icon: { SettingsIcon(systemImage: icon, tint: tint) }
-        ) {
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-        }
     }
 }

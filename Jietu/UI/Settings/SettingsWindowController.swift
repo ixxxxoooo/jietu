@@ -3,16 +3,22 @@ import SwiftUI
 
 /// 偏好设置窗口。
 ///
-/// 与 Onboarding 同样的做法：菜单栏代理 App（LSUIElement）没有 App 菜单，
-/// SwiftUI 的 `Settings` 场景够不着，所以用普通窗口手动管理，
-/// 打开期间临时切到 `.regular` 以便出现在 Dock / ⌘-Tab 里。
+/// 与参考项目一致：菜单栏代理 App（LSUIElement）没有 App 菜单，SwiftUI 的 `Settings`
+/// 场景够不着，所以用普通窗口手管；打开期间临时切到 `.regular` 以便出现在 Dock 里。
+///
+/// 设置窗是**唯一保留系统标题栏玻璃带**的窗口（内容仍用 `.fullSizeContentView` 通到栏下），
+/// 分区标题与回退 / 前进交给 `SettingsToolbarController`，侧栏 / 详情交给
+/// `NSSplitViewController`——只有它俩能拿到系统 sidebar 材质与 `.sidebarTrackingSeparator`。
 ///
 /// @author ixxxxoooo
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private static let contentSize = Theme.Size.settingsWindow
+    private static let autosaveName = "JietuSettingsWindow"
 
     private let settings: SettingsStore
     private var window: NSWindow?
+    /// 与窗口同生命周期重建，chrome 的状态不会比它装饰的窗口活得久。
+    private var chrome: SettingsToolbarController?
     private var previousActivationPolicy: NSApplication.ActivationPolicy = .accessory
 
     /// 热键改变回调，由 AppDelegate 负责注销旧热键、注册新热键（nil 表示清除）。
@@ -37,26 +43,47 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         previousActivationPolicy = NSApp.activationPolicy()
         NSApp.setActivationPolicy(.regular)
 
-        let root = SettingsView(settings: settings) { [weak self] action, hotkey in
-            self?.onHotkeyChange?(action, hotkey)
-        }
-        let hosting = NSHostingView(rootView: root)
-        hosting.frame = NSRect(origin: .zero, size: Self.contentSize)
-        hosting.autoresizingMask = [.width, .height]
+        let navigation = SettingsNavigationState()
+        let split = SettingsSplitViewController(
+            sidebar: SettingsSidebarView(navigation: navigation),
+            detail: SettingsDetailView(
+                settings: settings,
+                navigation: navigation
+            ) { [weak self] action, hotkey in
+                self?.onHotkeyChange?(action, hotkey)
+            }
+        )
 
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.contentSize),
-            styleMask: [.titled, .closable, .fullSizeContentView],
+            // `.miniaturizable` / `.resizable` 缺一不可，否则黄绿两个灯是灰的。
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        window.title = "Jietu 偏好设置"
+        window.title = navigation.section.title
+        // 先按参考项目建窗，再由 chrome 把标题栏恢复成系统玻璃带。
         window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.contentView = hosting
+        // 不让 AppKit 在启动时凭空恢复窗口（那时什么都还没接好）。
+        window.isRestorable = false
+        window.contentMinSize = Self.contentSize
+        window.contentViewController = split
+        // `contentViewController` 会把 frame 重置成控制器的 fitting size。
+        window.setContentSize(Self.contentSize)
         window.delegate = self
-        window.center()
+
+        let chrome = SettingsToolbarController(navigation: navigation)
+        self.chrome = chrome
+        chrome.install(in: window)
         self.window = window
+
+        window.setFrameAutosaveName(Self.autosaveName)
+        if !window.setFrameUsingName(Self.autosaveName) {
+            window.center()
+        }
 
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
@@ -66,6 +93,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func close() {
         window?.orderOut(nil)
         window = nil
+        chrome = nil
         restoreActivationPolicy()
     }
 
@@ -73,6 +101,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         window = nil
+        chrome = nil
         restoreActivationPolicy()
     }
 

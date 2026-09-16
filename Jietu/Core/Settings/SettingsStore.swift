@@ -68,6 +68,7 @@ final class SettingsStore {
         static let hotkeys = "hotkeys.map"
         /// 旧版本只存区域截图一个热键，启动时迁移到 `hotkeys`。
         static let legacyHotkeyAreaCapture = "hotkey.areaCapture"
+        static let appearance = "appearance.theme"
         static let copyToClipboard = "behavior.copyToClipboard"
         static let playShutterSound = "behavior.playShutterSound"
         static let saveToDisk = "behavior.saveToDisk"
@@ -116,6 +117,11 @@ final class SettingsStore {
 
     var copyToClipboard: Bool {
         didSet { defaults.set(copyToClipboard, forKey: Key.copyToClipboard) }
+    }
+
+    /// 外观：跟随系统 / 锁定浅色 / 锁定深色。
+    var appearance: AppAppearance {
+        didSet { defaults.set(appearance.rawValue, forKey: Key.appearance) }
     }
 
     var playShutterSound: Bool {
@@ -213,6 +219,8 @@ final class SettingsStore {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
+        self.appearance =
+            defaults.string(forKey: Key.appearance).flatMap(AppAppearance.init) ?? .system
         self.copyToClipboard = defaults.object(forKey: Key.copyToClipboard) as? Bool ?? true
         self.playShutterSound = defaults.object(forKey: Key.playShutterSound) as? Bool ?? true
         self.saveToDisk = defaults.object(forKey: Key.saveToDisk) as? Bool ?? false

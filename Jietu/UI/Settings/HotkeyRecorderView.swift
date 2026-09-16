@@ -17,8 +17,6 @@ struct HotkeyRecorderView: View {
     var title: String
     /// 未录制时展示的说明文案。
     var subtitle: String
-    /// 行首图标的 SF Symbol。
-    var icon: String = "keyboard"
     @Binding var hotkey: Hotkey?
 
     @State private var isRecording = false
@@ -32,8 +30,7 @@ struct HotkeyRecorderView: View {
             title: title,
             subtitle: statusText,
             subtitleLineLimit: 1,
-            subtitleTint: hint == nil ? nil : Theme.Colors.warning,
-            icon: { SettingsIcon(systemImage: icon) }
+            subtitleTint: hint == nil ? nil : Theme.Colors.warning
         ) {
             recorder
         }

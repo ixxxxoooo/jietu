@@ -64,11 +64,12 @@ struct QuickAccessView: View {
         }
         .frame(width: Self.cardWidth, height: Self.cardHeight)
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        // 不描彩边：悬停只把系统玻璃压深一点，表面材质交给 macOS 自己画。
         .overlay(
             RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
                 .strokeBorder(
-                    isHovering ? Theme.Colors.brand.opacity(0.9) : Theme.Colors.cardStroke,
-                    lineWidth: isHovering ? 2 : Theme.Size.hairline
+                    isHovering ? Theme.Colors.border : Theme.Colors.cardStroke,
+                    lineWidth: Theme.Size.hairline
                 )
         )
         .shadow(color: .black.opacity(0.34), radius: 12, y: 5)

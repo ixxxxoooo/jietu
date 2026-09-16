@@ -36,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        // 外观跟着设置走：跟随系统（nil）或锁定浅色 / 深色。
+        settings.appearance.apply()
 
         #if DEBUG
         // 自检模式：不建菜单栏、不注册热键，跑完自己退出。
