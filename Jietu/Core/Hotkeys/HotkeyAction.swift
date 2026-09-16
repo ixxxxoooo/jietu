@@ -36,6 +36,17 @@ enum HotkeyAction: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// 设置页图标的 SF Symbol。
+    var symbol: String {
+        switch self {
+        case .areaCapture: return "rectangle.dashed"
+        case .windowCapture: return "macwindow"
+        case .fullScreenCapture: return "rectangle.inset.filled"
+        case .timedCapture: return "timer"
+        case .scrollingCapture: return "scroll"
+        }
+    }
+
     /// 定时截图热键使用的延时（秒）。
     static let timedCaptureDelay: TimeInterval = 5
 }

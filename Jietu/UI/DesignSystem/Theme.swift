@@ -57,6 +57,24 @@ enum Theme {
 
         // MARK: Jietu 功能色（不属于 ramp）
 
+        /// 设置页等处的图标主题色：每个分区一个，侧边栏与内容区共用。
+        ///
+        /// 与 ramp 的墨色分工不同——ramp 管文本 / 分隔 / 控件底，Accent 只给图标上色。
+        enum Accent {
+            /// 通用。
+            static let blue = Color(red: 0x0D / 255, green: 0x44 / 255, blue: 0xE8 / 255)
+            /// 截图。
+            static let green = Color(red: 0.14, green: 0.78, blue: 0.42)
+            /// 快捷键。
+            static let amber = Color(red: 0.96, green: 0.62, blue: 0.04)
+            /// 预览浮窗。
+            static let teal = Color(red: 0.00, green: 0.68, blue: 0.72)
+            /// 标注。
+            static let violet = Color(red: 0.55, green: 0.30, blue: 0.94)
+            /// 权限。
+            static let rose = Color(red: 0.90, green: 0.30, blue: 0.42)
+        }
+
         /// Jietu 品牌蓝（自有品牌，不套用 Tinycast 的紫）。
         static let brand = Color(red: 0x0D / 255, green: 0x44 / 255, blue: 0xE8 / 255)
         /// 截图选框 / 控制点绿（功能色，不可被 ramp 替换）。

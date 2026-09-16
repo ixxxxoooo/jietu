@@ -106,3 +106,52 @@ extension View {
         disabled(!isEnabled).opacity(isEnabled ? 1 : 0.45)
     }
 }
+
+/// 带主题色图标的设置行：图标 + 标题 / 副标题 + 尾部任意控件。
+///
+/// 设置页每个分区用一个 `Theme.Colors.Accent`，侧边栏与内容区因此配色一致。
+///
+/// @author ixxxxoooo
+struct SettingsControlRow<Trailing: View>: View {
+    let icon: String
+    var tint: Color = Theme.Colors.textSecondary
+    let title: String
+    var subtitle: String?
+    var subtitleLineLimit = 2
+    /// 关掉时压暗并禁用（例如 JPEG 质量只在 JPEG 下生效）。
+    var isActive = true
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        SettingsRow(
+            title: title,
+            subtitle: subtitle,
+            subtitleLineLimit: subtitleLineLimit,
+            icon: { SettingsIcon(systemImage: icon, tint: tint) },
+            trailing: { trailing }
+        )
+        .settingsEnabled(isActive)
+    }
+}
+
+/// 带主题色图标的开关行。
+///
+/// @author ixxxxoooo
+struct SettingsToggleRow: View {
+    let icon: String
+    var tint: Color = Theme.Colors.textSecondary
+    let title: String
+    var subtitle: String?
+    @Binding var isOn: Bool
+
+    var body: some View {
+        SettingsRow(
+            title: title,
+            subtitle: subtitle,
+            icon: { SettingsIcon(systemImage: icon, tint: tint) }
+        ) {
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+        }
+    }
+}
