@@ -88,6 +88,7 @@ struct SettingsView: View {
             Toggle("登录时启动", isOn: $settings.launchAtLogin)
             Toggle("截图后播放快门音", isOn: $settings.playShutterSound)
             Toggle("截图后自动复制到剪贴板", isOn: $settings.copyToClipboard)
+            Toggle("保存后显示系统通知", isOn: $settings.showSaveNotification)
             Divider()
             Text("这些是每次截图都会用到的默认行为。")
                 .font(.system(size: 11))

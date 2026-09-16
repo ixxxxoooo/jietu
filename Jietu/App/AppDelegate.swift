@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let capture = CaptureEngine()
     private let overlays = OverlayCoordinator()
     private let quickAccess = QuickAccessPanelController()
+    private let notifier = CaptureNotifier()
     private var menuBar: MenuBarController?
     private var onboarding: OnboardingWindowController?
     private var settingsWindow: SettingsWindowController?
@@ -44,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpHotkeys()
         setUpQuickAccess()
         setUpLaunchAtLogin()
+        notifier.requestAuthorizationIfNeeded()
 
         if !ScreenCapturePermission.isGranted {
             logger.notice("screen recording permission missing, showing onboarding")
@@ -102,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// 只注册、不注销，成功后记录生效组合键。
+    @discardableResult
     private func register(_ hotkey: Hotkey, for action: HotkeyAction) -> Bool {
         let id = hotkeys.register(hotkey) { [weak self] in
             self?.perform(action)
@@ -325,6 +328,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func deliver(_ image: CGImage, onDisplay displayID: CGDirectDisplayID) {
         logger.notice("delivering \(image.width)x\(image.height) capture")
         recordHistory(image)
+        menuBar?.flashCaptureFeedback()
 
         if settings.playShutterSound {
             CaptureOutput.playShutterSound()
@@ -396,8 +400,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 format: settings.saveFormat,
                 quality: settings.jpegQuality
             )
-            settings.recordCapture(url)
-            logger.notice("saved capture to \(url.path, privacy: .public)")
+            didSave(to: url)
         } catch {
             logger.error("save failed: \(error.localizedDescription)")
         }
@@ -424,10 +427,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             guard let data else { throw CaptureOutputError.encodingFailed }
             try data.write(to: url, options: .atomic)
-            settings.recordCapture(url)
-            logger.notice("saved capture to \(url.path, privacy: .public)")
+            didSave(to: url)
         } catch {
             logger.error("save failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// 落盘后的统一收尾：记入最近截图 + 图标闪烁 + 通知。
+    private func didSave(to url: URL) {
+        settings.recordCapture(url)
+        logger.notice("saved capture to \(url.path, privacy: .public)")
+        menuBar?.flashCaptureFeedback()
+        if settings.showSaveNotification {
+            notifier.notifySaved(fileURL: url)
         }
     }
 

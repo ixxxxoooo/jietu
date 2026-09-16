@@ -24,6 +24,7 @@ struct SettingsStoreTests {
         #expect(store.copyToClipboard == true)
         #expect(store.playShutterSound == true)
         #expect(store.saveToDisk == false)
+        #expect(store.showSaveNotification == true)
         #expect(store.quickAccessAutoCloseDelay == 3)
         #expect(store.saveFormat == .png)
         #expect(store.hotkeyAreaCapture == .captureArea)

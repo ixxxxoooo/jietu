@@ -71,6 +71,7 @@ final class SettingsStore {
         static let copyToClipboard = "behavior.copyToClipboard"
         static let playShutterSound = "behavior.playShutterSound"
         static let saveToDisk = "behavior.saveToDisk"
+        static let showSaveNotification = "behavior.showSaveNotification"
         static let saveDirectoryPath = "behavior.saveDirectoryPath"
         static let quickAccessAutoCloseDelay = "behavior.quickAccessAutoCloseDelay"
         static let recentCapturePaths = "history.recentCapturePaths"
@@ -117,6 +118,11 @@ final class SettingsStore {
 
     var saveToDisk: Bool {
         didSet { defaults.set(saveToDisk, forKey: Key.saveToDisk) }
+    }
+
+    /// 保存成功后是否发系统通知（点击可在访达中定位文件）。
+    var showSaveNotification: Bool {
+        didSet { defaults.set(showSaveNotification, forKey: Key.showSaveNotification) }
     }
 
     var saveDirectory: URL {
@@ -183,6 +189,8 @@ final class SettingsStore {
         self.copyToClipboard = defaults.object(forKey: Key.copyToClipboard) as? Bool ?? true
         self.playShutterSound = defaults.object(forKey: Key.playShutterSound) as? Bool ?? true
         self.saveToDisk = defaults.object(forKey: Key.saveToDisk) as? Bool ?? false
+        self.showSaveNotification =
+            defaults.object(forKey: Key.showSaveNotification) as? Bool ?? true
         self.quickAccessAutoCloseDelay =
             defaults.object(forKey: Key.quickAccessAutoCloseDelay) as? Double ?? 3
         self.launchAtLogin = defaults.object(forKey: Key.launchAtLogin) as? Bool ?? false
