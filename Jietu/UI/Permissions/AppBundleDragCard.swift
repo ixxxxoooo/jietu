@@ -195,10 +195,10 @@ private struct AppBundleDragCardContent: View {
         }
         .padding(.horizontal, Theme.Spacing.lg)
         .frame(height: 56)
-        .background(Theme.Colors.cardFill, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .overlay(
+        // 玻璃面板里的一个「槽」：只压一层 ramp 的 controlSurface，不描边、不加灰。
+        .background(
             RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                .strokeBorder(Theme.Colors.cardStroke, lineWidth: Theme.Size.hairline)
+                .fill(Theme.Colors.controlSurface)
         )
         // 事件全部交给外层 AppKit 视图去起拖拽。
         .allowsHitTesting(false)

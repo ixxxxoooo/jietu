@@ -174,6 +174,10 @@ final class PermissionDragController {
 
 /// 面板内容：标题 + 可拖拽的 App 卡片 + 说明。
 ///
+/// 表面走参考项目的**浮动面板玻璃**：静态 `.regular`、`Radius.menuPanel`、不描边
+/// （`PopoverMenu` / `NoteSwitcherView` 都是这个配方）；卡片本身是个 `controlSurface`
+/// 的「槽」，两边都是 ramp 里的色，没有额外灰。
+///
 /// @author ixxxxoooo
 struct PermissionDragView: View {
     let appURL: URL
@@ -186,17 +190,17 @@ struct PermissionDragView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             header
             AppBundleDragCard(url: appURL, onDragStateChange: onDragStateChange)
             footer
         }
         .padding(Theme.Spacing.xl)
-        .floatingSurface()
+        .glassPanel()
     }
 
     private var header: some View {
-        HStack(spacing: Theme.Spacing.sm) {
+        HStack(spacing: Theme.Spacing.xs) {
             Image(systemName: "arrow.up.forward.app")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.Colors.accent)
@@ -206,39 +210,34 @@ struct PermissionDragView: View {
                 .lineLimit(1)
             Spacer(minLength: Theme.Spacing.md)
             // 系统设置被别的东西挡住时，用它拉回前台。
-            Button {
-                onOpenSettings()
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-            .buttonStyle(.plain)
-            .help("把系统设置拉到前面")
-
-            Button {
-                onClose()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Theme.Colors.textTertiary)
-            }
-            .buttonStyle(.plain)
-            .help("关闭")
+            BarIconButton(
+                title: "把系统设置拉到前面",
+                systemImage: "gearshape",
+                action: onOpenSettings
+            )
+            BarIconButton(
+                title: "关闭",
+                systemImage: "xmark",
+                tint: Theme.Colors.textTertiary,
+                action: onClose
+            )
         }
     }
 
     private var footer: some View {
-        HStack(spacing: Theme.Spacing.md) {
+        HStack(alignment: .center, spacing: Theme.Spacing.md) {
             Text("那一栏是接受拖入的：拖进去就等于把它加进列表并授权。")
                 .font(Theme.Typography.rowSubtitle)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
-            Button("重启 Jietu") { ScreenCapturePermission.relaunchApp() }
-                .buttonStyle(.link)
-                .font(Theme.Typography.rowSubtitle)
-                .help("授权后需要重启才会生效")
+            GlassButton(
+                title: "重启 Jietu",
+                systemImage: "arrow.clockwise",
+                role: .prominent,
+                action: { ScreenCapturePermission.relaunchApp() }
+            )
+            .help("授权后需要重启才会生效")
         }
     }
 }

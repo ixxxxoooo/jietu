@@ -271,15 +271,27 @@ enum Theme {
     static let quickAccessShadowPadding = Size.quickAccessShadowPadding
 }
 
-// MARK: - 玻璃浮动控件
+// MARK: - 玻璃
 
 extension View {
-    /// 浮在表面上的玻璃控件（胶囊 / 圆），frosted 让玻璃比纯透明更亮一点。
+    /// 浮在表面上的**玻璃控件**（胶囊 / 圆 / 可交互卡片）。
     ///
-    /// 只给浮动控件用；主表面永远不是 glass。
+    /// `interactive` 让它在悬停 / 按下时有系统反馈，`glassFrost` 把它提亮一档。
+    /// **只给控件用**；面板表面用下面的 `glassPanel`。
     func frosted(in shape: some Shape) -> some View {
         glassEffect(.regular.interactive().tint(Theme.Colors.glassFrost), in: shape)
             .tint(.clear)
+    }
+
+    /// 浮动**面板表面**的玻璃：静态 `.regular`，不加 `interactive`、不加 tint、不描边。
+    ///
+    /// 对齐参考项目里浮窗的做法（`PopoverMenu` / `NoteSwitcherView` /
+    /// `ExtensionActionsPanel` 都是 `.glassEffect(.regular, in: RoundedRectangle(
+    /// cornerRadius: Radius.menuPanel, style: .continuous))`）。
+    /// 主表面永远不用玻璃——那是 `FloatingSurface`（磨砂 + scrim）的活。
+    func glassPanel(cornerRadius: CGFloat = Theme.Radius.menuPanel) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return glassEffect(.regular, in: shape).clipShape(shape)
     }
 }
 
