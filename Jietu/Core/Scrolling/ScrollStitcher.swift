@@ -83,15 +83,18 @@ enum ScrollStitcher {
     }
 
     /// 把多帧拼成一张长图：帧序必须自上而下推进（场景内容向上滚动）。
+    ///
+    /// 注意 `previous` **只在拼接成功后前移**：`append` 取的是「相对长图末行」的位移，
+    /// 参考帧必须是**已经拼进长图的那一帧**。若把「对不上而跳过」的帧当成参考帧，
+    /// 下一帧算出来的位移就是相对一个从未拼进去的帧，结果会漏行 / 错位
+    /// （典型场景：用户往回滚了一点，再继续向下滚）。
     static func stitch(_ frames: [CGImage]) -> CGImage? {
         guard var result = frames.first else { return nil }
         var previous = result
         for frame in frames.dropFirst() {
-            guard let shift = offset(previous: previous, next: frame), shift > 0 else {
-                previous = frame
-                continue
-            }
-            guard let merged = append(base: result, next: frame, shift: shift) else { continue }
+            guard let shift = offset(previous: previous, next: frame), shift > 0,
+                let merged = append(base: result, next: frame, shift: shift)
+            else { continue }
             result = merged
             previous = frame
         }
