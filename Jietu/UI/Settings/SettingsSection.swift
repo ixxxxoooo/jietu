@@ -19,7 +19,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .general: return "通用"
         case .capture: return "截图"
         case .hotkeys: return "快捷键"
-        case .quickAccess: return "预览浮窗"
+        case .quickAccess: return "浮窗"
         case .annotation: return "标注"
         case .permission: return "权限"
         case .about: return "关于"

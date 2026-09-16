@@ -271,7 +271,7 @@ struct OnboardingView: View {
                 OnboardingDivider()
                 OnboardingRow(
                     title: "设置里还有更多",
-                    subtitle: "保存位置与格式、预览浮窗、标注默认样式。",
+                    subtitle: "保存位置与格式、浮窗、标注默认样式。",
                     systemImage: "gearshape",
                     tint: Theme.Colors.textSecondary
                 )

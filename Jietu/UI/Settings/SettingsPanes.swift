@@ -202,7 +202,7 @@ struct HotkeysSettingsPane: View {
     }
 }
 
-/// 预览浮窗：停靠位置 / 自动关闭。
+/// 浮窗：停靠位置 / 自动关闭。
 ///
 /// @author ixxxxoooo
 struct QuickAccessSettingsPane: View {
@@ -233,7 +233,7 @@ struct QuickAccessSettingsPane: View {
                     Text("浮窗多久后自动消失，「永不」则需手动关闭。")
                 }
             } header: {
-                SettingsSectionHeader(title: "预览浮窗")
+                SettingsSectionHeader(title: "浮窗")
             }
         }
         .formStyle(.grouped)
