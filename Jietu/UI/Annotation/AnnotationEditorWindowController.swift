@@ -96,7 +96,6 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
             )
         }
         window.isReleasedWhenClosed = false
-        window.appearance = NSAppearance(named: .darkAqua)
         window.contentView = hosting
         if inline {
             positionInline(window, size: size)

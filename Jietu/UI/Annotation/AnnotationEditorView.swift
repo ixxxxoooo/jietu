@@ -485,6 +485,8 @@ struct AnnotationEditorView: View {
                 optionsBar
             }
         }
+        // 就地模式窗口是透明的，工具栏得自己兜一层底，否则跟着系统主题切换时看不清。
+        .background(inline ? Color(nsColor: .windowBackgroundColor) : Color.clear)
     }
 
     private var mainBar: some View {
@@ -606,7 +608,7 @@ struct AnnotationEditorView: View {
             Circle()
                 .fill(color.swiftUIColor)
                 .frame(width: 20, height: 20)
-                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1.2))
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.3), lineWidth: 1.2))
                 .frame(width: 30, height: 26)
         }
         .buttonStyle(.plain)
@@ -644,10 +646,9 @@ struct AnnotationEditorView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "textformat.size")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(.secondary)
                     Slider(value: $fontSize, in: 10...100)
                         .frame(width: 90)
-                        .tint(.white)
                         .onChange(of: fontSize) { _, value in
                             applyToSelected { $0.withFontSize(value) }
                         }
@@ -657,10 +658,9 @@ struct AnnotationEditorView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "squareshape.split.3x3")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(.secondary)
                     Slider(value: $mosaicBlock, in: 4...40)
                         .frame(width: 90)
-                        .tint(.white)
                         .onChange(of: mosaicBlock) { _, value in
                             applyToSelected { $0.withPixelateBlock(value) }
                         }
@@ -670,10 +670,9 @@ struct AnnotationEditorView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "drop.halffull")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(.secondary)
                     Slider(value: $blurRadius, in: 2...60)
                         .frame(width: 90)
-                        .tint(.white)
                         .onChange(of: blurRadius) { _, value in
                             applyToSelected { $0.withBlurRadius(value) }
                         }
@@ -683,10 +682,9 @@ struct AnnotationEditorView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass.circle")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(.secondary)
                     Slider(value: $magnifierZoom, in: 1.5...6)
                         .frame(width: 90)
-                        .tint(.white)
                         .onChange(of: magnifierZoom) { _, value in
                             applyToSelected { $0.withMagnifierZoom(value) }
                         }
@@ -712,7 +710,7 @@ struct AnnotationEditorView: View {
             Image(systemName: item.symbolName)
                 .font(.system(size: 15, weight: .regular))
                 .frame(width: 30, height: 26)
-                .foregroundStyle(tool == item ? Theme.selectionGreen : Color.white.opacity(0.9))
+                .foregroundStyle(tool == item ? Theme.selectionGreen : Color.primary)
         }
         .buttonStyle(.plain)
         .help(item.title)
@@ -742,7 +740,7 @@ struct AnnotationEditorView: View {
             iconButton("缩小", symbol: "minus.magnifyingglass") { zoomOut() }
             Text("\(Int((zoom * 100).rounded()))%")
                 .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.secondary)
                 .frame(width: 42)
             iconButton("放大", symbol: "plus.magnifyingglass") { zoomIn() }
             Button("原始") { zoomToOriginal() }
