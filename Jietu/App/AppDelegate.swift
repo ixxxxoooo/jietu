@@ -651,7 +651,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showOnboarding() {
         if onboarding == nil {
-            onboarding = OnboardingWindowController()
+            onboarding = OnboardingWindowController(settings: settings)
         }
         onboarding?.present()
     }

@@ -48,6 +48,8 @@ enum Theme {
         static let textTertiary = ramp(dark: 0.40, light: 0.42)
         /// 图标解码前的空块。
         static let iconPlaceholder = ramp(dark: 0.06, light: 0.06)
+        /// 引导页顶部那层很淡的洗色。
+        static let sheen = ramp(dark: 0.04, light: 0.04)
         /// 设置卡片底，边框兼作行分隔。
         static let cardFill = ramp(dark: 0.05, light: 0.04)
         static let cardStroke = ramp(dark: 0.10, light: 0.10)

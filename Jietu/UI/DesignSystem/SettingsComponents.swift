@@ -74,23 +74,6 @@ struct SettingsSectionHeader: View {
     }
 }
 
-/// 卡片底 + 描边，用于把一组说明内容围起来（权限引导的状态卡）。
-///
-/// @author ixxxxoooo
-struct SettingsCard<Content: View>: View {
-    var padding: CGFloat = Theme.Spacing.xl
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-        content
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(shape.fill(Theme.Colors.cardFill))
-            .overlay(shape.strokeBorder(Theme.Colors.cardStroke, lineWidth: Theme.Size.hairline))
-    }
-}
-
 /// dev 渠道标记：说明当前是 Debug 构建，系统设置里要授权的就是这一条。
 ///
 /// @author ixxxxoooo
