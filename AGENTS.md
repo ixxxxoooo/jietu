@@ -5,17 +5,19 @@
 每次改动代码后，按顺序完成：**重新构建 → 重启 App → 提交 git**。
 
 ```bash
-# 1. 构建（产物固定落在 .build，勿用 DerivedData）
-xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
-  -destination 'platform=macOS' -derivedDataPath .build build
-
-# 2. 重启（先杀旧进程，再从 .build 启动新产物；在仓库根目录执行）
-pkill -f "Build/Products/Debug/Jietu Dev.app"; sleep 1
-open ".build/Build/Products/Debug/Jietu Dev.app"
+# 1 + 2. 构建 → 重启 → 校验（推荐，一条命令搞定）
+bash Scripts/restart-dev.sh
 
 # 3. 提交
 git add -A && git commit -m "<type>: <描述>"
 ```
+
+**必须校验「跑的就是刚构建的那个」**：`xcodebuild`（尤其 `test`）会刷新产物 mtime，
+而正在跑的进程可能还是上一次构建的。`Scripts/restart-dev.sh` 会比较
+「进程启动时刻」与「产物 mtime」，发现跑旧了自动再重启一次，并打印
+实例数 / 产物 mtime / 进程启动时刻 / 进程路径 —— 每次改完都看这几行。
+（手动等价物：`xcodebuild ... build` → `pkill -f "Build/Products/Debug/Jietu Dev.app"` →
+`open ".build/Build/Products/Debug/Jietu Dev.app"`。）
 
 - 构建必须成功（`** BUILD SUCCEEDED **`）才能提交。
 - 签名保持默认的自签名证书 `Jietu`，不要加 `CODE_SIGNING_ALLOWED=NO`，否则重签名会丢「屏幕录制」授权。
