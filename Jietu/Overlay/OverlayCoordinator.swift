@@ -30,6 +30,16 @@ final class OverlayCoordinator {
     var annotationDefaults: AnnotationDefaults = .standard
     var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)?
 
+    /// 遮罩的用途：普通截图 / 只要一块选区（滚动长图起步用）。
+    enum Purpose {
+        case screenshot
+        case regionPick
+    }
+
+    var purpose: Purpose = .screenshot
+    /// `purpose == .regionPick` 时，选区确定后回调（参数是选区所在显示器与 local 矩形）。
+    var onRegionPicked: ((DisplaySnapshot, CGRect) -> Void)?
+
     var isPresenting: Bool { !controllers.isEmpty }
 
     /// 临时隐藏 / 恢复所有遮罩窗（例如弹系统保存面板时，否则会被遮罩挡住）。
@@ -129,6 +139,14 @@ final class OverlayCoordinator {
     }
 
     private func commit(snapshot: DisplaySnapshot, localRect: CGRect) {
+        // 只要选区（滚动长图）：把矩形交回去，不做裁剪。
+        if purpose == .regionPick {
+            let picked = onRegionPicked
+            finish(.cancelled, reason: "region-pick")
+            picked?(snapshot, localRect)
+            return
+        }
+
         guard let image = CaptureOutput.crop(snapshot, toLocalRect: localRect) else {
             logger.error("crop produced empty image")
             finish(.cancelled, reason: "crop-failed")

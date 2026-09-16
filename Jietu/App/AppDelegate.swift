@@ -14,6 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboarding: OnboardingWindowController?
     private var settingsWindow: SettingsWindowController?
     private var historyPanel: HistoryPanelController?
+    /// 正在进行的滚动长图会话与控制条。
+    private var scrollingSession: ScrollingCaptureSession?
+    private var scrollingPanel: ScrollingCapturePanelController?
+    private var scrollingEscapeMonitor: Any?
+    private var isScrollingCancelled = false
     /// 会话内的截图历史（新截的即时可见，不必先保存）。
     private var sessionHistory: [HistoryItem] = []
     private var annotationEditors: [AnnotationEditorWindowController] = []
@@ -68,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onCaptureWindow = { [weak self] in self?.handleWindowCapture() }
         menuBar.onCaptureFullScreen = { [weak self] in self?.handleFullScreenCapture() }
         menuBar.onCaptureTimed = { [weak self] seconds in self?.handleTimedCapture(after: seconds) }
+        menuBar.onCaptureScrolling = { [weak self] in self?.handleScrollingCapture() }
         menuBar.onOpenRecent = { url in
             NSWorkspace.shared.activateFileViewerSelecting([url])
         }
@@ -100,6 +106,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             handleFullScreenCapture()
         case .timedCapture:
             handleTimedCapture(after: HotkeyAction.timedCaptureDelay)
+        case .scrollingCapture:
+            handleScrollingCapture()
         }
     }
 
@@ -191,6 +199,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlays.onAnnotationDefaultsChange = { [weak self] updated in
             self?.settings.annotationDefaults = updated
         }
+        overlays.onRegionPicked = { [weak self] snapshot, localRect in
+            self?.startScrollingCapture(snapshot: snapshot, localRect: localRect)
+        }
     }
 
     // MARK: - Capture flow
@@ -278,6 +289,127 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(for: .seconds(seconds))
             handleAreaCapture()
         }
+    }
+
+    // MARK: - Scrolling capture
+
+    /// 滚动长图：先用遮罩取一块选区，再由 `ScrollingCaptureSession` 连续采样拼接。
+    private func handleScrollingCapture() {
+        guard !overlays.isPresenting, scrollingSession == nil else { return }
+        guard hasUsableScreenCapturePermission else {
+            showOnboarding()
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                let snapshots = try await capture.captureAllDisplays()
+                let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
+                overlays.purpose = .regionPick
+                overlays.present(
+                    session: CaptureSession(snapshots: snapshots, windows: windows),
+                    inlineMode: false
+                )
+            } catch {
+                overlays.purpose = .screenshot
+                presentCaptureFailure(error)
+            }
+        }
+    }
+
+    /// 选区确定后启动采样：控制条浮在选区下方，用户手动滚动内容。
+    private func startScrollingCapture(snapshot: DisplaySnapshot, localRect: CGRect) {
+        overlays.purpose = .screenshot
+
+        let screenFrame = snapshot.screenFrameInPoints
+        // local（原点左下）→ 显示器坐标（原点左上），SCK 的 sourceRect 用后者。
+        let region = CGRect(
+            x: localRect.minX,
+            y: screenFrame.height - localRect.maxY,
+            width: localRect.width,
+            height: localRect.height
+        )
+        guard region.width >= 8, region.height >= 8 else {
+            presentCaptureFailure(CaptureError.emptyRegion)
+            return
+        }
+
+        let session = ScrollingCaptureSession(
+            engine: capture,
+            target: ScrollingCaptureSession.Target(
+                displayID: snapshot.displayID,
+                regionInPoints: region
+            )
+        )
+        let panel = ScrollingCapturePanelController()
+        scrollingSession = session
+        scrollingPanel = panel
+        isScrollingCancelled = false
+
+        session.onProgress = { [weak panel] height in
+            panel?.update(height: height)
+        }
+        panel.onFinish = { [weak self] in
+            self?.scrollingSession?.stop()
+        }
+        panel.onCancel = { [weak self] in
+            self?.isScrollingCancelled = true
+            self?.scrollingSession?.stop()
+        }
+        panel.present(
+            near: CGRect(
+                x: screenFrame.minX + localRect.minX,
+                y: screenFrame.minY + localRect.minY,
+                width: localRect.width,
+                height: localRect.height
+            )
+        )
+        registerScrollingEscapeMonitor()
+
+        Task { @MainActor in
+            let image = await session.run()
+            finishScrollingCapture(image: image, displayID: snapshot.displayID)
+        }
+    }
+
+    /// Esc 结束采样（控制条未必拿得到焦点，这里再兜一层）。
+    private func registerScrollingEscapeMonitor() {
+        removeScrollingEscapeMonitor()
+        scrollingEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53, let self, self.scrollingSession != nil else { return event }
+            self.scrollingSession?.stop()
+            return nil
+        }
+    }
+
+    private func removeScrollingEscapeMonitor() {
+        if let scrollingEscapeMonitor {
+            NSEvent.removeMonitor(scrollingEscapeMonitor)
+        }
+        scrollingEscapeMonitor = nil
+    }
+
+    private func finishScrollingCapture(image: CGImage?, displayID: CGDirectDisplayID) {
+        removeScrollingEscapeMonitor()
+        scrollingPanel?.close()
+        scrollingPanel = nil
+        scrollingSession = nil
+
+        let cancelled = isScrollingCancelled
+        isScrollingCancelled = false
+        guard !cancelled else { return }
+
+        guard let image else {
+            NSApp.activate()
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = "没有捕获到滚动内容"
+            alert.informativeText = "请框选可滚动的区域，然后缓慢、匀速地滚动内容再试一次。"
+            alert.addButton(withTitle: "好")
+            alert.runModal()
+            return
+        }
+        deliver(image, onDisplay: displayID)
     }
 
     private func snapshotUnderMouse(_ snapshots: [DisplaySnapshot]) -> DisplaySnapshot? {

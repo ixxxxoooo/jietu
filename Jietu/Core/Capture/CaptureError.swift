@@ -7,6 +7,7 @@ enum CaptureError: LocalizedError {
     case noDisplays
     case displayNotShareable(CGDirectDisplayID)
     case emptyImage(CGDirectDisplayID)
+    case emptyRegion
     case windowNotCapturable(CGWindowID)
     case noWindowUnderCursor
 
@@ -22,6 +23,8 @@ enum CaptureError: LocalizedError {
             return "显示器 \(id) 当前不可捕获"
         case .emptyImage(let id):
             return "显示器 \(id) 返回了空图像"
+        case .emptyRegion:
+            return "选区太小，无法截取"
         case .windowNotCapturable(let id):
             return "窗口 \(id) 当前不可捕获"
         case .noWindowUnderCursor:
@@ -37,6 +40,8 @@ enum CaptureError: LocalizedError {
             return "通常是权限刚授予但进程尚未重启，请重启 Jietu 后重试。"
         case .noDisplays:
             return "请确认显示器已正确连接。"
+        case .emptyRegion:
+            return "请框选一块更大一点的区域再试。"
         case .noWindowUnderCursor:
             return "请把鼠标移到要截取的窗口上再试一次。"
         }

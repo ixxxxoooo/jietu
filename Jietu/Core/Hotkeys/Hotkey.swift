@@ -25,6 +25,11 @@ struct Hotkey: Codable, Hashable {
         carbonModifiers: UInt32(cmdKey | shiftKey)
     )
 
+    static let captureScrolling = Hotkey(
+        keyCode: UInt32(kVK_ANSI_L),
+        carbonModifiers: UInt32(cmdKey | shiftKey)
+    )
+
     /// 空格：截图后「未做任何操作」时，唤回最近一张浮窗。
     ///
     /// 只在很短的时间窗内注册，避免长期占用系统空格键。

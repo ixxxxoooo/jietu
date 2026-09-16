@@ -93,6 +93,57 @@ final class CaptureEngine {
         return image
     }
 
+    /// 抓某个显示器上的一块区域（点坐标、原点左上，相对该显示器）。
+    ///
+    /// 滚动长图靠它反复抓同一块区域：只取需要的那块，比整屏抓再裁省一个数量级的带宽。
+    /// 默认把本 App 排除在画面外，所以浮在选区上的控制条不会被拍进去。
+    func captureRegion(
+        displayID: CGDirectDisplayID,
+        regionInPoints: CGRect,
+        excludingOwnApplication: Bool = true
+    ) async throws -> CGImage {
+        guard ScreenCapturePermission.isGranted else {
+            throw CaptureError.permissionDenied
+        }
+
+        let content = try await shareableContent()
+        guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
+            throw CaptureError.displayNotShareable(displayID)
+        }
+        let scale = NSScreen.screens.first { $0.jietu_displayID == displayID }?
+            .backingScaleFactor ?? 2
+
+        let region = regionInPoints.integral
+        guard region.width >= 1, region.height >= 1 else {
+            throw CaptureError.emptyRegion
+        }
+
+        let configuration = SCScreenshotConfiguration()
+        configuration.sourceRect = region
+        configuration.width = max(1, Int((region.width * scale).rounded()))
+        configuration.height = max(1, Int((region.height * scale).rounded()))
+        configuration.showsCursor = false
+        configuration.dynamicRange = .sdr
+
+        let ownApplications = excludingOwnApplication
+            ? content.applications.filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
+            : []
+        let filter = SCContentFilter(
+            display: display,
+            excludingApplications: ownApplications,
+            exceptingWindows: []
+        )
+
+        let output = try await SCScreenshotManager.captureScreenshot(
+            contentFilter: filter,
+            configuration: configuration
+        )
+        guard let image = output.sdrImage ?? output.hdrImage else {
+            throw CaptureError.emptyImage(displayID)
+        }
+        return image
+    }
+
     private func shareableContent() async throws -> SCShareableContent {
         do {
             // onScreenWindowsOnly: false —— 否则全屏空间里的窗口拿不到。
