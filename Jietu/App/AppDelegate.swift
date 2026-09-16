@@ -230,7 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let existing = others.first else { return false }
 
         logger.notice("another instance is already running, handing off")
-        existing.activate(options: [.activateIgnoringOtherApps])
+        existing.activate()
         DispatchQueue.main.async { NSApp.terminate(nil) }
         return true
     }

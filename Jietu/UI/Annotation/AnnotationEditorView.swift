@@ -259,7 +259,7 @@ struct AnnotationEditorView: View {
                         .frame(width: displayedSize.width, height: displayedSize.height)
                 }
                 selectionOverlay
-                selectionControls
+                selectionShortcuts
                 cropOverlay
                 textEditorOverlay
             } else {
@@ -318,31 +318,30 @@ struct AnnotationEditorView: View {
         .allowsHitTesting(false)
     }
 
-    /// 选中框右侧的操作按钮：层级 / 复制 / 样式 / 删除。
+    /// 单条标注的操作**不再挂一排浮动按钮**，只保留快捷键。
+    ///
+    /// 隐藏按钮照样能注册快捷键（参考项目里 ⌘F 也是这么挂的），
+    /// 所以功能没丢，只是不再在画布上压一排圆钮。
     @ViewBuilder
-    private var selectionControls: some View {
-        if let selected = selectedAnnotation, editingTextID == nil {
-            let box = selected.localBounds
-            let rightMid = viewPoint(selected.toWorld(CGPoint(x: box.maxX, y: box.midY)))
-            VStack(spacing: 6) {
-                selectionButton("arrow.up.to.line", "置顶 ⇧⌘]") { bringSelectedToFront() }
+    private var selectionShortcuts: some View {
+        if selectedAnnotation != nil, editingTextID == nil {
+            ZStack {
+                Button("置顶") { bringSelectedToFront() }
                     .keyboardShortcut("]", modifiers: [.command, .shift])
-                selectionButton("arrow.down.to.line", "置底 ⇧⌘[") { sendSelectedToBack() }
+                Button("置底") { sendSelectedToBack() }
                     .keyboardShortcut("[", modifiers: [.command, .shift])
-                selectionButton("plus.square.on.square", "复制一份 ⌘D") { duplicateSelected() }
+                Button("复制一份") { duplicateSelected() }
                     .keyboardShortcut("d", modifiers: .command)
-                selectionButton("paintbrush", "复制样式 ⌥⌘C") { copySelectedStyle() }
+                Button("复制样式") { copySelectedStyle() }
                     .keyboardShortcut("c", modifiers: [.option, .command])
-                selectionButton("doc.on.clipboard", "粘贴样式 ⌥⌘V") { pasteStyleToSelected() }
+                Button("粘贴样式") { pasteStyleToSelected() }
                     .keyboardShortcut("v", modifiers: [.option, .command])
                     .disabled(styleClipboard == nil)
-                    .opacity(styleClipboard == nil ? 0.4 : 1)
-                selectionButton("trash", "删除 ⌫") { deleteSelected() }
-                if case .text = selected.kind {
-                    selectionButton("pencil", "编辑文字") { startTextEditing(id: selected.id) }
-                }
             }
-            .position(x: rightMid.x + 20, y: rightMid.y)
+            .buttonStyle(.plain)
+            .frame(width: 0, height: 0)
+            .opacity(0)
+            .accessibilityHidden(true)
         }
     }
 

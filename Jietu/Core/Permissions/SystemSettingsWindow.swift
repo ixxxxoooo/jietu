@@ -38,7 +38,7 @@ enum SystemSettingsWindow {
         NSRunningApplication
             .runningApplications(withBundleIdentifier: bundleIdentifier)
             .first { !$0.isTerminated }?
-            .activate(options: [.activateIgnoringOtherApps]) ?? false
+            .activate() ?? false
     }
 
     /// cg 矩形 → AppKit 屏幕坐标（原点主屏左下），面板定位要用。
