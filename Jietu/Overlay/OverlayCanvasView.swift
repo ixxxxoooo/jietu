@@ -1467,7 +1467,8 @@ final class OverlayCanvasView: NSView {
                 color: model.color,
                 lineWidth: model.lineWidth
             )
-        case .text, .select, .eraser: return nil
+        // 裁剪只在标注编辑器窗口里提供，就地编辑不参与。
+        case .text, .select, .eraser, .crop: return nil
         }
     }
 
@@ -1589,8 +1590,6 @@ final class OverlayCanvasView: NSView {
     }
 
     private func inlineMouseUp(_ point: CGPoint) {
-        let crop = annotationPoint(from: point)
-
         if erasing {
             erasing = false
             lastErasePoint = nil

@@ -168,4 +168,57 @@ struct AnnotationGeometryTests {
         #expect(fontSize == 42)
         #expect(styledText.lineWidth == 1)
     }
+
+    // MARK: - 截后再裁剪
+
+    @Test("裁剪框被夹进图像范围，过小则判为无效")
+    func clampsCropRect() {
+        let size = CGSize(width: 100, height: 80)
+        #expect(CropOperation.clampedRect(CGRect(x: 20, y: 10, width: 40, height: 30), imageSize: size)
+            == CGRect(x: 20, y: 10, width: 40, height: 30))
+        // 超出右下角 → 夹到边界。
+        #expect(CropOperation.clampedRect(CGRect(x: 80, y: 60, width: 50, height: 50), imageSize: size)
+            == CGRect(x: 80, y: 60, width: 20, height: 20))
+        // 太小 / 完全在外面。
+        #expect(CropOperation.clampedRect(CGRect(x: 0, y: 0, width: 2, height: 2), imageSize: size) == nil)
+        #expect(CropOperation.clampedRect(CGRect(x: 200, y: 200, width: 10, height: 10), imageSize: size) == nil)
+    }
+
+    @Test("裁剪底图：尺寸与保留的像素区域正确")
+    func cropsImage() throws {
+        // 顶两行红、其余蓝。
+        let image = TestImage.horizontalBands(
+            width: 8,
+            height: 8,
+            rows: [(255, 0, 0), (255, 0, 0), (0, 0, 255)]
+        )
+        let result = try #require(
+            CropOperation.crop(image, to: CGRect(x: 0, y: 0, width: 4, height: 4))
+        )
+        #expect(result.image.width == 4)
+        #expect(result.image.height == 4)
+
+        // 裁的仍是左上角：前两行红、后面蓝。
+        let top = try #require(PixelSampler.sample(result.image, atPixel: CGPoint(x: 1, y: 1)))
+        #expect(top.red == 255)
+        #expect(top.blue == 0)
+        let bottom = try #require(PixelSampler.sample(result.image, atPixel: CGPoint(x: 1, y: 3)))
+        #expect(bottom.blue == 255)
+        #expect(bottom.red == 0)
+    }
+
+    @Test("裁剪后标注与擦除笔迹一起平移")
+    func shiftsContentAfterCrop() {
+        let annotation = rectAnnotation()
+        let delta = CropOperation.offset(for: CGRect(x: 30, y: 60, width: 100, height: 100))
+        #expect(delta == CGSize(width: -30, height: -60))
+
+        let shifted = CropOperation.shifted([annotation], by: delta)
+        #expect(shifted.first?.localBounds == CGRect(x: 70, y: 40, width: 200, height: 100))
+
+        let strokes = [EraserStroke(points: [CGPoint(x: 50, y: 70)], radius: 8)]
+        let shiftedStrokes = CropOperation.shifted(strokes, by: delta)
+        #expect(shiftedStrokes.first?.points.first == CGPoint(x: 20, y: 10))
+        #expect(shiftedStrokes.first?.radius == 8)
+    }
 }

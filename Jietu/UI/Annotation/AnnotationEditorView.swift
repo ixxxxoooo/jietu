@@ -34,9 +34,19 @@ struct AnnotationEditorView: View {
     @State private var styleClipboard: AnnotationStyle?
     @State private var eraserSize: CGFloat = 28
 
+    /// 裁剪后的底图；nil 表示还没裁过，用原始截图。
+    @State private var croppedImage: CGImage?
+    /// 确认裁剪前待应用的选区（图像像素坐标）。
+    @State private var cropRect: CGRect?
+
+    /// 当前实际使用的底图（裁剪会换掉它）。
+    private var currentBase: CGImage { croppedImage ?? baseImage }
+
     struct EditorSnapshot {
         let annotations: [Annotation]
         let strokes: [EraserStroke]
+        /// 裁剪会换底图，撤销必须一起回滚。
+        let croppedImage: CGImage?
     }
 
     // MARK: - Tool / style
@@ -106,8 +116,8 @@ struct AnnotationEditorView: View {
     private var naturalSize: CGSize {
         let scale = max(1, displayScale)
         return CGSize(
-            width: CGFloat(baseImage.width) / scale,
-            height: CGFloat(baseImage.height) / scale
+            width: CGFloat(currentBase.width) / scale,
+            height: CGFloat(currentBase.height) / scale
         )
     }
 
@@ -195,11 +205,12 @@ struct AnnotationEditorView: View {
                             .allowsHitTesting(false)
                     )
                 if isLiveTextActive {
-                    LiveTextOverlay(image: baseImage)
+                    LiveTextOverlay(image: currentBase)
                         .frame(width: displayedSize.width, height: displayedSize.height)
                 }
                 selectionOverlay
                 selectionControls
+                cropOverlay
                 textEditorOverlay
             } else {
                 ProgressView()
@@ -283,6 +294,79 @@ struct AnnotationEditorView: View {
             }
             .position(x: rightMid.x + 20, y: rightMid.y)
         }
+    }
+
+    /// 裁剪工具：拖动中显示待裁框，松手后给出确认 / 取消。
+    @ViewBuilder
+    private var cropOverlay: some View {
+        if tool == .crop, let imageRect = cropRect ?? draftRect {
+            let frame = viewRect(imageRect)
+            Canvas { context, size in
+                // 框外压暗，框内保持原样（even-odd 挖洞）。
+                var scrim = Path(CGRect(origin: .zero, size: size))
+                scrim.addRect(frame)
+                context.fill(scrim, with: .color(.black.opacity(0.45)), style: FillStyle(eoFill: true))
+            }
+            .allowsHitTesting(false)
+
+            Rectangle()
+                .strokeBorder(
+                    Color.accentColor,
+                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
+                )
+                .frame(width: frame.width, height: frame.height)
+                .position(x: frame.midX, y: frame.midY)
+                .allowsHitTesting(false)
+
+            if cropRect != nil {
+                HStack(spacing: 8) {
+                    Text("\(Int(imageRect.width)) × \(Int(imageRect.height))")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.white)
+                    selectionButton("checkmark", "应用裁剪 ↩") { applyCrop() }
+                        .keyboardShortcut(.return, modifiers: [])
+                    selectionButton("xmark", "取消裁剪") { cropRect = nil }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Color.black.opacity(0.75)))
+                .position(x: frame.midX, y: max(18, frame.minY - 22))
+            }
+        }
+    }
+
+    /// 拖动中的裁剪框（draft 只借来当预览，不落成标注）。
+    private var draftRect: CGRect? {
+        guard case .creating = dragMode, let draft, case .rectangle(let rect) = draft.kind
+        else { return nil }
+        return rect
+    }
+
+    private func viewRect(_ imageRect: CGRect) -> CGRect {
+        let origin = viewPoint(CGPoint(x: imageRect.minX, y: imageRect.minY))
+        return CGRect(
+            origin: origin,
+            size: CGSize(
+                width: imageRect.width * pointsPerPixel,
+                height: imageRect.height * pointsPerPixel
+            )
+        )
+    }
+
+    /// 应用裁剪：换底图，并把标注 / 擦除笔迹按新原点平移。
+    private func applyCrop() {
+        guard let rect = cropRect, let result = CropOperation.crop(currentBase, to: rect) else { return }
+
+        pushUndo()
+        let delta = CropOperation.offset(for: result.rect)
+        annotations = CropOperation.shifted(annotations, by: delta)
+        eraserStrokes = CropOperation.shifted(eraserStrokes, by: delta)
+        croppedImage = result.image
+        previewBase = nil
+        cropRect = nil
+        selectedID = nil
+        tool = .select
+        ensurePreviewBase()
     }
 
     private func selectionButton(
@@ -537,6 +621,9 @@ struct AnnotationEditorView: View {
     private func toolButton(_ item: AnnotationTool) -> some View {
         Button {
             tool = item
+            if item != .crop {
+                cropRect = nil
+            }
             if item.isDrawing {
                 selectedID = nil
                 // 切到绘制类工具时关闭实况文本，避免抢手势。
@@ -684,6 +771,18 @@ struct AnnotationEditorView: View {
     }
 
     private func endDrag(currentPx: CGPoint) {
+        if case .creating = dragMode, tool == .crop {
+            // 裁剪：只留框，等用户点确认，不落成标注。
+            if let draft, case .rectangle(let rect) = draft.kind, rect.width >= 4, rect.height >= 4 {
+                cropRect = rect
+            } else {
+                cropRect = nil
+            }
+            self.draft = nil
+            dragMode = .none
+            return
+        }
+
         if case .creating = dragMode, tool == .text {
             // 文本：落一个空文本对象，随即进入内联编辑（不弹窗）。
             if let draft, case .text(let origin, _, let size) = draft.kind {
@@ -743,6 +842,9 @@ struct AnnotationEditorView: View {
                 color: color,
                 lineWidth: lineWidth
             )
+        case .crop:
+            // 借矩形当裁剪框的预览，确认前不会变成标注。
+            return Annotation(kind: .rectangle(rect), color: color, lineWidth: lineWidth)
         case .select, .eraser:
             return nil
         }
@@ -751,25 +853,49 @@ struct AnnotationEditorView: View {
     // MARK: - Editing ops
 
     private func pushUndo() {
-        undoStack.append(EditorSnapshot(annotations: annotations, strokes: eraserStrokes))
+        undoStack.append(
+            EditorSnapshot(
+                annotations: annotations,
+                strokes: eraserStrokes,
+                croppedImage: croppedImage
+            )
+        )
         redoStack.removeAll()
     }
 
     private func undo() {
         guard let previous = undoStack.popLast() else { return }
-        redoStack.append(EditorSnapshot(annotations: annotations, strokes: eraserStrokes))
+        redoStack.append(
+            EditorSnapshot(
+                annotations: annotations,
+                strokes: eraserStrokes,
+                croppedImage: croppedImage
+            )
+        )
         apply(previous)
     }
 
     private func redo() {
         guard let next = redoStack.popLast() else { return }
-        undoStack.append(EditorSnapshot(annotations: annotations, strokes: eraserStrokes))
+        undoStack.append(
+            EditorSnapshot(
+                annotations: annotations,
+                strokes: eraserStrokes,
+                croppedImage: croppedImage
+            )
+        )
         apply(next)
     }
 
     private func apply(_ snapshot: EditorSnapshot) {
         annotations = snapshot.annotations
         eraserStrokes = snapshot.strokes
+        // 底图变了要重新栅格化预览。
+        if snapshot.croppedImage !== croppedImage {
+            croppedImage = snapshot.croppedImage
+            previewBase = nil
+            ensurePreviewBase()
+        }
         if let selectedID, !annotations.contains(where: { $0.id == selectedID }) {
             self.selectedID = nil
         }
@@ -1033,7 +1159,7 @@ struct AnnotationEditorView: View {
 
     private func renderedImage() -> CGImage? {
         AnnotationRenderer.render(
-            base: baseImage,
+            base: currentBase,
             annotations: annotations,
             eraserStrokes: eraserStrokes
         )
@@ -1075,7 +1201,8 @@ struct AnnotationEditorView: View {
     private var renderedPreview: CGImage? {
         guard let previewBase else { return nil }
         var list = annotations
-        if let draft { list.append(draft) }
+        // 裁剪框只是预览遮罩，不能烘进底图。
+        if let draft, tool != .crop { list.append(draft) }
         let scale = previewBaseScale
         let scaled = list.map { $0.scaled(by: scale) }
         let scaledStrokes = eraserStrokes.map {
@@ -1094,7 +1221,7 @@ struct AnnotationEditorView: View {
     private func ensurePreviewBase() {
         let scale = bufferScale
         guard previewBase == nil || abs(previewBaseScale - scale) > 0.0001 else { return }
-        previewBase = Self.rasterize(baseImage, scale: scale)
+        previewBase = Self.rasterize(currentBase, scale: scale)
         previewBaseScale = scale
     }
 

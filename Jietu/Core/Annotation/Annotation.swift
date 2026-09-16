@@ -16,6 +16,8 @@ enum AnnotationTool: String, CaseIterable, Identifiable {
     case pixelate
     case counter
     case eraser
+    /// 截后再裁剪：拖一个框，确认后把底图裁掉。
+    case crop
 
     var id: String { rawValue }
 
@@ -31,6 +33,7 @@ enum AnnotationTool: String, CaseIterable, Identifiable {
         case .pixelate: return "马赛克"
         case .counter: return "序号"
         case .eraser: return "橡皮"
+        case .crop: return "裁剪"
         }
     }
 
@@ -46,6 +49,7 @@ enum AnnotationTool: String, CaseIterable, Identifiable {
         case .pixelate: return "squareshape.split.3x3"
         case .counter: return "1.circle"
         case .eraser: return "eraser"
+        case .crop: return "crop"
         }
     }
 
