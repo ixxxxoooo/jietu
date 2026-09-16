@@ -165,7 +165,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let urls = (recentProvider?() ?? []).prefix(Self.recentPreviewCount)
 
         if urls.isEmpty {
-            let empty = NSMenuItem(title: "暂无", action: nil, keyEquivalent: "")
+            let empty = NSMenuItem(title: "暂无（截图后会出现在这里）", action: nil, keyEquivalent: "")
             empty.isEnabled = false
             recentMenu.addItem(empty)
             return

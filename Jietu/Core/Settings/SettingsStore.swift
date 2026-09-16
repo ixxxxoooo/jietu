@@ -187,9 +187,13 @@ final class SettingsStore {
         didSet { defaults.set(recentCapturePaths, forKey: Key.recentCapturePaths) }
     }
 
-    /// 最近截图的文件 URL。
+    /// 最近截图的文件 URL（新的在前）。
+    ///
+    /// 已被删除 / 移走的文件不再返回：这几条是历史记录，文件没了就既预览不了也打不开。
     var recentCaptureURLs: [URL] {
-        recentCapturePaths.map { URL(fileURLWithPath: $0) }
+        recentCapturePaths
+            .map { URL(fileURLWithPath: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     /// 记录一次保存，超出上限的旧记录会被丢弃。
