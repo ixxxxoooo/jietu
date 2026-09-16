@@ -37,3 +37,17 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
   与权限引导都会把当前身份（含 `dev` 标记）显示出来，照着勾选即可。
 - 改了渠道相关的 build setting 后，`JietuTests` 的 `TEST_HOST` 也要同步指向
   `Jietu Dev.app/Contents/MacOS/Jietu Dev`（Debug 侧已就位）。
+- **Debug 必须 `ENABLE_DEBUG_DYLIB = NO`**（已写进 Debug 配置）。Xcode 16+ 默认把 Debug 的
+  真代码放进 `Jietu Dev.debug.dylib`、主可执行文件只留 ~58KB 的壳；那样 TCC 拿不到稳定的
+  签名身份，「屏幕录制」授权会出现「API 说已授权、列表里却看不到这个 App」的怪状态。
+  关掉后主可执行文件是完整二进制（~6.5MB）。
+
+## 权限排查（屏幕录制）
+
+- 判断权限**别只看系统设置的列表**：自签名 / Debug 构建可能不在列表里，但授权照样生效。
+  以 `CGPreflightScreenCaptureAccess()` 和实际能否截图为准。
+- 让 App 出现在列表里：点该栏左下的 **`+`** 手动选中 `Jietu Dev.app`（最可靠）。
+- 自签名证书 `Jietu` 目前**未经信任**（`security find-identity -v -p codesigning` 里没有它）。
+  想让它自动出现 / 让授权在重编译后更稳，可在「钥匙串访问 › 登录 › Jietu › 显示简介 › 信任」
+  把「代码签名」设为「始终信任」。
+- `tccutil reset ScreenCapture <bundle id>` 会**清掉当前生效的授权**，只在确实要重来时用。

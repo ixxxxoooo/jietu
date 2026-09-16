@@ -327,6 +327,9 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
+				// Xcode 16+ 的 Debug 默认把真代码放进 .debug.dylib、主可执行文件只留壳；
+				// 那样 TCC 拿不到稳定的签名身份，「屏幕录制」列表里永远不会出现本 App。
+				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Config/Info.plist;

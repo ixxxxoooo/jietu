@@ -341,7 +341,10 @@ struct PermissionSettingsPane: View {
                     }
                 } label: {
                     Text("授权对象")
-                    Text("在「系统设置 › 隐私与安全性 › 屏幕录制」里勾选它。")
+                    Text(
+                        "在「系统设置 › 隐私与安全性 › 屏幕录制」里勾选它；"
+                            + "若列表里没有它，点列表左下的「+」手动选中这个 App。"
+                    )
                 }
 
                 LabeledContent {
@@ -375,7 +378,11 @@ struct PermissionSettingsPane: View {
             } header: {
                 SettingsSectionHeader(title: "权限")
             } footer: {
-                Text("授权状态每秒复查一次；从系统设置切回来会立刻更新。")
+                Text(
+                    "授权状态每秒复查一次，从系统设置切回来会立刻更新。\n"
+                        + "自签名 / Debug 构建有时不会自动出现在系统设置的列表里"
+                        + "（但授权本身照样生效），用「+」手动添加即可。"
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

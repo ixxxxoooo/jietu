@@ -227,9 +227,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = .warning
         alert.messageText = "重新注册「屏幕录制」权限？"
         alert.informativeText =
-            "会先清掉本 App 在「屏幕录制」里的旧记录，再重新申请一次，"
-            + "让它重新出现在系统设置的列表里。\n"
-            + "清掉之后需要重新勾选，并重启 Jietu 才会生效。"
+            "会先清掉本 App 在「屏幕录制」里的旧记录，再重新申请一次。\n"
+            + "注意：这会丢掉当前**已经生效**的授权，需要重新勾选并重启。\n"
+            + "如果只是想让它出现在系统设置的列表里，"
+            + "直接点列表左下的「+」手动添加即可，不用清记录。"
         alert.addButton(withTitle: "重新注册")
         alert.addButton(withTitle: "取消")
         guard alert.runModal() == .alertFirstButtonReturn else { return }

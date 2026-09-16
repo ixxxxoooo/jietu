@@ -199,7 +199,7 @@ struct OnboardingView: View {
                 OnboardingDivider()
                 OnboardingRow(
                     title: "授权对象",
-                    subtitle: "在「系统设置 › 隐私与安全性 › 屏幕录制」里勾选它。",
+                    subtitle: "在「系统设置 › 隐私与安全性 › 屏幕录制」里勾选它；列表里没有就点「+」手动添加。",
                     systemImage: "app.badge.checkmark",
                     tint: Theme.Colors.accent
                 ) {
@@ -228,7 +228,7 @@ struct OnboardingView: View {
                 caption(
                     model.suggestsRelaunch
                         ? "已经勾选却还是未授权？点「重启 Jietu」立刻生效。"
-                        : "可以点「稍后」跳过，之后再从菜单栏的「权限…」进来。"
+                        : "列表里找不到本 App 时，点系统设置那一栏左下的「+」手动添加。"
                 )
                 Spacer(minLength: 0)
                 Button("重新检测") { model.refresh() }
