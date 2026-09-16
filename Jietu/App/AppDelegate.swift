@@ -19,8 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var scrollingPanel: ScrollingCapturePanelController?
     private var scrollingEscapeMonitor: Any?
     private var isScrollingCancelled = false
-    /// 本次滚动长图的模式（自动 / 手动）。
-    private var scrollingMode: ScrollingCaptureSession.Mode = .manual
     /// 会话内的截图历史（新截的即时可见，不必先保存）。
     private var sessionHistory: [HistoryItem] = []
     private var annotationEditors: [AnnotationEditorWindowController] = []
@@ -79,12 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onCaptureWindow = { [weak self] in self?.handleWindowCapture() }
         menuBar.onCaptureFullScreen = { [weak self] in self?.handleFullScreenCapture() }
         menuBar.onCaptureTimed = { [weak self] seconds in self?.handleTimedCapture(after: seconds) }
-        menuBar.onCaptureScrollingAuto = { [weak self] in
-            self?.handleScrollingCapture(mode: .automatic)
-        }
-        menuBar.onCaptureScrollingManual = { [weak self] in
-            self?.handleScrollingCapture(mode: .manual)
-        }
+        menuBar.onCaptureScrolling = { [weak self] in self?.handleScrollingCapture() }
         menuBar.onOpenRecent = { url in
             NSWorkspace.shared.activateFileViewerSelecting([url])
         }
@@ -121,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .timedCapture:
             handleTimedCapture(after: HotkeyAction.timedCaptureDelay)
         case .scrollingCapture:
-            handleScrollingCapture(mode: .automatic)
+            handleScrollingCapture()
         }
     }
 
@@ -338,13 +331,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Scrolling capture
 
-    /// 滚动长图：先用遮罩取一块选区，再由 `ScrollingCaptureSession` 连续采样拼接。
-    ///
-    /// - Parameter mode: 自动滚动（合成滚轮）/ 手动滚动；自动需要「辅助功能」权限。
-    private func handleScrollingCapture(mode: ScrollingCaptureSession.Mode) {
+    /// 滚动长图：先用遮罩取一块选区；框选完成后由控制条上的按钮决定怎么滚。
+    private func handleScrollingCapture() {
         guard !overlays.isPresenting, scrollingSession == nil else { return }
         guard requireScreenCapturePermission() else { return }
-        scrollingMode = resolveScrollingMode(mode)
 
         Task { @MainActor in
             do {
@@ -385,7 +375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .manual
     }
 
-    /// 选区确定后启动采样：控制条浮在选区下方，自动或手动滚动内容。
+    /// 选区确定后**先不采样**：控制条浮在选区下方，等用户点「自动截图 / 开始截图」。
     private func startScrollingCapture(snapshot: DisplaySnapshot, localRect: CGRect) {
         overlays.purpose = .screenshot
 
@@ -411,6 +401,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             size: localRect.size
         )
 
+        let panel = ScrollingCapturePanelController()
+        scrollingPanel = panel
+        isScrollingCancelled = false
+
+        panel.onStartManual = { [weak self] in
+            self?.beginScrollingSession(
+                mode: .manual, snapshot: snapshot, region: region, globalRect: globalRect)
+        }
+        panel.onStartAuto = { [weak self] in
+            self?.beginScrollingSession(
+                mode: .automatic, snapshot: snapshot, region: region, globalRect: globalRect)
+        }
+        panel.onFinish = { [weak self] in self?.scrollingSession?.stop() }
+        panel.onCancel = { [weak self] in self?.cancelScrollingCapture() }
+        panel.present(
+            near: CGRect(
+                x: screenFrame.minX + localRect.minX,
+                y: screenFrame.minY + localRect.minY,
+                width: localRect.width,
+                height: localRect.height
+            )
+        )
+        registerScrollingEscapeMonitor()
+    }
+
+    /// 用户点了「开始截图 / 自动截图」：建会话、开跑。
+    private func beginScrollingSession(
+        mode: ScrollingCaptureSession.Mode,
+        snapshot: DisplaySnapshot,
+        region: CGRect,
+        globalRect: CGRect
+    ) {
+        guard scrollingSession == nil, let panel = scrollingPanel else { return }
+
+        // 自动滚动要合成滚轮事件，没授权就先申请并给用户选择。
+        let effective = mode == .automatic ? resolveScrollingMode(.automatic) : .manual
+
         let session = ScrollingCaptureSession(
             engine: capture,
             target: ScrollingCaptureSession.Target(
@@ -419,38 +446,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 regionInGlobalCGPoints: globalRect
             )
         )
-        session.mode = scrollingMode
+        session.mode = effective
         // 自动滚动没有「人手停顿」，4 拍（1 秒）就够判定到底；手动保留 6 拍（1.5 秒）。
-        session.idleIntervalsToStop = scrollingMode == .automatic ? 4 : 6
-        let panel = ScrollingCapturePanelController()
-        scrollingSession = session
-        scrollingPanel = panel
-        isScrollingCancelled = false
-
+        session.idleIntervalsToStop = effective == .automatic ? 4 : 6
         session.onProgress = { [weak panel] height in
             panel?.update(height: height)
         }
-        panel.onFinish = { [weak self] in
-            self?.scrollingSession?.stop()
-        }
-        panel.onCancel = { [weak self] in
-            self?.isScrollingCancelled = true
-            self?.scrollingSession?.stop()
-        }
-        panel.present(
-            near: CGRect(
-                x: screenFrame.minX + localRect.minX,
-                y: screenFrame.minY + localRect.minY,
-                width: localRect.width,
-                height: localRect.height
-            ),
-            mode: scrollingMode
-        )
-        registerScrollingEscapeMonitor()
+        scrollingSession = session
+        panel.setRunning(mode: effective)
 
         Task { @MainActor in
             let image = await session.run()
             finishScrollingCapture(image: image, displayID: snapshot.displayID)
+        }
+    }
+
+    /// 待开始状态下的「取消」：没有会话在跑，直接把控制条收掉。
+    private func cancelScrollingCapture() {
+        isScrollingCancelled = true
+        if let session = scrollingSession {
+            session.stop()
+        } else {
+            finishScrollingCapture(image: nil, displayID: CGMainDisplayID())
         }
     }
 

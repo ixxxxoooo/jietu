@@ -185,8 +185,8 @@ enum Theme {
         /// QAO 距屏幕边缘。
         static let quickAccessInset: CGFloat = 20
 
-        /// 滚动长图控制条（高度按一行提示 + 一行按钮算出来，不裁剪）。
-        static let scrollingPanel = CGSize(width: 320, height: 124)
+        /// 滚动长图控制条（高度按「一行状态 + 最多两行提示 + 一行按钮」算出来，不裁剪）。
+        static let scrollingPanel = CGSize(width: 330, height: 136)
         /// 历史面板。
         static let historyPanel = CGSize(width: 340, height: 560)
         /// 权限引导窗口。

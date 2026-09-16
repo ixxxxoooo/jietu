@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 滚动长图的悬浮控制条：显示已拼接高度 + 完成 / 取消。
+/// 滚动长图的悬浮控制条：先让用户选「自动截图 / 开始截图」，开始后显示进度 + 完成 / 取消。
 ///
 /// 关键点：抓取时把本 App 排除在画面外（`CaptureEngine.captureRegion`），
 /// 所以这个控制条即使压在选区上也不会被拍进长图。
@@ -11,26 +11,31 @@ final class ScrollingCapturePanelController {
     private var panel: NSPanel?
     private var hosting: NSHostingView<ScrollingCapturePanelView>?
 
+    /// 框选完成后先停在「待开始」，由用户点按钮决定怎么滚。
+    enum Stage: Equatable {
+        case ready
+        case running(ScrollingCaptureSession.Mode)
+    }
+
+    private var stage: Stage = .ready
+    private var height = 0
+
+    var onStartManual: (() -> Void)?
+    var onStartAuto: (() -> Void)?
     var onFinish: (() -> Void)?
     var onCancel: (() -> Void)?
-
-    private var mode: ScrollingCaptureSession.Mode = .manual
 
     private static var size: NSSize { Theme.Size.scrollingPanel }
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
-    /// 贴着选区下方展示（下方放不下就挪到上方）。
-    func present(near screenRect: CGRect, mode: ScrollingCaptureSession.Mode) {
+    /// 贴着选区下方展示（下方放不下就挪到上方）：初始为「待开始」。
+    func present(near screenRect: CGRect) {
         close()
-        self.mode = mode
+        stage = .ready
+        height = 0
 
-        let root = ScrollingCapturePanelView(
-            height: 0,
-            mode: mode,
-            onFinish: { [weak self] in self?.onFinish?() },
-            onCancel: { [weak self] in self?.onCancel?() }
-        )
+        let root = makeRoot()
         let hosting = NSHostingView(rootView: root)
         hosting.frame = NSRect(origin: .zero, size: Self.size)
         self.hosting = hosting
@@ -62,12 +67,29 @@ final class ScrollingCapturePanelController {
         self.panel = panel
     }
 
+    /// 切到「进行中」并更新已拼接高度（像素）。
+    func setRunning(mode: ScrollingCaptureSession.Mode) {
+        stage = .running(mode)
+        height = 0
+        refresh()
+    }
+
     /// 更新已拼接高度（像素）。
     func update(height: Int) {
-        guard let hosting else { return }
-        hosting.rootView = ScrollingCapturePanelView(
+        self.height = height
+        refresh()
+    }
+
+    private func refresh() {
+        hosting?.rootView = makeRoot()
+    }
+
+    private func makeRoot() -> ScrollingCapturePanelView {
+        ScrollingCapturePanelView(
             height: height,
-            mode: mode,
+            stage: stage,
+            onStartManual: { [weak self] in self?.onStartManual?() },
+            onStartAuto: { [weak self] in self?.onStartAuto?() },
             onFinish: { [weak self] in self?.onFinish?() },
             onCancel: { [weak self] in self?.onCancel?() }
         )
@@ -85,7 +107,9 @@ final class ScrollingCapturePanelController {
 /// @author ixxxxoooo
 struct ScrollingCapturePanelView: View {
     var height: Int
-    var mode: ScrollingCaptureSession.Mode = .manual
+    var stage: ScrollingCapturePanelController.Stage = .ready
+    var onStartManual: () -> Void = {}
+    var onStartAuto: () -> Void = {}
     var onFinish: () -> Void
     var onCancel: () -> Void
 
@@ -99,24 +123,28 @@ struct ScrollingCapturePanelView: View {
                     .font(Theme.Typography.bar)
                     .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer(minLength: Theme.Spacing.md)
-                Text(height > 0 ? "已拼接 \(height) px" : (mode == .automatic ? "准备滚动…" : "等待滚动…"))
+                Text(trailingText)
                     .font(Theme.Typography.numeric)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
-            Text(
-                mode == .automatic
-                    ? "正在自动滚动…任意键停止，也会在到底后自动完成。"
-                    : "匀速滚动，停止约 1.5 秒自动完成。"
-            )
+            Text(hintText)
                 .font(Theme.Typography.rowSubtitle)
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .lineLimit(1)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: Theme.Spacing.md) {
                 Spacer(minLength: 0)
                 GlassButton(title: "取消", role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                GlassButton(title: "完成", role: .prominent, action: onFinish)
-                    .keyboardShortcut(.defaultAction)
+                if case .ready = stage {
+                    GlassButton(title: "开始截图", action: onStartManual)
+                        .help("点完自己把鼠标放进选区往下滚")
+                    GlassButton(title: "自动截图", role: .prominent, action: onStartAuto)
+                        .help("由 Jietu 自己滚动（需要辅助功能权限）")
+                } else {
+                    GlassButton(title: "完成", role: .prominent, action: onFinish)
+                        .keyboardShortcut(.defaultAction)
+                }
             }
         }
         .padding(Theme.Spacing.xl)
@@ -126,5 +154,24 @@ struct ScrollingCapturePanelView: View {
             alignment: .topLeading
         )
         .floatingSurface()
+    }
+
+    private var trailingText: String {
+        switch stage {
+        case .ready: return "框选完成"
+        case .running:
+            return height > 0 ? "已拼接 \(height) px" : "准备滚动…"
+        }
+    }
+
+    private var hintText: String {
+        switch stage {
+        case .ready:
+            return "自动截图：它自己滚；开始截图：你把鼠标放进选区自己滚。"
+        case .running(.automatic):
+            return "正在自动滚动…任意键停止，到底后自动完成。"
+        case .running(.manual):
+            return "匀速滚动，停止约 1.5 秒自动完成。"
+        }
     }
 }
