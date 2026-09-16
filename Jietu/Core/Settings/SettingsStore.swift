@@ -85,7 +85,7 @@ final class SettingsStore {
     }
 
     /// 最近截图最多保留的条数。
-    static let maxRecentCaptures = 8
+    static let maxRecentCaptures = 10
 
     private let defaults: UserDefaults
 

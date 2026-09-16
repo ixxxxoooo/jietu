@@ -67,6 +67,21 @@ enum FilenameTemplate {
             .joined(separator: "-")
     }
 
+    /// 从文件名（`Jietu yyyy-MM-dd at HH.mm.ss`）解析截图时刻，失败则用文件创建时间。
+    static func captureDate(of url: URL) -> Date {
+        let name = url.lastPathComponent
+        if name.hasPrefix("Jietu "), let separator = name.range(of: " at ") {
+            let datePart = String(name[name.index(name.startIndex, offsetBy: 6)..<separator.lowerBound])
+            let timePart = String(name[separator.upperBound...].prefix(8))
+            if let date = dateTimeFormatter.date(from: "\(datePart) \(timePart)") {
+                return date
+            }
+        }
+        return (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date()
+    }
+
+    private static let dateTimeFormatter: DateFormatter = formatter("yyyy-MM-dd HH.mm.ss")
+
     private static func expand(_ fragment: String, date: Date) -> String {
         fragment
             .replacingOccurrences(of: "{date}", with: datePart(date))

@@ -591,7 +591,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let saved = settings.recentCaptureURLs.map { url -> HistoryItem in
             HistoryItem(
                 id: url.path,
-                date: Self.captureDate(of: url),
+                date: FilenameTemplate.captureDate(of: url),
                 image: NSImage(contentsOf: url),
                 url: url,
                 cgImage: nil
@@ -602,25 +602,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sorted { $0.date > $1.date }
             .prefix(40)
             .map { $0 }
-    }
-
-    /// 从文件名（`Jietu yyyy-MM-dd at HH.mm.ss`）解析截图时刻，失败则用文件时间。
-    private static func captureDate(of url: URL) -> Date {
-        let name = url.lastPathComponent
-        if name.hasPrefix("Jietu ") {
-            let body = name.dropFirst("Jietu ".count)
-            if let range = body.range(of: " at ") {
-                let datePart = String(body[body.startIndex..<range.lowerBound])
-                let timePart = String(body[range.upperBound...].prefix(8))
-                let formatter = DateFormatter()
-                formatter.locale = Locale(identifier: "en_US_POSIX")
-                formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
-                if let date = formatter.date(from: "\(datePart) \(timePart)") {
-                    return date
-                }
-            }
-        }
-        return (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date()
     }
 
     /// 记录一次截图到会话历史。
