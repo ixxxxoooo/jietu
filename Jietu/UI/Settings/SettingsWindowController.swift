@@ -9,7 +9,7 @@ import SwiftUI
 ///
 /// @author ixxxxoooo
 final class SettingsWindowController: NSObject, NSWindowDelegate {
-    private static let contentSize = NSSize(width: 660, height: 470)
+    private static let contentSize = Theme.Size.settingsWindow
 
     private let settings: SettingsStore
     private var window: NSWindow?

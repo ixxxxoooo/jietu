@@ -14,7 +14,7 @@ final class ScrollingCapturePanelController {
     var onFinish: (() -> Void)?
     var onCancel: (() -> Void)?
 
-    private static let size = NSSize(width: 300, height: 84)
+    private static var size: NSSize { Theme.Size.scrollingPanel }
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
@@ -54,7 +54,6 @@ final class ScrollingCapturePanelController {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         panel.contentView = hosting
-        panel.appearance = NSAppearance(named: .darkAqua)
         panel.orderFrontRegardless()
         self.panel = panel
     }
@@ -85,37 +84,37 @@ struct ScrollingCapturePanelView: View {
     var onCancel: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: "scroll")
+                    .font(Theme.Typography.bar)
+                    .foregroundStyle(Theme.Colors.textSecondary)
                 Text("滚动长图")
-                    .font(.system(size: 12, weight: .semibold))
-                Spacer(minLength: 8)
+                    .font(Theme.Typography.bar)
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Spacer(minLength: Theme.Spacing.md)
                 Text(height > 0 ? "已拼接 \(height) px" : "等待滚动…")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Typography.numeric)
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
-            Text("请匀速滚动要截取的内容，停止滚动约 1.5 秒后自动完成。")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
+            Text("匀速滚动，停止约 1.5 秒自动完成。")
+                .font(Theme.Typography.rowSubtitle)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .lineLimit(1)
+            HStack(spacing: Theme.Spacing.md) {
                 Spacer(minLength: 0)
-                Button("取消") { onCancel() }
+                GlassButton(title: "取消", role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                Button("完成") { onFinish() }
+                GlassButton(title: "完成", role: .prominent, action: onFinish)
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(12)
-        .frame(width: 300, height: 84, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.black.opacity(0.78))
+        .padding(Theme.Spacing.xl)
+        .frame(
+            width: Theme.Size.scrollingPanel.width,
+            height: Theme.Size.scrollingPanel.height,
+            alignment: .topLeading
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
-        )
+        .floatingSurface()
     }
 }

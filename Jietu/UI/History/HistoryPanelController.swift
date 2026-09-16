@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// @author ixxxxoooo
 final class HistoryPanelController: NSObject, NSWindowDelegate {
-    private static let size = NSSize(width: 320, height: 560)
+    private static var size: NSSize { Theme.Size.historyPanel }
 
     private var window: NSPanel?
     private var monitor: Any?

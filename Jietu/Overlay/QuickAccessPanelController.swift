@@ -116,7 +116,6 @@ final class QuickAccessPanelController {
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
         panel.isReleasedWhenClosed = false
-        panel.appearance = NSAppearance(named: .darkAqua)
         panel.contentView = hosting
 
         let screen = NSScreen.screens.first { $0.jietu_displayID == displayID } ?? NSScreen.main

@@ -7,6 +7,7 @@ import SwiftUI
 /// 不像全局监视器那样需要「辅助功能」权限，也不会偷录其它 App 的输入。
 ///
 /// 默认不设热键（`hotkey == nil` 显示「未设置」），录制后可再点「清除」删掉。
+/// 视觉走 Tinycast 的设置行：标题 + 副标题 + 尾部 keycap / 玻璃按钮。
 ///
 /// @author ixxxxoooo
 struct HotkeyRecorderView: View {
@@ -21,32 +22,39 @@ struct HotkeyRecorderView: View {
     @State private var hint: String?
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 13))
-                Text(statusText)
-                    .font(.system(size: 11))
-                    .foregroundStyle(hint == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
-            }
-            Spacer(minLength: 12)
+        SettingsRow(
+            title: title,
+            subtitle: statusText,
+            subtitleLineLimit: 1,
+            subtitleTint: hint == nil ? nil : Theme.Colors.warning
+        ) {
+            HStack(spacing: Theme.Spacing.md) {
+                if isRecording {
+                    Text("录制中…")
+                        .font(Theme.Typography.bar)
+                        .foregroundStyle(Theme.Colors.brand)
+                    Button("取消") { stopRecording() }
+                        .buttonStyle(.link)
+                } else {
+                    Button {
+                        startRecording()
+                    } label: {
+                        KeyCapChip(
+                            text: hotkey?.displayString ?? "未设置",
+                            style: .filled,
+                            scale: .standard
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help("点击后按下新的组合键")
 
-            if isRecording {
-                Text("录制中…")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.brand)
-                Button("取消") { stopRecording() }
+                    Button("清除") {
+                        hotkey = nil
+                        hint = nil
+                    }
                     .buttonStyle(.link)
-            } else {
-                Button(hotkey?.displayString ?? "未设置") { startRecording() }
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .frame(minWidth: 88)
-                Button("清除") {
-                    hotkey = nil
-                    hint = nil
+                    .disabled(hotkey == nil)
                 }
-                .buttonStyle(.link)
-                .disabled(hotkey == nil)
             }
         }
         .onDisappear { stopRecording() }

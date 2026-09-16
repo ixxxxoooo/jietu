@@ -3,9 +3,11 @@ import SwiftUI
 
 /// 截图后的浮动预览（Quick Access Overlay）。
 ///
-/// 默认只显示图片预览本身；鼠标移入时**压暗图片**并浮出操作按钮：
-/// 四角为圆形图标（关闭 / 钉图 / 标注 / 文字识别），中间两条胶囊按钮（复制 / 保存）。
+/// 默认只显示图片预览本身；鼠标移入时**压暗图片**并浮出玻璃操作按钮：
+/// 四角为圆形图标（关闭 / 钉图 / 标注 / 文字识别），中间一条胶囊按钮（保存）。
 /// 点击图片打开标注编辑器，拖拽图片可导出。
+///
+/// 表面走设计系统：磨砂 + 墨色 scrim + `Radius.menuPanel`，玻璃只给浮动按钮。
 ///
 /// @author ixxxxoooo
 struct QuickAccessView: View {
@@ -21,20 +23,20 @@ struct QuickAccessView: View {
 
     @State private var isHovering = false
 
-    static let cardWidth: CGFloat = 236
-    static let cardHeight: CGFloat = 152
-    private static let cornerRadius: CGFloat = 16
+    static var cardWidth: CGFloat { Theme.Size.quickAccessCard.width }
+    static var cardHeight: CGFloat { Theme.Size.quickAccessCard.height }
+    private static let cornerRadius = Theme.Radius.menuPanel
 
     /// 含阴影留白的面板尺寸。
     static var panelSize: CGSize {
         CGSize(
-            width: cardWidth + Theme.quickAccessShadowPadding * 2,
-            height: cardHeight + Theme.quickAccessShadowPadding * 2
+            width: cardWidth + Theme.Size.quickAccessShadowPadding * 2,
+            height: cardHeight + Theme.Size.quickAccessShadowPadding * 2
         )
     }
 
     var body: some View {
-        imageCard.padding(Theme.quickAccessShadowPadding)
+        imageCard.padding(Theme.Size.quickAccessShadowPadding)
     }
 
     private var imageCard: some View {
@@ -44,13 +46,15 @@ struct QuickAccessView: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: Self.cardWidth, height: Self.cardHeight)
                 .blur(radius: isHovering ? 16 : 0)
-                // 磨砂底 + 较实的深色：默认就不透明，悬停更实。
-                .background(
+                // 磨砂 + 墨色 scrim 压在图片后面：不透明截图看起来原样，
+                // 透明区域与悬停模糊时才露出这层底。
+                .background {
                     ZStack {
-                        VisualEffectBackground(material: .hudWindow)
-                        Color.black.opacity(isHovering ? 0.78 : 0.62)
+                        VisualEffectView(material: .hudWindow)
+                        Theme.Colors.panelScrim
+                        Color.black.opacity(isHovering ? 0.30 : 0)
                     }
-                )
+                }
                 // 手势只挂在图片上：按钮在更上层，点按钮不会触发这里。
                 .contentShape(Rectangle())
                 .onTapGesture { onAnnotate() }
@@ -63,13 +67,13 @@ struct QuickAccessView: View {
         .overlay(
             RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
                 .strokeBorder(
-                    isHovering ? Theme.brand.opacity(0.9) : Color.white.opacity(0.10),
-                    lineWidth: isHovering ? 2 : 0.5
+                    isHovering ? Theme.Colors.brand.opacity(0.9) : Theme.Colors.cardStroke,
+                    lineWidth: isHovering ? 2 : Theme.Size.hairline
                 )
         )
         .shadow(color: .black.opacity(0.34), radius: 12, y: 5)
         .help("点击打开标注编辑器，拖拽到其它 App 或文件夹可导出")
-        .animation(.easeOut(duration: 0.14), value: isHovering)
+        .animation(.easeOut(duration: Theme.Duration.hover), value: isHovering)
         .onHover { hovering in
             isHovering = hovering
             onHoverChange(hovering)
@@ -79,61 +83,25 @@ struct QuickAccessView: View {
     /// 四角圆形图标 + 中间保存按钮，仅悬停时出现。
     private var controls: some View {
         ZStack {
-            pillButton("保存", symbol: "square.and.arrow.down", action: onSave)
+            GlassButton(title: "保存", systemImage: "square.and.arrow.down", action: onSave)
 
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    circleButton("关闭", symbol: "xmark", action: onClose)
+                    GlassCircleButton(title: "关闭", systemImage: "xmark", action: onClose)
                     Spacer(minLength: 0)
-                    circleButton("钉图", symbol: "pin", action: onPin)
+                    GlassCircleButton(title: "钉图", systemImage: "pin", action: onPin)
                 }
                 Spacer(minLength: 0)
                 HStack(spacing: 0) {
-                    circleButton("标注", symbol: "pencil.tip.crop.circle", action: onAnnotate)
+                    GlassCircleButton(
+                        title: "标注", systemImage: "pencil.tip.crop.circle", action: onAnnotate)
                     Spacer(minLength: 0)
-                    circleButton("复制", symbol: "doc.on.doc", action: onCopy)
+                    GlassCircleButton(title: "复制", systemImage: "doc.on.doc", action: onCopy)
                 }
             }
         }
-        .padding(8)
+        .padding(Theme.Spacing.md)
         .opacity(isHovering ? 1 : 0)
         .allowsHitTesting(isHovering)
-    }
-
-    private func pillButton(
-        _ title: String,
-        symbol: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 11, weight: .medium))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 6)
-            .foregroundStyle(.white)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .capsule)
-        .help(title)
-    }
-
-    private func circleButton(
-        _ title: String,
-        symbol: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 30, height: 30)
-                .foregroundStyle(.white)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
-        .help(title)
     }
 }

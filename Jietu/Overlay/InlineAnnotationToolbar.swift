@@ -32,6 +32,9 @@ final class InlineToolbarModel {
 
 /// 就地标注的**主工具栏**：固定尺寸，展开选项时也不重算，避免闪烁。
 ///
+/// 表面走 `FloatingSurface`（磨砂 + scrim），控件用 `BarButton` 家族：
+/// 选中常驻 `controlSurface`，未选中悬停才压一层墨。
+///
 /// @author ixxxxoooo
 struct InlineMainToolbar: View {
     @Bindable var model: InlineToolbarModel
@@ -42,31 +45,49 @@ struct InlineMainToolbar: View {
     ]
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Theme.Size.toolbarItemSpacing) {
             ForEach(Self.tools) { item in
                 toolButton(item)
             }
 
             separator
 
-            iconButton("撤销", symbol: "arrow.uturn.backward") { model.onUndo?() }
-                .disabled(!model.canUndo)
-            iconButton("重做", symbol: "arrow.uturn.forward") { model.onRedo?() }
-                .disabled(!model.canRedo)
+            BarIconButton(
+                title: "撤销",
+                systemImage: "arrow.uturn.backward",
+                isSelected: false,
+                action: { model.onUndo?() }
+            )
+            .disabled(!model.canUndo)
+            .opacity(model.canUndo ? 1 : 0.4)
+
+            BarIconButton(
+                title: "重做",
+                systemImage: "arrow.uturn.forward",
+                action: { model.onRedo?() }
+            )
+            .disabled(!model.canRedo)
+            .opacity(model.canRedo ? 1 : 0.4)
 
             separator
 
             colorButton
             widthButton
 
-            Spacer(minLength: 12)
+            Spacer(minLength: Theme.Spacing.xl)
 
-            iconButton("下载", symbol: "square.and.arrow.down") { model.onSave?() }
-            iconButton("钉图", symbol: "pin") { model.onPin?() }
-            iconButton(
-                "识别文字",
-                symbol: "text.viewfinder",
-                tint: model.isLiveTextActive ? Theme.selectionGreen : .white
+            BarIconButton(title: "下载", systemImage: "square.and.arrow.down") {
+                model.onSave?()
+            }
+            BarIconButton(title: "钉图", systemImage: "pin") {
+                model.onPin?()
+            }
+            BarIconButton(
+                title: "识别文字",
+                systemImage: "text.viewfinder",
+                tint: model.isLiveTextActive
+                    ? Theme.Colors.brand : Theme.Colors.textSecondary,
+                isSelected: model.isLiveTextActive
             ) {
                 if model.isLiveTextActive {
                     model.isLiveTextActive = false
@@ -75,81 +96,73 @@ struct InlineMainToolbar: View {
                     model.tool = .select
                 }
             }
-            iconButton("取消", symbol: "xmark", tint: .red) { model.onCancel?() }
-            iconButton("确认", symbol: "checkmark", tint: .green) { model.onConfirm?() }
+            BarIconButton(
+                title: "取消",
+                systemImage: "xmark",
+                tint: Theme.Colors.destructive
+            ) {
+                model.onCancel?()
+            }
+            BarIconButton(
+                title: "确认",
+                systemImage: "checkmark",
+                tint: Theme.Colors.success
+            ) {
+                model.onConfirm?()
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.lg)
         .fixedSize()
-        .background(FrostedBar())
+        .floatingSurface()
     }
 
     private var separator: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.14))
-            .frame(width: 1, height: 20)
-            .padding(.horizontal, 4)
+            .fill(Theme.Colors.separator)
+            .frame(width: Theme.Size.hairline, height: Theme.Size.toolbarSeparatorHeight)
+            .padding(.horizontal, Theme.Spacing.xs)
     }
 
     private var colorButton: some View {
-        Button {
+        BarButton(chrome: .rounded, isSelected: model.showColor) {
             model.showColor.toggle()
             if model.showColor { model.showWidth = false }
         } label: {
             Circle()
                 .fill(model.color.swiftUIColor)
                 .frame(width: 20, height: 20)
-                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1.2))
-                .frame(width: 30, height: 26)
+                .overlay(Circle().strokeBorder(Theme.Colors.border, lineWidth: 1.2))
+                .frame(width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
         }
-        .buttonStyle(.plain)
         .help("颜色")
     }
 
     private var widthButton: some View {
-        Button {
+        BarIconButton(
+            title: "线条粗细",
+            systemImage: "lineweight",
+            isSelected: model.showWidth
+        ) {
             model.showWidth.toggle()
             if model.showWidth { model.showColor = false }
-        } label: {
-            Image(systemName: "lineweight")
-                .font(.system(size: 15, weight: .regular))
-                .frame(width: 30, height: 26)
-                .foregroundStyle(model.showWidth ? Theme.selectionGreen : Color.white.opacity(0.9))
         }
-        .buttonStyle(.plain)
-        .help("线条粗细")
     }
 
     private func toolButton(_ item: AnnotationTool) -> some View {
-        Button {
+        BarButton(chrome: .rounded, isSelected: model.tool == item) {
             model.tool = item
             if item.isDrawing { model.isLiveTextActive = false }
         } label: {
             Image(systemName: item.symbolName)
-                .font(.system(size: 15, weight: .regular))
-                .frame(width: 30, height: 26)
+                .font(.system(size: Theme.Size.toolbarIconSize, weight: .regular))
                 .foregroundStyle(
-                    model.tool == item ? Theme.selectionGreen : Color.white.opacity(0.9)
+                    model.tool == item ? Theme.Colors.textPrimary : Theme.Colors.textSecondary
                 )
+                .frame(
+                    width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
         }
-        .buttonStyle(.plain)
         .help(item.title)
-    }
-
-    private func iconButton(
-        _ title: String,
-        symbol: String,
-        tint: Color = .white,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .medium))
-                .frame(width: 28, height: 26)
-                .foregroundStyle(tint)
-        }
-        .buttonStyle(.plain)
-        .help(title)
     }
 }
 
@@ -160,26 +173,24 @@ struct InlineOptionsToolbar: View {
     @Bindable var model: InlineToolbarModel
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Theme.Spacing.xxl) {
             if model.showWidth {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.md) {
                     Text(model.tool == .eraser ? "橡皮" : "\(Int(model.lineWidth))")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .font(Theme.Typography.numeric)
+                        .foregroundStyle(Theme.Colors.textPrimary)
                         .frame(width: 34, alignment: .trailing)
                     if model.tool == .eraser {
                         Slider(value: $model.eraserSize, in: 8...120)
                             .frame(width: 170)
-                            .tint(.white)
                     } else {
                         Slider(value: $model.lineWidth, in: 1...24)
                             .frame(width: 170)
-                            .tint(.white)
                     }
                 }
             }
             if model.showColor {
-                HStack(spacing: 10) {
+                HStack(spacing: Theme.Spacing.lg) {
                     ForEach(RGBAColor.palette, id: \.self) { swatch in
                         Button {
                             model.color = swatch
@@ -190,7 +201,7 @@ struct InlineOptionsToolbar: View {
                                 .overlay(
                                     Circle().strokeBorder(
                                         model.color == swatch
-                                            ? Color.white : Color.white.opacity(0.2),
+                                            ? Theme.Colors.textPrimary : Theme.Colors.border,
                                         lineWidth: model.color == swatch ? 2 : 1
                                     )
                                 )
@@ -201,26 +212,9 @@ struct InlineOptionsToolbar: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.lg)
         .fixedSize()
-        .background(FrostedBar())
-    }
-}
-
-/// 磨砂深色圆角条。
-///
-/// @author ixxxxoooo
-struct FrostedBar: View {
-    var body: some View {
-        ZStack {
-            VisualEffectBackground(material: .hudWindow)
-            Color.black.opacity(0.45)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
-        )
+        .floatingSurface()
     }
 }

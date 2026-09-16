@@ -481,7 +481,9 @@ struct AnnotationEditorView: View {
         VStack(spacing: 0) {
             mainBar
             if showColor || showWidth {
-                Divider()
+                Rectangle()
+                    .fill(Theme.Colors.separator)
+                    .frame(height: Theme.Size.hairline)
                 optionsBar
             }
         }
@@ -490,29 +492,31 @@ struct AnnotationEditorView: View {
     }
 
     private var mainBar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Theme.Size.toolbarItemSpacing) {
             ForEach(AnnotationTool.allCases) { item in
                 toolButton(item)
             }
 
             separator
 
-            iconButton("撤销", symbol: "arrow.uturn.backward") { undo() }
+            iconButton("撤销", symbol: "arrow.uturn.backward", key: "z", modifiers: .command) { undo() }
                 .disabled(undoStack.isEmpty)
-                .keyboardShortcut("z", modifiers: .command)
-            iconButton("重做", symbol: "arrow.uturn.forward") { redo() }
-                .disabled(redoStack.isEmpty)
-                .keyboardShortcut("z", modifiers: [.command, .shift])
-            iconButton("删除", symbol: "trash") { deleteSelected() }
+                .opacity(undoStack.isEmpty ? 0.4 : 1)
+            iconButton(
+                "重做", symbol: "arrow.uturn.forward", key: "z", modifiers: [.command, .shift]
+            ) { redo() }
+            .disabled(redoStack.isEmpty)
+            .opacity(redoStack.isEmpty ? 0.4 : 1)
+            iconButton("删除", symbol: "trash", key: .delete, modifiers: []) { deleteSelected() }
                 .disabled(selectedID == nil)
-                .keyboardShortcut(.delete, modifiers: [])
+                .opacity(selectedID == nil ? 0.4 : 1)
 
             separator
 
             colorButton
             widthButton
 
-            Spacer(minLength: 12)
+            Spacer(minLength: Theme.Spacing.xl)
 
             zoomControls
 
@@ -521,7 +525,8 @@ struct AnnotationEditorView: View {
             iconButton(
                 "识别文字",
                 symbol: "text.viewfinder",
-                tint: isLiveTextActive ? Theme.brand : .primary
+                tint: isLiveTextActive ? Theme.Colors.brand : Theme.Colors.textSecondary,
+                isSelected: isLiveTextActive
             ) {
                 if isLiveTextActive {
                     isLiveTextActive = false
@@ -533,32 +538,31 @@ struct AnnotationEditorView: View {
             iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
             iconButton("保存", symbol: "square.and.arrow.down") { exportToSave() }
             iconButton("钉图", symbol: "pin") { exportToPin() }
-            iconButton("关闭", symbol: "xmark") { onClose() }
-                .keyboardShortcut(.cancelAction)
+            iconButton("关闭", symbol: "xmark", key: .escape, modifiers: []) { onClose() }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// 点开颜色 / 粗细后出现的第二行（同样通栏，与窗口风格一致）。
     @ViewBuilder
     private var optionsBar: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Theme.Spacing.xxl) {
             if showWidth {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.md) {
                     Text(model_toolIsEraser ? "橡皮" : "粗细")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Typography.rowSubtitle)
+                        .foregroundStyle(Theme.Colors.textSecondary)
                     if model_toolIsEraser {
                         Text("\(Int(eraserSize))")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .font(Theme.Typography.numeric)
                             .frame(width: 22, alignment: .trailing)
                         Slider(value: $eraserSize, in: 8...120)
                             .frame(width: 170)
                     } else {
                         Text("\(Int(lineWidth))")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .font(Theme.Typography.numeric)
                             .frame(width: 22, alignment: .trailing)
                         Slider(value: $lineWidth, in: 1...24)
                             .frame(width: 170)
@@ -569,7 +573,7 @@ struct AnnotationEditorView: View {
                 }
             }
             if showColor {
-                HStack(spacing: 10) {
+                HStack(spacing: Theme.Spacing.lg) {
                     ForEach(RGBAColor.palette, id: \.self) { swatch in
                         Button {
                             color = swatch
@@ -581,7 +585,7 @@ struct AnnotationEditorView: View {
                                 .overlay(
                                     Circle().strokeBorder(
                                         color == swatch
-                                            ? Theme.brand : Color.primary.opacity(0.25),
+                                            ? Theme.Colors.textPrimary : Theme.Colors.border,
                                         lineWidth: color == swatch ? 2 : 1
                                     )
                                 )
@@ -593,47 +597,43 @@ struct AnnotationEditorView: View {
             contextualStyleControls
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var model_toolIsEraser: Bool { tool == .eraser }
 
     private var colorButton: some View {
-        Button {
-            showColor.toggle()
-            if showColor { showWidth = false }
-        } label: {
+        BarButton(
+            chrome: .rounded,
+            isSelected: showColor,
+            help: "颜色",
+            action: {
+                showColor.toggle()
+                if showColor { showWidth = false }
+            }
+        ) {
             Circle()
                 .fill(color.swiftUIColor)
                 .frame(width: 20, height: 20)
-                .overlay(Circle().strokeBorder(Color.primary.opacity(0.3), lineWidth: 1.2))
-                .frame(width: 30, height: 26)
+                .overlay(Circle().strokeBorder(Theme.Colors.border, lineWidth: 1.2))
+                .frame(width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
         }
-        .buttonStyle(.plain)
-        .help("颜色")
     }
 
     private var widthButton: some View {
-        Button {
+        iconButton("线条粗细", symbol: "lineweight", isSelected: showWidth) {
             showWidth.toggle()
             if showWidth { showColor = false }
-        } label: {
-            Image(systemName: "lineweight")
-                .font(.system(size: 15, weight: .regular))
-                .frame(width: 30, height: 26)
-                .foregroundStyle(showWidth ? Theme.brand : Color.primary)
         }
-        .buttonStyle(.plain)
-        .help("线条粗细")
     }
 
     private var separator: some View {
         Rectangle()
-            .fill(Color.primary.opacity(0.12))
-            .frame(width: 1, height: 20)
-            .padding(.horizontal, 4)
+            .fill(Theme.Colors.separator)
+            .frame(width: Theme.Size.hairline, height: Theme.Size.toolbarSeparatorHeight)
+            .padding(.horizontal, Theme.Spacing.xs)
     }
 
     /// 选中文字 / 马赛克时显示字号 / 块大小。
@@ -642,52 +642,26 @@ struct AnnotationEditorView: View {
         if let selected = selectedAnnotation {
             switch selected.kind {
             case .text:
-                separator
-                HStack(spacing: 6) {
-                    Image(systemName: "textformat.size")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    Slider(value: $fontSize, in: 10...100)
-                        .frame(width: 90)
-                        .onChange(of: fontSize) { _, value in
-                            applyToSelected { $0.withFontSize(value) }
-                        }
+                contextualSlider(symbol: "textformat.size", value: $fontSize, range: 10...100) {
+                    newValue in
+                    applyToSelected { $0.withFontSize(newValue) }
                 }
             case .pixelate:
-                separator
-                HStack(spacing: 6) {
-                    Image(systemName: "squareshape.split.3x3")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    Slider(value: $mosaicBlock, in: 4...40)
-                        .frame(width: 90)
-                        .onChange(of: mosaicBlock) { _, value in
-                            applyToSelected { $0.withPixelateBlock(value) }
-                        }
+                contextualSlider(
+                    symbol: "squareshape.split.3x3", value: $mosaicBlock, range: 4...40
+                ) { newValue in
+                    applyToSelected { $0.withPixelateBlock(newValue) }
                 }
             case .blur:
-                separator
-                HStack(spacing: 6) {
-                    Image(systemName: "drop.halffull")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    Slider(value: $blurRadius, in: 2...60)
-                        .frame(width: 90)
-                        .onChange(of: blurRadius) { _, value in
-                            applyToSelected { $0.withBlurRadius(value) }
-                        }
+                contextualSlider(symbol: "drop.halffull", value: $blurRadius, range: 2...60) {
+                    newValue in
+                    applyToSelected { $0.withBlurRadius(newValue) }
                 }
             case .magnifier:
-                separator
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass.circle")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    Slider(value: $magnifierZoom, in: 1.5...6)
-                        .frame(width: 90)
-                        .onChange(of: magnifierZoom) { _, value in
-                            applyToSelected { $0.withMagnifierZoom(value) }
-                        }
+                contextualSlider(
+                    symbol: "magnifyingglass.circle", value: $magnifierZoom, range: 1.5...6
+                ) { newValue in
+                    applyToSelected { $0.withMagnifierZoom(newValue) }
                 }
             default:
                 EmptyView()
@@ -695,57 +669,86 @@ struct AnnotationEditorView: View {
         }
     }
 
-    private func toolButton(_ item: AnnotationTool) -> some View {
-        Button {
-            tool = item
-            if item != .crop {
-                cropRect = nil
-            }
-            if item.isDrawing {
-                selectedID = nil
-                // 切到绘制类工具时关闭实况文本，避免抢手势。
-                isLiveTextActive = false
-            }
-        } label: {
-            Image(systemName: item.symbolName)
-                .font(.system(size: 15, weight: .regular))
-                .frame(width: 30, height: 26)
-                .foregroundStyle(tool == item ? Theme.selectionGreen : Color.primary)
+    /// 选中标注后出现的一个「图标 + 滑块」调节项。
+    private func contextualSlider(
+        symbol: String,
+        value: Binding<CGFloat>,
+        range: ClosedRange<CGFloat>,
+        onChange: @escaping (CGFloat) -> Void
+    ) -> some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            separator
+            Image(systemName: symbol)
+                .font(Theme.Typography.rowSubtitle)
+                .foregroundStyle(Theme.Colors.textSecondary)
+            Slider(value: value, in: range)
+                .frame(width: 90)
+                .onChange(of: value.wrappedValue) { _, newValue in
+                    onChange(newValue)
+                }
         }
-        .buttonStyle(.plain)
-        .help(item.title)
+    }
+
+    private func toolButton(_ item: AnnotationTool) -> some View {
+        BarButton(
+            chrome: .rounded,
+            isSelected: tool == item,
+            help: item.title,
+            action: {
+                tool = item
+                if item != .crop {
+                    cropRect = nil
+                }
+                if item.isDrawing {
+                    selectedID = nil
+                    // 切到绘制类工具时关闭实况文本，避免抢手势。
+                    isLiveTextActive = false
+                }
+            }
+        ) {
+            Image(systemName: item.symbolName)
+                .font(.system(size: Theme.Size.toolbarIconSize, weight: .regular))
+                .foregroundStyle(
+                    tool == item ? Theme.Colors.textPrimary : Theme.Colors.textSecondary
+                )
+                .frame(width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
+        }
     }
 
     private func iconButton(
         _ title: String,
         symbol: String,
-        tint: Color = .primary,
+        tint: Color? = nil,
+        isSelected: Bool = false,
+        key: KeyEquivalent? = nil,
+        modifiers: EventModifiers = .command,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .medium))
-                .frame(width: 28, height: 26)
-                .foregroundStyle(tint)
-        }
-        .buttonStyle(.plain)
-        .help(title)
+        BarIconButton(
+            title: title,
+            systemImage: symbol,
+            tint: tint,
+            isSelected: isSelected,
+            key: key,
+            modifiers: modifiers,
+            action: action
+        )
     }
 
     private var zoomControls: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Theme.Size.toolbarItemSpacing) {
             Button("适应") { zoomToFit() }
                 .buttonStyle(.link)
-                .font(.system(size: 11))
+                .font(Theme.Typography.compactKeyCap)
             iconButton("缩小", symbol: "minus.magnifyingglass") { zoomOut() }
             Text("\(Int((zoom * 100).rounded()))%")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .frame(width: 42)
+                .font(Theme.Typography.numeric)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .frame(width: 46)
             iconButton("放大", symbol: "plus.magnifyingglass") { zoomIn() }
             Button("原始") { zoomToOriginal() }
                 .buttonStyle(.link)
-                .font(.system(size: 11))
+                .font(Theme.Typography.compactKeyCap)
         }
     }
 

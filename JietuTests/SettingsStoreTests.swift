@@ -137,13 +137,22 @@ struct SettingsStoreTests {
     }
 
     @Test("最近截图按新到旧排序，且去重、限长")
-    func recentCaptures() {
+    func recentCaptures() throws {
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
 
+        // `recentCaptureURLs` 会过滤掉不存在的文件，所以要落真实文件。
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jietu-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
         let store = SettingsStore(defaults: defaults)
-        let first = URL(fileURLWithPath: "/tmp/a.png")
-        let second = URL(fileURLWithPath: "/tmp/b.png")
+        let first = directory.appendingPathComponent("a.png")
+        let second = directory.appendingPathComponent("b.png")
+        try Data().write(to: first)
+        try Data().write(to: second)
+
         store.recordCapture(first)
         store.recordCapture(second)
         #expect(store.recentCaptureURLs == [second, first])
@@ -154,7 +163,9 @@ struct SettingsStoreTests {
 
         // 超出上限后只保留最近的若干条。
         for index in 0..<(SettingsStore.maxRecentCaptures + 4) {
-            store.recordCapture(URL(fileURLWithPath: "/tmp/\(index).png"))
+            let url = directory.appendingPathComponent("\(index).png")
+            try Data().write(to: url)
+            store.recordCapture(url)
         }
         #expect(store.recentCaptureURLs.count == SettingsStore.maxRecentCaptures)
 

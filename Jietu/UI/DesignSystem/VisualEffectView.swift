@@ -1,28 +1,29 @@
 import AppKit
 import SwiftUI
 
-/// 把 `NSVisualEffectView` 的毛玻璃带进 SwiftUI。
+/// 原生 vibrancy 背景；macOS 26 上这些材质由系统用 Liquid Glass 渲染。
 ///
 /// 注意 `state = .active`：截图的 HUD 是非激活面板，不强制 active 的话
 /// 磨砂层会跟着 App 的激活状态忽明忽暗。
-struct VisualEffectBackground: NSViewRepresentable {
+///
+/// 外观**不锁定**，跟随窗口；表面的明暗由 `Theme.Colors.panelScrim` 决定。
+///
+/// @author ixxxxoooo
+struct VisualEffectView: NSViewRepresentable {
     var material: NSVisualEffectView.Material = .hudWindow
-    var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
+    var blending: NSVisualEffectView.BlendingMode = .behindWindow
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = material
-        view.blendingMode = blendingMode
+        view.blendingMode = blending
         view.state = .active
         view.isEmphasized = false
-        // 显式锁定深色，不跟随系统外观。
-        view.appearance = NSAppearance(named: .darkAqua)
         return view
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
-        nsView.blendingMode = blendingMode
-        nsView.appearance = NSAppearance(named: .darkAqua)
+        nsView.blendingMode = blending
     }
 }
