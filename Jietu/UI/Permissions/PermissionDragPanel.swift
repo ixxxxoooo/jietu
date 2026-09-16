@@ -101,6 +101,8 @@ final class PermissionDragController {
 
     private var panel: PermissionDragPanel?
     private var timer: Timer?
+    /// 拖拽中的状态：兜底用（见 tick）。
+    private var isDraggingApp = false
     /// 连续几次找不到系统设置窗口（窗口关了就当收工）。
     private var misses = 0
     private let missLimit = 8
@@ -134,6 +136,7 @@ final class PermissionDragController {
                     onOpenSettings: { [weak self] in self?.reopenSettings() },
                     onClose: { [weak self] in self?.close() },
                     onDragStateChange: { [weak self] dragging in
+                        self?.isDraggingApp = dragging
                         self?.panel?.setDraggingPassthrough(dragging)
                     }
                 )
@@ -144,8 +147,10 @@ final class PermissionDragController {
         startTracking()
     }
 
+    /// 「设置」按钮：URL 在「已经停在这一栏」时是 no-op，所以还要显式激活一次。
     private func reopenSettings() {
         ScreenCapturePermission.openSystemSettings()
+        SystemSettingsWindow.activate()
         panel?.orderFrontRegardless()
     }
 
@@ -169,6 +174,12 @@ final class PermissionDragController {
         }
         misses = 0
         panel?.snap(to: SystemSettingsWindow.appKitFrame(fromCG: frame))
+
+        // 兜底：拖拽回调万一没回来（拖到别的 App 上被打断），面板不能卡在鼠标穿透上，
+        // 否则里面的按钮全都点不动。
+        if !isDraggingApp, let panel, panel.ignoresMouseEvents {
+            panel.setDraggingPassthrough(false)
+        }
     }
 }
 

@@ -228,17 +228,12 @@ struct OnboardingView: View {
                 caption(
                     model.suggestsRelaunch
                         ? "已经勾选却还是未授权？点「重启 Jietu」立刻生效。"
-                        : "列表里找不到本 App 时，点系统设置那一栏左下的「+」手动添加。"
+                        : "主按钮会打开系统设置并浮出面板，把里面的卡片拖进列表即可。"
                 )
                 Spacer(minLength: 0)
                 Button("重新检测") { model.refresh() }
                     .buttonStyle(.link)
                     .font(.caption)
-                // 列表里根本看不到本 App 时的出口：清掉旧记录再重新注册一次。
-                Button("重新注册…") { model.reRegisterPermission() }
-                    .buttonStyle(.link)
-                    .font(.caption)
-                    .help("清掉「屏幕录制」里的旧记录并重新申请，让它重新出现在系统设置的列表里")
             }
         }
     }
@@ -449,14 +444,6 @@ final class OnboardingModel {
     func requestAccess() {
         hasTriedGranting = true
         PermissionDragController.shared.present()
-        refresh()
-    }
-
-    /// 「重新注册…」：清掉本 App 在「屏幕录制」里的旧记录，再重新申请一次。
-    func reRegisterPermission() {
-        hasTriedGranting = true
-        ScreenCapturePermission.reRegister()
-        ScreenCapturePermission.openSystemSettings()
         refresh()
     }
 

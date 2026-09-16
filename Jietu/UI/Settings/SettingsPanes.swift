@@ -348,20 +348,13 @@ struct PermissionSettingsPane: View {
                 }
 
                 LabeledContent {
-                    HStack(spacing: Theme.Spacing.md) {
-                        Button("打开系统设置") {
-                            triedGranting = true
-                            ScreenCapturePermission.openSystemSettings()
-                        }
-                        Button("授权屏幕录制") {
-                            triedGranting = true
-                            // 打开系统设置并浮出「把 App 拖进去」的面板：
-                            // 那一栏只列申请过的 App，拖进去等于手动加入并授权。
-                            PermissionDragController.shared.present()
-                            refresh()
-                        }
-                        .help("打开系统设置，并把本 App 拖进列表即可授权")
+                    // 统一走拖拽授权：打开系统设置并浮出面板，把 App 卡片拖进列表即可。
+                    Button("拖拽授权…") {
+                        triedGranting = true
+                        PermissionDragController.shared.present()
+                        refresh()
                     }
+                    .help("打开系统设置并浮出面板，把本 App 的卡片拖进列表")
                 } label: {
                     Text("授权操作")
                 }
@@ -380,7 +373,7 @@ struct PermissionSettingsPane: View {
                 Text(
                     "授权状态每秒复查一次，从系统设置切回来会立刻更新。\n"
                         + "自签名 / Debug 构建有时不会自动出现在系统设置的列表里"
-                        + "（但授权本身照样生效），用「+」手动添加即可。"
+                        + "（但授权本身照样生效），用「拖拽授权…」把本 App 拖进去即可。"
                 )
                     .font(.caption)
                     .foregroundStyle(.secondary)

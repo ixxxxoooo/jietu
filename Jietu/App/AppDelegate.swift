@@ -84,9 +84,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onAuthorizeScreenRecording = { PermissionDragController.shared.present() }
         menuBar.onOpenOnboarding = { [weak self] in self?.showOnboarding() }
         menuBar.onOpenSettings = { [weak self] in self?.showSettings() }
-        menuBar.onReregisterPermission = { [weak self] in
-            self?.reRegisterScreenCapturePermission()
-        }
         menuBar.onRelaunch = { ScreenCapturePermission.relaunchApp() }
         menuBar.onQuit = { NSApp.terminate(nil) }
         menuBar.recentProvider = { [weak self] in self?.settings.recentCaptureURLs ?? [] }
@@ -219,41 +216,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 每次都**现读**，不缓存启动时的快照——用户刚在系统设置里勾完就回来时，
     /// 缓存的旧值会让入口一直说「没权限」。不可用就打开权限引导：
     /// 引导页里既能看到实时状态，也有「重新检测」和「重启 Jietu」两个出口。
-    /// 「重新注册「屏幕录制」权限…」：清掉本 App 的旧记录再重新申请，
-    /// 让它重新出现在系统设置的列表里。清掉后必须重新授权 + 重启才生效。
-    private func reRegisterScreenCapturePermission() {
-        NSApp.activate()
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "重新注册「屏幕录制」权限？"
-        alert.informativeText =
-            "会先清掉本 App 在「屏幕录制」里的旧记录，再重新申请一次。\n"
-            + "注意：这会丢掉当前**已经生效**的授权，需要重新勾选并重启。\n"
-            + "如果只是想让它出现在系统设置的列表里，"
-            + "直接点列表左下的「+」手动添加即可，不用清记录。"
-        alert.addButton(withTitle: "重新注册")
-        alert.addButton(withTitle: "取消")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-
-        ScreenCapturePermission.reRegister()
-        ScreenCapturePermission.openSystemSettings()
-        // 授权后的状态在本次进程里不会刷新，直接引导重启。
-        presentRelaunchPrompt()
-    }
-
-    /// 屏幕录制的授权只在授权之后启动的进程里生效，需要重启时统一走这里。
-    private func presentRelaunchPrompt() {
-        NSApp.activate()
-        let alert = NSAlert()
-        alert.messageText = "需要重启 Jietu"
-        alert.informativeText = "macOS 的屏幕录制授权只在授权之后启动的进程里生效，重启后即可正常截图。"
-        alert.addButton(withTitle: "重启 Jietu")
-        alert.addButton(withTitle: "稍后")
-        if alert.runModal() == .alertFirstButtonReturn {
-            ScreenCapturePermission.relaunchApp()
-        }
-    }
-
     private func requireScreenCapturePermission() -> Bool {
         guard !ScreenCapturePermission.isGranted else { return true }
         logger.notice("capture requested without screen recording permission")

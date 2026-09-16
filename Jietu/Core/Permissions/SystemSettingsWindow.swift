@@ -29,6 +29,18 @@ enum SystemSettingsWindow {
             .frameInCGPoints
     }
 
+    /// 把系统设置拉到前台。
+    ///
+    /// 光靠 settings URL 不够：**已经停在那一栏时它是个 no-op**，窗口不会前置，
+    /// 面板上的「设置」按钮看起来就像坏了。
+    @discardableResult
+    static func activate() -> Bool {
+        NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier)
+            .first { !$0.isTerminated }?
+            .activate(options: [.activateIgnoringOtherApps]) ?? false
+    }
+
     /// cg 矩形 → AppKit 屏幕坐标（原点主屏左下），面板定位要用。
     static func appKitFrame(fromCG rect: CGRect) -> CGRect {
         CGRect(

@@ -54,4 +54,6 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
 - 自签名证书 `Jietu` 目前**未经信任**（`security find-identity -v -p codesigning` 里没有它）。
   想让它自动出现 / 让授权在重编译后更稳，可在「钥匙串访问 › 登录 › Jietu › 显示简介 › 信任」
   把「代码签名」设为「始终信任」。
-- `tccutil reset ScreenCapture <bundle id>` 会**清掉当前生效的授权**，只在确实要重来时用。
+- 授权入口**只有拖拽**：菜单栏「拖拽授权「屏幕录制」…」/ 设置页「拖拽授权…」。
+  刻意不提供 `tccutil reset ScreenCapture <bundle id>` 这类「清记录重来」的入口——
+  它会清掉当前**已经生效**的授权，代价大于收益。
