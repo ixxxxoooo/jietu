@@ -15,11 +15,45 @@ struct AnnotationEditorView: View {
     let baseImage: CGImage
     /// 就地模式：图片在上、工具栏贴在下方，无窗口边框。
     var inline = false
+    /// 初始样式（沿用上次用的工具 / 颜色 / 参数）。
+    var defaults: AnnotationDefaults = .standard
+    /// 样式变化时回报，由外部落盘记住。
+    var onDefaultsChange: ((AnnotationDefaults) -> Void)?
     var onCopy: (CGImage) -> Void
     var onSave: (CGImage) -> Void
     /// 参数二为画布在窗口中的全局坐标（供「原地钉图」定位）。
     var onPin: (CGImage, CGRect) -> Void
     var onClose: () -> Void
+
+    init(
+        baseImage: CGImage,
+        inline: Bool = false,
+        defaults: AnnotationDefaults = .standard,
+        onDefaultsChange: ((AnnotationDefaults) -> Void)? = nil,
+        onCopy: @escaping (CGImage) -> Void,
+        onSave: @escaping (CGImage) -> Void,
+        onPin: @escaping (CGImage, CGRect) -> Void,
+        onClose: @escaping () -> Void
+    ) {
+        self.baseImage = baseImage
+        self.inline = inline
+        self.defaults = defaults
+        self.onDefaultsChange = onDefaultsChange
+        self.onCopy = onCopy
+        self.onSave = onSave
+        self.onPin = onPin
+        self.onClose = onClose
+
+        let defaults = defaults.sanitized
+        _tool = State(initialValue: defaults.tool)
+        _color = State(initialValue: defaults.color)
+        _lineWidth = State(initialValue: defaults.lineWidth)
+        _fontSize = State(initialValue: defaults.fontSize)
+        _mosaicBlock = State(initialValue: defaults.mosaicBlock)
+        _blurRadius = State(initialValue: defaults.blurRadius)
+        _magnifierZoom = State(initialValue: defaults.magnifierZoom)
+        _eraserSize = State(initialValue: defaults.eraserSize)
+    }
 
     @Environment(\.displayScale) private var displayScale
 
@@ -165,6 +199,23 @@ struct AnnotationEditorView: View {
         }
         .onDisappear { removeScrollMonitor() }
         .onChange(of: bufferScale) { _, _ in ensurePreviewBase() }
+        .onChange(of: currentDefaults) { _, newValue in
+            onDefaultsChange?(newValue)
+        }
+    }
+
+    /// 当前样式的快照，用于回写「记住上次用的样式」。
+    private var currentDefaults: AnnotationDefaults {
+        AnnotationDefaults(
+            tool: tool,
+            color: color,
+            lineWidth: lineWidth,
+            fontSize: fontSize,
+            mosaicBlock: mosaicBlock,
+            blurRadius: blurRadius,
+            magnifierZoom: magnifierZoom,
+            eraserSize: eraserSize
+        )
     }
 
     private var canvasArea: some View {

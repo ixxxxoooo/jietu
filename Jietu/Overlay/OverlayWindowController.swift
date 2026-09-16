@@ -34,6 +34,12 @@ final class OverlayWindowController {
         set { canvas.onPinImage = newValue }
     }
 
+    /// 就地标注的样式变更（工具 / 颜色 / 参数），由 Coordinator 转给外部记住。
+    var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)? {
+        get { canvas.onAnnotationDefaultsChange }
+        set { canvas.onAnnotationDefaultsChange = newValue }
+    }
+
     /// 本遮罩覆盖的显示器 AppKit 全局范围，用来判断鼠标落在哪块屏。
     var screenFrame: CGRect { window.frame }
 
@@ -52,7 +58,8 @@ final class OverlayWindowController {
         screen: NSScreen,
         displayIndex: Int,
         displayCount: Int,
-        inlineMode: Bool
+        inlineMode: Bool,
+        annotationDefaults: AnnotationDefaults = .standard
     ) {
         self.snapshot = snapshot
         canvas = OverlayCanvasView(
@@ -62,6 +69,7 @@ final class OverlayWindowController {
             displayCount: displayCount
         )
         canvas.inlineMode = inlineMode
+        canvas.annotationDefaults = annotationDefaults
 
         // 注意：不要用 `NSWindow(contentRect:...screen:)` 直接传 screen.frame。
         // 实测在缩放/副屏上 AppKit 会把原点乘以 backingScale（523 → 1046），

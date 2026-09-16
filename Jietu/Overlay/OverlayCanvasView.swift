@@ -65,6 +65,9 @@ final class OverlayCanvasView: NSView {
     /// 就地工具栏的「下载 / 钉图」回调（钉图额外带选区 local rect，用于原地钉）。
     var onSaveImage: ((CGImage) -> Void)?
     var onPinImage: ((CGImage, CGRect) -> Void)?
+    /// 标注默认样式：就地工具栏开出来时用它，改完回报给外部记住。
+    var annotationDefaults: AnnotationDefaults = .standard
+    var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)?
 
     private enum Phase {
         case selecting
@@ -1313,7 +1316,15 @@ final class OverlayCanvasView: NSView {
     // MARK: Inline toolbar
 
     private func showToolbar() {
+        let seed = annotationDefaults.sanitized
         let model = InlineToolbarModel()
+        model.tool = seed.tool == .crop ? .rectangle : seed.tool
+        model.color = seed.color
+        model.lineWidth = seed.lineWidth
+        model.eraserSize = seed.eraserSize
+        model.mosaicBlock = seed.mosaicBlock
+        model.blurRadius = seed.blurRadius
+        model.magnifierZoom = seed.magnifierZoom
         model.onConfirm = { [weak self] in self?.confirmInline() }
         model.onCancel = { [weak self] in self?.onCancel?() }
         model.onUndo = { [weak self] in self?.inlineUndo() }
@@ -1337,6 +1348,37 @@ final class OverlayCanvasView: NSView {
 
         // 只在颜色/粗细开关变化时重建下方选项条。
         observeOptions(model)
+        observeDefaults(model)
+    }
+
+    /// 工具 / 颜色 / 参数变化时回报，由外部落盘（下次截图沿用）。
+    private func observeDefaults(_ model: InlineToolbarModel) {
+        withObservationTracking {
+            _ = model.tool
+            _ = model.color
+            _ = model.lineWidth
+            _ = model.eraserSize
+            _ = model.mosaicBlock
+            _ = model.blurRadius
+            _ = model.magnifierZoom
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                guard let self, self.toolbarModel === model else { return }
+                self.onAnnotationDefaultsChange?(
+                    AnnotationDefaults(
+                        tool: model.tool,
+                        color: model.color,
+                        lineWidth: model.lineWidth,
+                        fontSize: self.annotationDefaults.fontSize,
+                        mosaicBlock: model.mosaicBlock,
+                        blurRadius: model.blurRadius,
+                        magnifierZoom: model.magnifierZoom,
+                        eraserSize: model.eraserSize
+                    )
+                )
+                self.observeDefaults(model)
+            }
+        }
     }
 
     private func hideToolbar() {

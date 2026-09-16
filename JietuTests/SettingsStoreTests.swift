@@ -72,6 +72,51 @@ struct SettingsStoreTests {
         #expect(store.hotkey(for: .areaCapture) == legacy)
     }
 
+    @Test("标注默认样式默认值符合预期，且能持久化")
+    func annotationDefaults() {
+        let (defaults, suite) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let store = SettingsStore(defaults: defaults)
+        #expect(store.annotationDefaults == .standard)
+
+        var updated = AnnotationDefaults.standard
+        updated.tool = .blur
+        updated.color = .blue
+        updated.lineWidth = 11
+        store.annotationDefaults = updated
+
+        let reloaded = SettingsStore(defaults: defaults)
+        #expect(reloaded.annotationDefaults == updated)
+    }
+
+    @Test("存档里的越界样式会被夹回合法范围")
+    func sanitizesStoredAnnotationDefaults() throws {
+        let (defaults, suite) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let broken = AnnotationDefaults(
+            tool: .magnifier,
+            color: RGBAColor(red: 2, green: -1, blue: 0.5, alpha: 1),
+            lineWidth: 999,
+            fontSize: 0,
+            mosaicBlock: -5,
+            blurRadius: 9999,
+            magnifierZoom: 0.1,
+            eraserSize: 0
+        )
+        defaults.set(try JSONEncoder().encode(broken), forKey: "annotation.defaults")
+
+        let store = SettingsStore(defaults: defaults)
+        #expect(store.annotationDefaults.tool == .magnifier)
+        #expect(store.annotationDefaults.lineWidth == 24)
+        #expect(store.annotationDefaults.fontSize == 10)
+        #expect(store.annotationDefaults.blurRadius == 60)
+        #expect(store.annotationDefaults.magnifierZoom == 1.5)
+        #expect(store.annotationDefaults.eraserSize == 8)
+        #expect(store.annotationDefaults.color == RGBAColor(red: 1, green: 0, blue: 0.5, alpha: 1))
+    }
+
     @Test("写入后重新读取能恢复")
     func persists() {
         let (defaults, suite) = makeDefaults()

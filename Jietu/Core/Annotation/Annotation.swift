@@ -5,7 +5,7 @@ import Foundation
 /// 标注工具。
 ///
 /// @author ixxxxoooo
-enum AnnotationTool: String, CaseIterable, Identifiable {
+enum AnnotationTool: String, CaseIterable, Identifiable, Codable {
     case select
     case rectangle
     case ellipse
@@ -69,7 +69,7 @@ enum AnnotationTool: String, CaseIterable, Identifiable {
 /// 与外观无关的 RGBA 颜色。
 ///
 /// @author ixxxxoooo
-struct RGBAColor: Equatable, Hashable {
+struct RGBAColor: Equatable, Hashable, Codable {
     var red: CGFloat
     var green: CGFloat
     var blue: CGFloat
@@ -77,6 +77,15 @@ struct RGBAColor: Equatable, Hashable {
 
     var cgColor: CGColor {
         CGColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
+    }
+
+    /// 夹到 0...1；用于读取可能损坏的存档值。
+    var sanitized: RGBAColor {
+        func clamp(_ value: CGFloat) -> CGFloat {
+            guard value.isFinite else { return 0 }
+            return min(max(value, 0), 1)
+        }
+        return RGBAColor(red: clamp(red), green: clamp(green), blue: clamp(blue), alpha: clamp(alpha))
     }
 
     static let red = RGBAColor(red: 1, green: 0.23, blue: 0.19, alpha: 1)

@@ -229,8 +229,36 @@ struct SettingsView: View {
             Text("就地编辑：截完直接在当前画面上标注，工具栏就地出现。\n独立窗口：截完先显示浮窗，点开后在单独窗口编辑。")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
+            Divider()
+            defaultStyleRow
         }
     }
+
+    /// 当前记住的默认样式（工具 / 颜色 / 参数沿用上次用法）。
+    private var defaultStyleRow: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("默认样式")
+                    .font(.system(size: 13))
+                Text(styleSummary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            Button("恢复默认") { settings.annotationDefaults = .standard }
+        }
+    }
+
+    private var styleSummary: String {
+        let style = settings.annotationDefaults
+        let colorName = Self.colorNames[style.color] ?? "自定义色"
+        return "\(style.tool.title) · \(colorName) · 线宽 \(Int(style.lineWidth)) · 字号 \(Int(style.fontSize))"
+    }
+
+    private static let colorNames: [RGBAColor: String] = [
+        .red: "红", .orange: "橙", .yellow: "黄", .green: "绿",
+        .blue: "蓝", .white: "白", .black: "黑",
+    ]
 
     private var permissionSection: some View {
         VStack(alignment: .leading, spacing: 14) {

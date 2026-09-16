@@ -26,6 +26,9 @@ final class OverlayCoordinator {
     var onSaveImage: ((CGImage) -> Void)?
     /// 钉图（参数二是屏幕坐标矩形，用于原地钉）。
     var onPinImage: ((CGImage, CGRect) -> Void)?
+    /// 就地标注的默认样式（present 时传给工具栏；改动后经 `onAnnotationDefaultsChange` 回报）。
+    var annotationDefaults: AnnotationDefaults = .standard
+    var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)?
 
     var isPresenting: Bool { !controllers.isEmpty }
 
@@ -59,7 +62,8 @@ final class OverlayCoordinator {
                 screen: screen,
                 displayIndex: index + 1,
                 displayCount: session.snapshots.count,
-                inlineMode: inlineMode
+                inlineMode: inlineMode,
+                annotationDefaults: annotationDefaults
             )
             controller.onCancel = { [weak self] in
                 self?.finish(.cancelled, reason: "canvas:cancel")
@@ -78,6 +82,10 @@ final class OverlayCoordinator {
                 let rect = self.screenRect(forLocalRect: localRect, snapshot: snapshot)
                 self.onPinImage?(image, rect)
                 self.finish(.cancelled, reason: "pin")
+            }
+            controller.onAnnotationDefaultsChange = { [weak self] updated in
+                self?.annotationDefaults = updated
+                self?.onAnnotationDefaultsChange?(updated)
             }
             controllers.append(controller)
         }

@@ -81,6 +81,7 @@ final class SettingsStore {
         static let jpegQuality = "behavior.jpegQuality"
         static let quickAccessPosition = "behavior.quickAccessPosition"
         static let editorMode = "behavior.editorMode"
+        static let annotationDefaults = "annotation.defaults"
     }
 
     /// 最近截图最多保留的条数。
@@ -172,6 +173,11 @@ final class SettingsStore {
         didSet { defaults.set(editorMode.rawValue, forKey: Key.editorMode) }
     }
 
+    /// 标注的默认样式：工具 / 颜色 / 线宽 / 字号 / 马赛克块 / 模糊半径 / 放大倍率 / 橡皮大小。
+    var annotationDefaults: AnnotationDefaults {
+        didSet { persistAnnotationDefaults() }
+    }
+
     /// 最近保存的截图路径（新的在前）。
     private(set) var recentCapturePaths: [String] {
         didSet { defaults.set(recentCapturePaths, forKey: Key.recentCapturePaths) }
@@ -218,6 +224,13 @@ final class SettingsStore {
                 .flatMap(QuickAccessPosition.init(rawValue:))) ?? .bottomRight
         self.editorMode =
             (defaults.string(forKey: Key.editorMode).flatMap(EditorMode.init(rawValue:))) ?? .inline
+        if let data = defaults.data(forKey: Key.annotationDefaults),
+            let stored = try? JSONDecoder().decode(AnnotationDefaults.self, from: data)
+        {
+            self.annotationDefaults = stored.sanitized
+        } else {
+            self.annotationDefaults = .standard
+        }
 
         if let path = defaults.string(forKey: Key.saveDirectoryPath) {
             self.saveDirectory = URL(fileURLWithPath: path, isDirectory: true)
@@ -253,5 +266,10 @@ final class SettingsStore {
         )
         guard let data = try? JSONEncoder().encode(resolved) else { return }
         defaults.set(data, forKey: Key.hotkeys)
+    }
+
+    private func persistAnnotationDefaults() {
+        guard let data = try? JSONEncoder().encode(annotationDefaults) else { return }
+        defaults.set(data, forKey: Key.annotationDefaults)
     }
 }

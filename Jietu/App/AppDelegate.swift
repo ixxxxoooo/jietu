@@ -187,6 +187,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlays.onPinImage = { image, screenRect in
             PinWindowController.pin(image: image, on: NSScreen.main, targetFrame: screenRect)
         }
+        overlays.annotationDefaults = settings.annotationDefaults
+        overlays.onAnnotationDefaultsChange = { [weak self] updated in
+            self?.settings.annotationDefaults = updated
+        }
     }
 
     // MARK: - Capture flow
@@ -377,12 +381,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// - Parameter anchor: 选区在屏幕上的矩形（就地编辑时把窗口放到选区附近）。
     private func openAnnotationEditor(_ image: CGImage, anchor: CGRect? = nil) {
-        let controller = AnnotationEditorWindowController(image: image, anchor: anchor)
+        let controller = AnnotationEditorWindowController(
+            image: image,
+            anchor: anchor,
+            annotationDefaults: settings.annotationDefaults
+        )
         controller.onCopy = { rendered in
             CaptureOutput.copyToPasteboard(rendered)
         }
         controller.onSave = { [weak self] rendered in
             self?.saveAs(rendered)
+        }
+        controller.onAnnotationDefaultsChange = { [weak self] updated in
+            self?.settings.annotationDefaults = updated
         }
         controller.onClose = { [weak self, weak controller] in
             guard let self else { return }

@@ -11,16 +11,24 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
     private let image: CGImage
     /// 就地编辑时选区在屏幕上的矩形，用来把窗口放到选区附近。
     private let anchor: CGRect?
+    /// 标注默认样式：开窗时用，改完回写。
+    private let annotationDefaults: AnnotationDefaults
     private var window: NSWindow?
     private var previousActivationPolicy: NSApplication.ActivationPolicy = .accessory
 
     var onCopy: ((CGImage) -> Void)?
     var onSave: ((CGImage) -> Void)?
+    var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)?
     var onClose: (() -> Void)?
 
-    init(image: CGImage, anchor: CGRect? = nil) {
+    init(
+        image: CGImage,
+        anchor: CGRect? = nil,
+        annotationDefaults: AnnotationDefaults = .standard
+    ) {
         self.image = image
         self.anchor = anchor
+        self.annotationDefaults = annotationDefaults
         super.init()
     }
 
@@ -42,6 +50,10 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
         let root = AnnotationEditorView(
             baseImage: image,
             inline: inline,
+            defaults: annotationDefaults,
+            onDefaultsChange: { [weak self] updated in
+                self?.onAnnotationDefaultsChange?(updated)
+            },
             onCopy: { [weak self] rendered in self?.onCopy?(rendered) },
             onSave: { [weak self] rendered in self?.onSave?(rendered) },
             onPin: { [weak self] rendered, frame in
