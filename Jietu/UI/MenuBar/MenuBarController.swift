@@ -25,6 +25,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onOpenSystemSettings: (() -> Void)?
     var onOpenOnboarding: (() -> Void)?
     var onOpenSettings: (() -> Void)?
+    var onReregisterPermission: (() -> Void)?
+    var onRelaunch: (() -> Void)?
     var onQuit: (() -> Void)?
 
     /// 最近截图提供者，菜单每次弹出时拉取一次。
@@ -102,6 +104,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(
             item("打开「屏幕录制」系统设置…", #selector(handleOpenSystemSettings), symbol: nil)
         )
+        // 列表里看不到本 App 时的出口：清掉旧记录再重新注册一次。
+        menu.addItem(
+            item("重新注册「屏幕录制」权限…", #selector(handleReregisterPermission), symbol: nil)
+        )
         menu.addItem(item("权限引导…", #selector(handleOpenOnboarding), symbol: nil))
 
         menu.addItem(.separator())
@@ -109,6 +115,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let preferences = item("偏好设置…", #selector(handleOpenSettings), symbol: "gearshape")
         preferences.keyEquivalent = ","
         menu.addItem(preferences)
+
+        menu.addItem(.separator())
+
+        // 屏幕录制的授权在授权时的那个进程里不生效，卡住时重启是最快的路。
+        menu.addItem(item("重启 Jietu", #selector(handleRelaunch), symbol: "arrow.clockwise"))
 
         menu.addItem(.separator())
 
@@ -334,6 +345,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func handleOpenSettings() {
         onOpenSettings?()
+    }
+
+    @objc private func handleReregisterPermission() {
+        onReregisterPermission?()
+    }
+
+    @objc private func handleRelaunch() {
+        onRelaunch?()
     }
 
     @objc private func handleQuit() {

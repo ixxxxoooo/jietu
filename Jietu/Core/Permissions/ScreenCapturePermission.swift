@@ -35,6 +35,34 @@ enum ScreenCapturePermission {
         CGRequestScreenCaptureAccess()
     }
 
+    /// 让本 App 重新出现在「系统设置 › 屏幕录制」列表里。
+    ///
+    /// 列表里看不到本 App 时（签名身份变过、或列表里那条是旧 bundle id 留下的死记录），
+    /// 先 `tccutil reset` 清掉本 App 的旧记录，再 `CGRequestScreenCaptureAccess()`
+    /// 重新注册一次——macOS 会把它重新列进「屏幕录制」，并再弹一次授权。
+    ///
+    /// - Returns: 重新申请后是否已经拿到授权。
+    @discardableResult
+    static func reRegister() -> Bool {
+        resetSystemEntry()
+        return request()
+    }
+
+    /// 清掉本 App 在「屏幕录制」里的记录（`tccutil reset ScreenCapture <bundle id>`）。
+    static func resetSystemEntry() {
+        guard let bundleID = Bundle.main.bundleIdentifier, !bundleID.isEmpty else { return }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        task.arguments = ["reset", "ScreenCapture", bundleID]
+        do {
+            try task.run()
+            task.waitUntilExit()
+            NSLog("[Jietu] tccutil reset ScreenCapture \(bundleID) -> \(task.terminationStatus)")
+        } catch {
+            NSLog("[Jietu] tccutil reset failed: \(error.localizedDescription)")
+        }
+    }
+
     static func openSystemSettings() {
         guard
             let url = URL(
