@@ -7,9 +7,6 @@ import SwiftUI
 /// **最新的一张在最上面，早的依次在下面**。每张各自计时，到点后向屏幕边缘侧滑并淡出，
 /// 其余浮窗自动补位。全部尺寸一致，只显示图片预览本身。
 ///
-/// 若浮窗是「用户未做任何操作」而自动滑出的，则进入**可唤回**状态：
-/// 由外部（AppDelegate）短暂注册空格热键，按下即 `recallLast()` 把它唤回。
-///
 /// @author ixxxxoooo
 final class QuickAccessPanelController {
     private final class Entry {
@@ -21,8 +18,6 @@ final class QuickAccessPanelController {
         let dragURL: URL?
         var deadline: Date?
         var isHovering = false
-        /// 用户是否对这张浮窗做过操作（复制/保存/标注/钉图/关闭）。
-        var didTakeAction = false
 
         init(
             id: UUID,
@@ -44,11 +39,6 @@ final class QuickAccessPanelController {
     private var entries: [Entry] = []
     private var timer: Timer?
 
-    /// 最近一次「未操作即滑出」的截图，可被空格唤回。
-    private var recallImage: CGImage?
-    private var recallDisplayID: CGDirectDisplayID?
-    private var recallSaveDirectory: URL?
-
     private let inset: CGFloat = Theme.quickAccessInset
     private let gap: CGFloat = 10
     private let appearDuration: TimeInterval = 0.26
@@ -66,19 +56,12 @@ final class QuickAccessPanelController {
     var onDismiss: (() -> Void)?
     /// 浮窗出现 / 全部消失。
     var onVisibilityChanged: ((Bool) -> Void)?
-    /// 可唤回状态变化：true 表示可以注册空格唤回，false 表示应撤销。
-    var onRecallStateChanged: ((Bool) -> Void)?
 
     var isVisible: Bool { !entries.isEmpty }
-
-    /// 最新一张截图（用于空格打开编辑器）。
-    var latestImage: CGImage? { entries.last?.image }
 
     // MARK: - Present
 
     func present(image: CGImage, onDisplay displayID: CGDirectDisplayID, saveDirectory: URL) {
-        clearRecall()
-
         let id = UUID()
         let panelSize = QuickAccessView.panelSize
         let nsImage = NSImage(
@@ -90,11 +73,9 @@ final class QuickAccessPanelController {
         let root = QuickAccessView(
             image: nsImage,
             onCopy: { [weak self] in
-                self?.markAction(id)
                 self?.onCopy?(image)
             },
             onSave: { [weak self] in
-                self?.markAction(id)
                 self?.onSave?(image)
             },
             onAnnotate: { [weak self] in
@@ -102,7 +83,6 @@ final class QuickAccessPanelController {
                 self?.onAnnotate?(image)
             },
             onPin: { [weak self] in
-                self?.markAction(id)
                 self?.onPin?(image)
             },
             onClose: { [weak self] in self?.dismissEntry(id, animated: true) },
@@ -175,38 +155,7 @@ final class QuickAccessPanelController {
             removeDragFile(entry)
         }
         entries.removeAll()
-        clearRecall()
         if hadEntries { onDismiss?() }
-    }
-
-    /// 把最近一张「未操作即滑出」的浮窗唤回。
-    func recallLast() {
-        guard let image = recallImage else { return }
-        let displayID = recallDisplayID ?? CGDirectDisplayID(0)
-        let directory = recallSaveDirectory ?? FileManager.default.temporaryDirectory
-        clearRecall()
-        present(image: image, onDisplay: displayID, saveDirectory: directory)
-    }
-
-    // MARK: - Actions / recall
-
-    private func markAction(_ id: UUID) {
-        entries.first(where: { $0.id == id })?.didTakeAction = true
-    }
-
-    private func setRecall(_ entry: Entry) {
-        recallImage = entry.image
-        recallDisplayID = entry.displayID
-        recallSaveDirectory = entry.saveDirectory
-        onRecallStateChanged?(true)
-    }
-
-    private func clearRecall() {
-        guard recallImage != nil else { return }
-        recallImage = nil
-        recallDisplayID = nil
-        recallSaveDirectory = nil
-        onRecallStateChanged?(false)
     }
 
     // MARK: - Layout
@@ -348,10 +297,7 @@ final class QuickAccessPanelController {
             })
         else { return }
 
-        // 用户没做任何操作就滑出 → 进入可唤回状态。
-        let recallable = !expired.didTakeAction
         dismissEntry(expired.id, animated: true)
-        if recallable { setRecall(expired) }
     }
 
     // MARK: - Temp files
