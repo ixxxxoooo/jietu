@@ -71,58 +71,111 @@ final class ScrollingCaptureSession {
             scroller = nil
         }
 
-        guard let first = try? await capture() else {
+        // 构建长效区域捕获器，避免单帧重复 IPC 查询 shareableContent
+        let regionCapturer = try? await engine.makeRegionCapturer(
+            displayID: target.displayID,
+            regionInPoints: target.regionInPoints
+        )
+
+        guard let first = await captureSettledFrame(capturer: regionCapturer) else {
             logger.error("initial region capture failed")
             return nil
         }
+
+        let stitcher = ScrollStitcher.Session(
+            firstFrame: first,
+            maxFrames: 120,
+            maxPixelHeight: maxPixelHeight
+        )
+
         didCaptureAnything = false
         stitchedHeight = first.height
         onProgress?(stitchedHeight)
         onPreview?(first)
 
-        var result = first
-        var previous = first
         var idleIntervals = 0
 
         while !isStopped, idleIntervals < idleIntervalsToStop, stitchedHeight < maxPixelHeight {
-            // 自动模式：先推一步，再等画面稳定后抓帧。
-            autoScroller?.postScrollStep()
-            try? await Task.sleep(for: .seconds(interval))
+            if mode == .automatic {
+                autoScroller?.postScrollStep()
+            } else {
+                try? await Task.sleep(for: .seconds(interval))
+            }
+
             guard !isStopped else { break }
-            guard let frame = try? await capture(), frame.width == previous.width else {
+
+            guard let frame = await captureSettledFrame(capturer: regionCapturer) else {
                 idleIntervals += 1
                 continue
             }
 
-            guard let shift = ScrollStitcher.offset(previous: previous, next: frame) else {
-                // 对不上：多半是滚太快跳过了内容，等下一拍再看，连续多次就收工。
+            let outcome = stitcher.append(frame: frame)
+            switch outcome {
+            case .appended(let newHeight):
+                stitchedHeight = newHeight
+                didCaptureAnything = true
+                idleIntervals = 0
+                onProgress?(stitchedHeight)
+                if let preview = stitcher.currentPreviewImage() {
+                    onPreview?(preview)
+                }
+
+            case .noNewContent:
                 idleIntervals += 1
-                continue
-            }
-            guard shift > 0 else {
-                idleIntervals += 1
-                continue
-            }
-            guard let merged = ScrollStitcher.append(base: result, next: frame, shift: shift) else {
-                idleIntervals += 1
-                continue
+
+            case .atLimit:
+                break
             }
 
-            result = merged
-            previous = frame
-            stitchedHeight = merged.height
-            didCaptureAnything = true
-            idleIntervals = 0
-            onProgress?(stitchedHeight)
-            onPreview?(merged)
+            if case .atLimit = outcome {
+                break
+            }
         }
 
         guard didCaptureAnything else {
             logger.notice("no scrolling content captured")
             return nil
         }
+
+        let finalImage = stitcher.finish()
         logger.notice("scrolling capture finished at \(self.stitchedHeight)px")
-        return result
+        return finalImage
+    }
+
+    /// 轮询直到两次截取的底层像素数据完全一致（页面平滑动画/重绘沉降完毕）或超时。
+    /// 参考 capcap captureSettledFrame 机制，防止抓取平滑滚动途中的模糊中间态。
+    private func captureSettledFrame(capturer: CaptureEngine.RegionCapturer?) async -> CGImage? {
+        guard let capturer else {
+            return try? await capture()
+        }
+
+        var previousData: CFData?
+        var lastImage: CGImage?
+        var waitMs: UInt64 = 15
+        let deadline = Date().addingTimeInterval(1.2)
+
+        for _ in 0..<12 {
+            guard Date() < deadline, !isStopped else { break }
+            guard let image = try? await capturer.capture() else {
+                try? await Task.sleep(nanoseconds: 25_000_000)
+                continue
+            }
+
+            guard let data = image.dataProvider?.data else {
+                return image
+            }
+
+            if let prev = previousData, CFEqual(prev, data) {
+                return image
+            }
+
+            previousData = data
+            lastImage = image
+            try? await Task.sleep(nanoseconds: waitMs * 1_000_000)
+            waitMs = min(waitMs * 3 / 2, 70)
+        }
+
+        return lastImage
     }
 
     /// 自动模式才建滚动器：往选区中央发合成滚轮，并屏蔽用户在选区里的输入。

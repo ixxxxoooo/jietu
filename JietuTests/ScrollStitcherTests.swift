@@ -154,4 +154,65 @@ struct ScrollStitcherTests {
         // shift 为 0 时不该凭空长高。
         #expect(ScrollStitcher.append(base: first, next: second, shift: 0) == nil)
     }
+
+    @Test("带有固定吸顶栏（Sticky Header）的页面能够正确配准与拼接")
+    func stitchesWithStickyHeader() throws {
+        let width = 160
+        let viewportHeight = 100
+        let headerHeight = 25
+
+        // 构造一个包含 25px 吸顶导航栏与滚动正文的图像生成器
+        func makeFrame(scrollOffset: Int) -> CGImage {
+            let cs = CGColorSpaceCreateDeviceRGB()
+            let ctx = CGContext(
+                data: nil,
+                width: width,
+                height: viewportHeight,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: cs,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )!
+            // 吸顶栏：行 0..<headerHeight 恒定为红色（CGContext 顶部为 viewportHeight - headerHeight）
+            ctx.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+            ctx.fill(CGRect(x: 0, y: viewportHeight - headerHeight, width: width, height: headerHeight))
+
+            // 滚动内容：行 headerHeight..<viewportHeight 随 scrollOffset 移动
+            for y in headerHeight..<viewportHeight {
+                let contentY = (y - headerHeight) + scrollOffset
+                let g = CGFloat((contentY * 31) % 255) / 255.0
+                let b = CGFloat((contentY * 73) % 255) / 255.0
+                ctx.setFillColor(CGColor(red: 0, green: g, blue: b, alpha: 1))
+                ctx.fill(CGRect(x: 0, y: viewportHeight - 1 - y, width: width, height: 1))
+            }
+            return ctx.makeImage()!
+        }
+
+        let f0 = makeFrame(scrollOffset: 0)
+        let f1 = makeFrame(scrollOffset: 15)
+        let f2 = makeFrame(scrollOffset: 30)
+
+        let session = ScrollStitcher.Session(firstFrame: f0)
+        let r1 = session.append(frame: f1)
+        let r2 = session.append(frame: f2)
+
+        #expect(r1 != .noNewContent)
+        #expect(r2 != .noNewContent)
+
+        let result = try #require(session.finish())
+        #expect(result.width == width)
+        #expect(result.height > viewportHeight)
+    }
+
+    @Test("BitmapData 判重：完全相同的画面返回 true，不同的画面返回 false")
+    func bitmapNearlyIdenticalCheck() throws {
+        let source = makeSource()
+        let b1 = try #require(ScrollStitcher.BitmapData(image: source))
+        let b2 = try #require(ScrollStitcher.BitmapData(image: source))
+        #expect(b1.isNearlyIdentical(to: b2))
+
+        let diffSource = TestImage.make(width: 8, height: 80) { _, _ in (255, 255, 255) }
+        let b3 = try #require(ScrollStitcher.BitmapData(image: diffSource))
+        #expect(!b1.isNearlyIdentical(to: b3))
+    }
 }

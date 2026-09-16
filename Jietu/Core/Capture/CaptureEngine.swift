@@ -93,15 +93,41 @@ final class CaptureEngine {
         return image
     }
 
-    /// 抓某个显示器上的一块区域（点坐标、原点左上，相对该显示器）。
-    ///
-    /// 滚动长图靠它反复抓同一块区域：只取需要的那块，比整屏抓再裁省一个数量级的带宽。
-    /// 默认把本 App 排除在画面外，所以浮在选区上的控制条不会被拍进去。
-    func captureRegion(
+    /// 用于高频采样的区域捕获器（如滚动长图）：会话开始前构建一次 Filter 与 Configuration，
+    /// 后续每拍无需反复 IPC 查询 SCShareableContent。
+    final class RegionCapturer {
+        private let filter: SCContentFilter
+        private let configuration: SCScreenshotConfiguration
+        private let displayID: CGDirectDisplayID
+
+        fileprivate init(
+            filter: SCContentFilter,
+            configuration: SCScreenshotConfiguration,
+            displayID: CGDirectDisplayID
+        ) {
+            self.filter = filter
+            self.configuration = configuration
+            self.displayID = displayID
+        }
+
+        func capture() async throws -> CGImage {
+            let output = try await SCScreenshotManager.captureScreenshot(
+                contentFilter: filter,
+                configuration: configuration
+            )
+            guard let image = output.sdrImage ?? output.hdrImage else {
+                throw CaptureError.emptyImage(displayID)
+            }
+            return image
+        }
+    }
+
+    /// 构建一个针对特定选区的长效捕获器（如滚动长图采样循环使用）。
+    func makeRegionCapturer(
         displayID: CGDirectDisplayID,
         regionInPoints: CGRect,
         excludingOwnApplication: Bool = true
-    ) async throws -> CGImage {
+    ) async throws -> RegionCapturer {
         guard ScreenCapturePermission.isGranted else {
             throw CaptureError.permissionDenied
         }
@@ -133,15 +159,24 @@ final class CaptureEngine {
             excludingApplications: ownApplications,
             exceptingWindows: []
         )
+        return RegionCapturer(filter: filter, configuration: configuration, displayID: displayID)
+    }
 
-        let output = try await SCScreenshotManager.captureScreenshot(
-            contentFilter: filter,
-            configuration: configuration
+    /// 抓某个显示器上的一块区域（点坐标、原点左上，相对该显示器）。
+    ///
+    /// 滚动长图靠它反复抓同一块区域：只取需要的那块，比整屏抓再裁省一个数量级的带宽。
+    /// 默认把本 App 排除在画面外，所以浮在选区上的控制条不会被拍进去。
+    func captureRegion(
+        displayID: CGDirectDisplayID,
+        regionInPoints: CGRect,
+        excludingOwnApplication: Bool = true
+    ) async throws -> CGImage {
+        let capturer = try await makeRegionCapturer(
+            displayID: displayID,
+            regionInPoints: regionInPoints,
+            excludingOwnApplication: excludingOwnApplication
         )
-        guard let image = output.sdrImage ?? output.hdrImage else {
-            throw CaptureError.emptyImage(displayID)
-        }
-        return image
+        return try await capturer.capture()
     }
 
     private func shareableContent() async throws -> SCShareableContent {
