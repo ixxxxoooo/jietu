@@ -22,7 +22,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onClearRecents: (() -> Void)?
     var onOpenFolder: (() -> Void)?
     var onOpenHistory: (() -> Void)?
-    var onOpenSystemSettings: (() -> Void)?
+    var onAuthorizeScreenRecording: (() -> Void)?
     var onOpenOnboarding: (() -> Void)?
     var onOpenSettings: (() -> Void)?
     var onReregisterPermission: (() -> Void)?
@@ -102,7 +102,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         permissionItem.isEnabled = false
         menu.addItem(permissionItem)
         menu.addItem(
-            item("打开「屏幕录制」系统设置…", #selector(handleOpenSystemSettings), symbol: nil)
+            item("拖拽授权「屏幕录制」…", #selector(handleAuthorizeScreenRecording), symbol: "hand.draw")
         )
         // 列表里看不到本 App 时的出口：清掉旧记录再重新注册一次。
         menu.addItem(
@@ -335,8 +335,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         onOpenHistory?()
     }
 
-    @objc private func handleOpenSystemSettings() {
-        onOpenSystemSettings?()
+    @objc private func handleAuthorizeScreenRecording() {
+        onAuthorizeScreenRecording?()
     }
 
     @objc private func handleOpenOnboarding() {

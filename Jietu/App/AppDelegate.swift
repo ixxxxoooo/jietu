@@ -81,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onClearRecents = { [weak self] in self?.settings.clearRecentCaptures() }
         menuBar.onOpenFolder = { [weak self] in self?.openSaveFolder() }
         menuBar.onOpenHistory = { [weak self] in self?.showHistory() }
-        menuBar.onOpenSystemSettings = { ScreenCapturePermission.openSystemSettings() }
+        menuBar.onAuthorizeScreenRecording = { PermissionDragController.shared.present() }
         menuBar.onOpenOnboarding = { [weak self] in self?.showOnboarding() }
         menuBar.onOpenSettings = { [weak self] in self?.showSettings() }
         menuBar.onReregisterPermission = { [weak self] in

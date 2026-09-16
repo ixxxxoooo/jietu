@@ -355,13 +355,12 @@ struct PermissionSettingsPane: View {
                         }
                         Button("授权屏幕录制") {
                             triedGranting = true
-                            if ScreenCapturePermission.request() {
-                                refresh()
-                            } else {
-                                // 已经问过 / 被拒过，系统不会再弹窗，直接把人送过去。
-                                ScreenCapturePermission.openSystemSettings()
-                            }
+                            // 打开系统设置并浮出「把 App 拖进去」的面板：
+                            // 那一栏只列申请过的 App，拖进去等于手动加入并授权。
+                            PermissionDragController.shared.present()
+                            refresh()
                         }
+                        .help("打开系统设置，并把本 App 拖进列表即可授权")
                     }
                 } label: {
                     Text("授权操作")

@@ -445,16 +445,11 @@ final class OnboardingModel {
         }
     }
 
-    /// 点「授权屏幕录制」：先走系统申请（只在没问过时弹窗），没弹窗就直接把人送到系统设置。
+    /// 点「授权屏幕录制」：打开系统设置并浮出拖拽面板（那一栏会接受把 .app 拖进去）。
     func requestAccess() {
         hasTriedGranting = true
-        if ScreenCapturePermission.request() {
-            refresh()
-        } else {
-            ScreenCapturePermission.openSystemSettings()
-            // 人切去系统设置期间窗口还在，回来时轮询会接上。
-            refresh()
-        }
+        PermissionDragController.shared.present()
+        refresh()
     }
 
     /// 「重新注册…」：清掉本 App 在「屏幕录制」里的旧记录，再重新申请一次。

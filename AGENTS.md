@@ -46,7 +46,11 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
 
 - 判断权限**别只看系统设置的列表**：自签名 / Debug 构建可能不在列表里，但授权照样生效。
   以 `CGPreflightScreenCaptureAccess()` 和实际能否截图为准。
-- 让 App 出现在列表里：点该栏左下的 **`+`** 手动选中 `Jietu Dev.app`（最可靠）。
+- 让 App 出现在列表里，两条路：
+  1. 点该栏左下的 **`+`** 手动选中 `Jietu Dev.app`；
+  2. 菜单栏 **「拖拽授权「屏幕录制」…」**：打开系统设置并浮出一个面板，把里面的 App 卡片
+     拖进列表即可（那一栏接受拖入）。实现见 `UI/Permissions/`，用 `CGWindowList` 定位系统设置
+     窗口，**不需要辅助功能权限**。
 - 自签名证书 `Jietu` 目前**未经信任**（`security find-identity -v -p codesigning` 里没有它）。
   想让它自动出现 / 让授权在重编译后更稳，可在「钥匙串访问 › 登录 › Jietu › 显示简介 › 信任」
   把「代码签名」设为「始终信任」。
