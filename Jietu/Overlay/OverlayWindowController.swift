@@ -111,6 +111,13 @@ final class OverlayWindowController {
         window.makeFirstResponder(canvas)
     }
 
+    /// 滚动长图：遮罩留在原地当取景框，但**鼠标穿透**，滚轮落到下面那个页面。
+    func enterScrollCaptureChrome() {
+        canvas.setScrollCaptureChrome(true)
+        window.ignoresMouseEvents = true
+        window.orderFrontRegardless()
+    }
+
     func close() {
         window.orderOut(nil)
         window.contentView = nil

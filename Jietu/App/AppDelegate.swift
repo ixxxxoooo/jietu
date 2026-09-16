@@ -19,6 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var scrollingPanel: ScrollingCapturePanelController?
     private var scrollingEscapeMonitor: Any?
     private var isScrollingCancelled = false
+    /// 滚动长图的右侧实时预览。
+    private var scrollingPreview: ScrollingPreviewPanel?
+    /// 本次滚动长图的选区（AppKit 全局坐标）：控制条与预览都贴它定位。
+    private var scrollingSelectionRect: CGRect?
     /// 会话内的截图历史（新截的即时可见，不必先保存）。
     private var sessionHistory: [HistoryItem] = []
     private var annotationEditors: [AnnotationEditorWindowController] = []
@@ -435,14 +439,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         panel.onFinish = { [weak self] in self?.scrollingSession?.stop() }
         panel.onCancel = { [weak self] in self?.cancelScrollingCapture() }
-        panel.present(
-            near: CGRect(
-                x: screenFrame.minX + localRect.minX,
-                y: screenFrame.minY + localRect.minY,
-                width: localRect.width,
-                height: localRect.height
-            )
+
+        let selectionRect = CGRect(
+            x: screenFrame.minX + localRect.minX,
+            y: screenFrame.minY + localRect.minY,
+            width: localRect.width,
+            height: localRect.height
         )
+        scrollingSelectionRect = selectionRect
+        panel.present(near: selectionRect)
         registerScrollingEscapeMonitor()
     }
 
@@ -472,6 +477,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         session.onProgress = { [weak panel] height in
             panel?.update(height: height)
         }
+
+        // 右侧实时预览：贴在选区右边（放不下会自己翻到左边）。
+        let preview = ScrollingPreviewPanel()
+        if let selectionRect = scrollingSelectionRect {
+            preview.present(near: selectionRect)
+        }
+        session.onPreview = { [weak preview] image in
+            preview?.update(image: image)
+        }
+        scrollingPreview = preview
+
         scrollingSession = session
         panel.setRunning(mode: effective)
 
@@ -518,6 +534,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scrollingPanel?.close()
         scrollingPanel = nil
         scrollingSession = nil
+        scrollingPreview?.close()
+        scrollingPreview = nil
+        scrollingSelectionRect = nil
+        // 遮罩在滚动期间留着当取景框，这时候才真正关掉它。
+        overlays.releaseScrollChrome()
 
         let cancelled = isScrollingCancelled
         isScrollingCancelled = false

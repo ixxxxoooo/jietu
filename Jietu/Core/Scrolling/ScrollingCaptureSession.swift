@@ -45,6 +45,8 @@ final class ScrollingCaptureSession {
     /// 当前长图高度（像素），用于控制条显示进度。
     private(set) var stitchedHeight = 0
     var onProgress: ((Int) -> Void)?
+    /// 每拼上新内容回一次长图，供右侧实时预览显示。
+    var onPreview: ((CGImage) -> Void)?
 
     private var isStopped = false
     private var didCaptureAnything = false
@@ -76,6 +78,7 @@ final class ScrollingCaptureSession {
         didCaptureAnything = false
         stitchedHeight = first.height
         onProgress?(stitchedHeight)
+        onPreview?(first)
 
         var result = first
         var previous = first
@@ -111,6 +114,7 @@ final class ScrollingCaptureSession {
             didCaptureAnything = true
             idleIntervals = 0
             onProgress?(stitchedHeight)
+            onPreview?(merged)
         }
 
         guard didCaptureAnything else {

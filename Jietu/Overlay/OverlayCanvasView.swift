@@ -67,6 +67,10 @@ final class OverlayCanvasView: NSView {
     var annotationDefaults: AnnotationDefaults = .standard
     var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)?
 
+    /// 滚动长图期间：遮罩只当取景框（压暗 + 绿框），冻结图与其它装饰全部收起，
+    /// 这样用户能看见下面**真实页面在滚**。
+    private var isScrollCaptureChrome = false
+
     private enum Phase {
         case selecting
         case annotating
@@ -360,6 +364,25 @@ final class OverlayCanvasView: NSView {
         trackingArea = area
     }
 
+    /// 切换「滚动长图取景框」外观（只留压暗 + 选区绿框，窗口由控制器设为鼠标穿透）。
+    func setScrollCaptureChrome(_ on: Bool) {
+        isScrollCaptureChrome = on
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        // 冻结图收起 → 露出下面实时画面；dimLayer / 选区边框保留 → 就是取景框。
+        imageLayer.isHidden = on
+        annotationLayer.isHidden = on
+        handlesLayer.isHidden = on
+        inlineSelectionBorderLayer.isHidden = on
+        inlineHandlesLayer.isHidden = on
+        windowHighlightLayer.isHidden = true
+        sizeLabelLayer.isHidden = on
+        hintLayer.isHidden = on
+        crosshairLayer.isHidden = on
+        crosshairLayer.path = nil
+        CATransaction.commit()
+    }
+
     // MARK: - Rendering
 
     private func updateAllLayers() {
@@ -436,6 +459,7 @@ final class OverlayCanvasView: NSView {
     }
 
     private func updateSizeLabel(_ selection: CGRect) {
+        guard !isScrollCaptureChrome else { return }
         let pixelSize = CGSize(
             width: (selection.width * snapshot.effectiveScale).rounded(),
             height: (selection.height * snapshot.effectiveScale).rounded()
@@ -458,6 +482,7 @@ final class OverlayCanvasView: NSView {
     }
 
     private func updateCrosshair() {
+        guard !isScrollCaptureChrome else { return }
         // 选区定型后收起十字线，避免干扰阅读选框内容。
         guard let cursorPoint, !isSettled else {
             crosshairLayer.path = nil
@@ -498,6 +523,7 @@ final class OverlayCanvasView: NSView {
     }
 
     private func updateHint() {
+        guard !isScrollCaptureChrome else { return }
         let size = snapshot.pixelSize
         var text = String(
             format: "显示器 %d/%d  ·  %.0f×%.0f px  ·  缩放 %.2fx",
@@ -736,6 +762,9 @@ final class OverlayCanvasView: NSView {
                     fromCGRect: hoveredWindow.frameInCGPoints,
                     screen: screen
                 ).intersection(canvasBounds)
+                // 先把选区视觉画出来再交付：滚动长图会把遮罩留着当取景框，
+                // 少了这一步绿框就不会出现。
+                updateAllLayers()
                 commit()
                 return
             }

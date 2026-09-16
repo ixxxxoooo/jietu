@@ -54,7 +54,8 @@ final class ScrollingCapturePanelController {
             defer: false
         )
         panel.isFloatingPanel = true
-        panel.level = .floating
+        // 高于遮罩（滚动长图期间遮罩留着当取景框，压在它下面就看不见了）。
+        panel.level = .screenSaver + 1
         panel.becomesKeyOnlyIfNeeded = true
         panel.isOpaque = false
         panel.backgroundColor = .clear

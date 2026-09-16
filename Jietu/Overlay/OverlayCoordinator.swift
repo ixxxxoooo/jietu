@@ -41,6 +41,9 @@ final class OverlayCoordinator {
     /// `purpose == .regionPick` 时，选区确定后回调（参数是选区所在显示器与 local 矩形）。
     var onRegionPicked: ((DisplaySnapshot, CGRect) -> Void)?
 
+    /// 滚动长图期间遮罩**不关**：只留压暗 + 绿框当取景框（鼠标穿透）。
+    private var isHoldingForScrollCapture = false
+
     var isPresenting: Bool { !controllers.isEmpty }
 
     /// 临时隐藏 / 恢复所有遮罩窗（例如弹系统保存面板时，否则会被遮罩挡住）。
@@ -140,11 +143,13 @@ final class OverlayCoordinator {
     }
 
     private func commit(snapshot: DisplaySnapshot, localRect: CGRect) {
-        // 只要选区（滚动长图）：把矩形交回去，不做裁剪。
+        // 只要选区（滚动长图）：把矩形交回去，**但遮罩留着当取景框**——
+        // 用户要能看着下面的页面滚，右侧还有实时预览。
         if purpose == .regionPick {
-            let picked = onRegionPicked
-            finish(.cancelled, reason: "region-pick")
-            picked?(snapshot, localRect)
+            logger.notice("region picked: holding overlay as scroll-capture chrome")
+            purpose = .screenshot
+            holdForScrollCapture()
+            onRegionPicked?(snapshot, localRect)
             return
         }
 
@@ -188,6 +193,29 @@ final class OverlayCoordinator {
         return CGRect(origin: origin, size: localRect.size)
     }
 
+    /// 滚动长图取景：遮罩留着、切成取景框外观、鼠标穿透，并把前台还给用户原来的 App。
+    private func holdForScrollCapture() {
+        guard isPresenting, !isHoldingForScrollCapture else { return }
+        isHoldingForScrollCapture = true
+        for controller in controllers {
+            controller.enterScrollCaptureChrome()
+        }
+        // 页面得能滚：把前台还给用户原本在用的 App。
+        if let previousApplication,
+            previousApplication.bundleIdentifier != Bundle.main.bundleIdentifier
+        {
+            previousApplication.activate()
+        }
+        previousApplication = nil
+    }
+
+    /// 滚动长图结束：这时候才真正关掉遮罩。
+    func releaseScrollChrome() {
+        guard isHoldingForScrollCapture else { return }
+        isHoldingForScrollCapture = false
+        finish(.cancelled, reason: "scroll-capture-released")
+    }
+
     private func finish(_ outcome: Outcome, reason: String) {
         guard isPresenting else { return }
         // 用途用完即复位，调用方不必记着清：
@@ -199,6 +227,7 @@ final class OverlayCoordinator {
             NSEvent.removeMonitor(escapeMonitor)
             self.escapeMonitor = nil
         }
+        isHoldingForScrollCapture = false
         for controller in controllers {
             controller.close()
         }
