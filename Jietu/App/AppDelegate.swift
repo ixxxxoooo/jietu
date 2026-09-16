@@ -16,11 +16,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 会话内的截图历史（新截的即时可见，不必先保存）。
     private var sessionHistory: [HistoryItem] = []
     private var annotationEditors: [AnnotationEditorWindowController] = []
-    private var hotkeyRegistrationID: UInt32?
+    /// 动作 → Carbon 热键引用 id。
+    private var hotkeyIDs: [HotkeyAction: UInt32] = [:]
+    /// 动作 → 当前真正生效的组合键，注册失败时用它回滚。
+    private var activeHotkeys: [HotkeyAction: Hotkey] = [:]
     /// 浮窗存在期间注册的「空格 → 打开编辑器」热键。
     private var spaceHotkeyID: UInt32?
-    /// 当前已生效的区域截图热键，注册失败时用它回滚。
-    private var activeHotkey: Hotkey?
 
     /// 启动时已有权限 = 当前进程可直接截图。
     ///
@@ -81,39 +82,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setUpHotkeys() {
-        applyAreaCaptureHotkey(settings.hotkeyAreaCapture)
+        for action in HotkeyAction.allCases {
+            applyHotkey(settings.hotkey(for: action), for: action)
+        }
     }
 
-    /// 注销旧热键并注册新热键。
+    /// 某个热键被触发时执行对应动作。
+    private func perform(_ action: HotkeyAction) {
+        switch action {
+        case .areaCapture:
+            handleAreaCapture()
+        case .windowCapture:
+            handleWindowCapture()
+        case .fullScreenCapture:
+            handleFullScreenCapture()
+        case .timedCapture:
+            handleTimedCapture(after: HotkeyAction.timedCaptureDelay)
+        }
+    }
+
+    /// 只注册、不注销，成功后记录生效组合键。
+    private func register(_ hotkey: Hotkey, for action: HotkeyAction) -> Bool {
+        let id = hotkeys.register(hotkey) { [weak self] in
+            self?.perform(action)
+        }
+        guard let id else { return false }
+        hotkeyIDs[action] = id
+        activeHotkeys[action] = hotkey
+        return true
+    }
+
+    /// 注销某个动作的旧热键并注册新热键。
     ///
     /// Carbon 热键不能原地修改，设置页改了组合键只能走这条路径重注册。
-    /// 注册失败（多半是被别的 App 占用）时会回滚到上一个可用组合键并返回 false。
+    /// 注册失败（被别的 App 占用，或与另一个动作撞车）时回滚到上一个可用组合键并返回 false。
     @discardableResult
-    private func applyAreaCaptureHotkey(_ hotkey: Hotkey) -> Bool {
-        let previous = activeHotkey
+    private func applyHotkey(_ hotkey: Hotkey, for action: HotkeyAction) -> Bool {
+        let previous = activeHotkeys[action]
 
-        if let hotkeyRegistrationID {
-            hotkeys.unregister(hotkeyRegistrationID)
-            self.hotkeyRegistrationID = nil
+        if let id = hotkeyIDs[action] {
+            hotkeys.unregister(id)
+            hotkeyIDs[action] = nil
         }
 
-        let id = hotkeys.register(hotkey) { [weak self] in
-            self?.handleAreaCapture()
+        // 同一组合键不能绑两个动作，Carbon 那边只会静默失败，这里先给出可读原因。
+        if let clash = activeHotkeys.first(where: { $0.key != action && $0.value == hotkey })?.key {
+            logger.error(
+                "hotkey \(hotkey.displayString, privacy: .public) already bound to \(clash.rawValue, privacy: .public)"
+            )
+            if let previous { register(previous, for: action) }
+            return false
         }
-        if let id {
-            hotkeyRegistrationID = id
-            activeHotkey = hotkey
-            logger.notice("registered hotkey \(hotkey.displayString, privacy: .public)")
+
+        if register(hotkey, for: action) {
+            logger.notice(
+                "registered \(action.rawValue, privacy: .public) hotkey \(hotkey.displayString, privacy: .public)"
+            )
             return true
         }
 
-        logger.error("failed to register hotkey \(hotkey.displayString, privacy: .public)")
+        logger.error(
+            "failed to register \(action.rawValue, privacy: .public) hotkey \(hotkey.displayString, privacy: .public)"
+        )
         // 回滚：把上一个可用的组合键重新注册回来，避免用户彻底失去快捷键。
-        if let previous {
-            hotkeyRegistrationID = hotkeys.register(previous) { [weak self] in
-                self?.handleAreaCapture()
-            }
-        }
+        if let previous { register(previous, for: action) }
         return false
     }
 
@@ -502,14 +534,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showSettings() {
         if settingsWindow == nil {
             let controller = SettingsWindowController(settings: settings)
-            controller.onHotkeyChange = { [weak self] hotkey in
+            controller.onHotkeyChange = { [weak self] action, hotkey in
                 guard let self else { return }
-                guard self.applyAreaCaptureHotkey(hotkey) else {
+                guard self.applyHotkey(hotkey, for: action) else {
                     // 回滚设置里的组合键，并提示占用。
-                    if let active = self.activeHotkey, self.settings.hotkeyAreaCapture != active {
-                        self.settings.hotkeyAreaCapture = active
+                    if let active = self.activeHotkeys[action], self.settings.hotkey(for: action) != active {
+                        self.settings.setHotkey(active, for: action)
                     }
-                    self.presentHotkeyFailure(hotkey)
+                    self.presentHotkeyFailure(hotkey, action: action)
                     return
                 }
             }
@@ -519,12 +551,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// 热键被占用时的提示。
-    private func presentHotkeyFailure(_ hotkey: Hotkey) {
+    private func presentHotkeyFailure(_ hotkey: Hotkey, action: HotkeyAction) {
         NSApp.activate()
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "快捷键 \(hotkey.displayString) 注册失败"
-        alert.informativeText = "该组合键可能已被系统或其它 App 占用，已恢复为原来的快捷键。"
+        alert.messageText = "「\(action.title)」的快捷键 \(hotkey.displayString) 注册失败"
+        alert.informativeText = "该组合键可能已被系统、其它 App 或本 App 的其它动作占用，已恢复为原来的快捷键。"
         alert.addButton(withTitle: "好")
         alert.runModal()
     }

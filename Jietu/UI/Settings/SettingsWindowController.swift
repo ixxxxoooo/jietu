@@ -16,7 +16,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var previousActivationPolicy: NSApplication.ActivationPolicy = .accessory
 
     /// 热键改变回调，由 AppDelegate 负责注销旧热键、注册新热键。
-    var onHotkeyChange: ((Hotkey) -> Void)?
+    var onHotkeyChange: ((HotkeyAction, Hotkey) -> Void)?
 
     init(settings: SettingsStore) {
         self.settings = settings
@@ -37,8 +37,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         previousActivationPolicy = NSApp.activationPolicy()
         NSApp.setActivationPolicy(.regular)
 
-        let root = SettingsView(settings: settings) { [weak self] hotkey in
-            self?.onHotkeyChange?(hotkey)
+        let root = SettingsView(settings: settings) { [weak self] action, hotkey in
+            self?.onHotkeyChange?(action, hotkey)
         }
         let hosting = NSHostingView(rootView: root)
         hosting.frame = NSRect(origin: .zero, size: Self.contentSize)

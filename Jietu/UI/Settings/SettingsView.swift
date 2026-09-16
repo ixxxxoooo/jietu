@@ -42,8 +42,8 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 /// @author ixxxxoooo
 struct SettingsView: View {
     @Bindable var settings: SettingsStore
-    /// 热键改变时通知外部重新注册。
-    var onHotkeyChange: (Hotkey) -> Void
+    /// 某个动作的热键改变时通知外部重新注册。
+    var onHotkeyChange: (HotkeyAction, Hotkey) -> Void
 
     @State private var section: SettingsSection = .general
 
@@ -63,9 +63,6 @@ struct SettingsView: View {
             }
         }
         .frame(width: 660, height: 470)
-        .onChange(of: settings.hotkeyAreaCapture) { _, newValue in
-            onHotkeyChange(newValue)
-        }
         .onChange(of: settings.launchAtLogin) { _, newValue in
             LaunchAtLogin.setEnabled(newValue)
         }
@@ -147,8 +144,21 @@ struct SettingsView: View {
     private var hotkeysSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionTitle("快捷键")
-            HotkeyRecorderView(hotkey: $settings.hotkeyAreaCapture)
-            Text("点击右侧按钮后按下新的组合键；至少需要一个修饰键。")
+            ForEach(HotkeyAction.allCases) { action in
+                HotkeyRecorderView(
+                    title: action.title,
+                    subtitle: action.subtitle,
+                    hotkey: Binding(
+                        get: { settings.hotkey(for: action) },
+                        set: { newValue in
+                            settings.setHotkey(newValue, for: action)
+                            onHotkeyChange(action, newValue)
+                        }
+                    )
+                )
+            }
+            Divider()
+            Text("全局热键，点击右侧按钮后按下新的组合键；至少需要一个修饰键，Esc 取消。")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }

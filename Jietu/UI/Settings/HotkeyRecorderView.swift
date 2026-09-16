@@ -8,6 +8,10 @@ import SwiftUI
 ///
 /// @author ixxxxoooo
 struct HotkeyRecorderView: View {
+    /// 动作名，例如「区域截图」。
+    var title: String
+    /// 未录制时展示的说明文案。
+    var subtitle: String
     @Binding var hotkey: Hotkey
 
     @State private var isRecording = false
@@ -17,9 +21,9 @@ struct HotkeyRecorderView: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("区域截图")
+                Text(title)
                     .font(.system(size: 13))
-                Text(isRecording ? "请按下新的组合键，Esc 取消" : "点击右侧按钮可重新录制")
+                Text(statusText)
                     .font(.system(size: 11))
                     .foregroundStyle(hint == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
             }
@@ -38,6 +42,11 @@ struct HotkeyRecorderView: View {
             }
         }
         .onDisappear { stopRecording() }
+    }
+
+    private var statusText: String {
+        if isRecording { return "请按下新的组合键，Esc 取消" }
+        return hint ?? subtitle
     }
 
     /// 进入录制态并挂上本地事件监视器。

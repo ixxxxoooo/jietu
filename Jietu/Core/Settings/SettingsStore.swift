@@ -64,7 +64,10 @@ enum EditorMode: String, CaseIterable, Identifiable {
 @Observable
 final class SettingsStore {
     private enum Key {
-        static let hotkeyAreaCapture = "hotkey.areaCapture"
+        /// 多热键映射（动作 rawValue → 组合键）。
+        static let hotkeys = "hotkeys.map"
+        /// 旧版本只存区域截图一个热键，启动时迁移到 `hotkeys`。
+        static let legacyHotkeyAreaCapture = "hotkey.areaCapture"
         static let copyToClipboard = "behavior.copyToClipboard"
         static let playShutterSound = "behavior.playShutterSound"
         static let saveToDisk = "behavior.saveToDisk"
@@ -83,8 +86,25 @@ final class SettingsStore {
 
     private let defaults: UserDefaults
 
+    /// 各动作的全局热键。缺失的动作回落到 `HotkeyAction.defaultHotkey`。
+    var hotkeys: [HotkeyAction: Hotkey] {
+        didSet { persistHotkeys() }
+    }
+
+    /// 读取某个动作的热键。
+    func hotkey(for action: HotkeyAction) -> Hotkey {
+        hotkeys[action] ?? action.defaultHotkey
+    }
+
+    /// 改写某个动作的热键。
+    func setHotkey(_ hotkey: Hotkey, for action: HotkeyAction) {
+        hotkeys[action] = hotkey
+    }
+
+    /// 区域截图热键（多热键之前的旧入口，保留给已有调用方）。
     var hotkeyAreaCapture: Hotkey {
-        didSet { persistHotkey() }
+        get { hotkey(for: .areaCapture) }
+        set { setHotkey(newValue, for: .areaCapture) }
     }
 
     var copyToClipboard: Bool {
@@ -185,17 +205,30 @@ final class SettingsStore {
         }
 
         if
-            let data = defaults.data(forKey: Key.hotkeyAreaCapture),
+            let data = defaults.data(forKey: Key.hotkeys),
+            let stored = try? JSONDecoder().decode([String: Hotkey].self, from: data)
+        {
+            self.hotkeys = Dictionary(
+                uniqueKeysWithValues: stored.compactMap { raw, hotkey in
+                    HotkeyAction(rawValue: raw).map { ($0, hotkey) }
+                }
+            )
+        } else if
+            let data = defaults.data(forKey: Key.legacyHotkeyAreaCapture),
             let stored = try? JSONDecoder().decode(Hotkey.self, from: data)
         {
-            self.hotkeyAreaCapture = stored
+            // 迁移：旧版本只有一个区域截图热键。
+            self.hotkeys = [.areaCapture: stored]
         } else {
-            self.hotkeyAreaCapture = .captureArea
+            self.hotkeys = [:]
         }
     }
 
-    private func persistHotkey() {
-        guard let data = try? JSONEncoder().encode(hotkeyAreaCapture) else { return }
-        defaults.set(data, forKey: Key.hotkeyAreaCapture)
+    private func persistHotkeys() {
+        let resolved = Dictionary(
+            uniqueKeysWithValues: HotkeyAction.allCases.map { ($0.rawValue, hotkey(for: $0)) }
+        )
+        guard let data = try? JSONEncoder().encode(resolved) else { return }
+        defaults.set(data, forKey: Key.hotkeys)
     }
 }
