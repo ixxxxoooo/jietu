@@ -296,14 +296,15 @@ struct AnnotationSettingsPane: View {
 ///
 /// @author ixxxxoooo
 struct PermissionSettingsPane: View {
-    @State private var granted = ScreenCapturePermission.isGranted
+    @State private var screenRecordingGranted = ScreenCapturePermission.isGranted
+    @State private var accessibilityGranted = AccessibilityPermission.isGranted
     @State private var triedGranting = false
 
     private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     /// 授权晚于本次启动，或引导过授权但状态还没变 → 给「重启」。
     private var suggestsRelaunch: Bool {
-        ScreenCapturePermission.needsRelaunch || (triedGranting && !granted)
+        ScreenCapturePermission.needsRelaunch || (triedGranting && !screenRecordingGranted)
     }
 
     var body: some View {
@@ -311,13 +312,7 @@ struct PermissionSettingsPane: View {
             Section {
                 LabeledContent {
                     HStack(spacing: Theme.Spacing.lg) {
-                        Label(
-                            granted ? "已授权" : "未授权",
-                            systemImage: granted
-                                ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
-                        )
-                        .foregroundStyle(granted ? Color.green : Color.orange)
-
+                        statusLabel(granted: screenRecordingGranted)
                         Button("重新检测") { refresh() }
                             .controlSize(.small)
                             .help("立刻再读一次系统里的授权状态")
@@ -325,7 +320,7 @@ struct PermissionSettingsPane: View {
                 } label: {
                     Text("屏幕录制")
                     Text(
-                        granted
+                        screenRecordingGranted
                             ? (ScreenCapturePermission.needsRelaunch
                                 ? "已经勾选，重启后生效。" : "Jietu 可以正常冻结屏幕并截图。")
                             : "没有它，截图会返回空白画面。"
@@ -352,7 +347,7 @@ struct PermissionSettingsPane: View {
                     // 统一走拖拽授权：打开系统设置并浮出面板，把 App 卡片拖进列表即可。
                     Button("拖拽授权…") {
                         triedGranting = true
-                        PermissionDragController.shared.present()
+                        PermissionDragController.shared.present(pane: .screenRecording)
                         refresh()
                     }
                     .help("打开系统设置并浮出面板，把本 App 的卡片拖进列表")
@@ -369,15 +364,48 @@ struct PermissionSettingsPane: View {
                     }
                 }
             } header: {
-                SettingsSectionHeader(title: "权限")
+                SettingsSectionHeader(title: "屏幕录制")
+            }
+
+            Section {
+                LabeledContent {
+                    HStack(spacing: Theme.Spacing.lg) {
+                        statusLabel(granted: accessibilityGranted)
+                        Button("重新检测") { refresh() }
+                            .controlSize(.small)
+                            .help("立刻再读一次系统里的授权状态")
+                    }
+                } label: {
+                    Text("辅助功能")
+                    Text(
+                        accessibilityGranted
+                            ? "「滚动长图（自动滚动）」可以合成滚轮了。"
+                            : "「滚动长图（自动滚动）」需要它来合成滚轮事件；不授权也能用手动滚动。"
+                    )
+                }
+
+                LabeledContent {
+                    HStack(spacing: Theme.Spacing.md) {
+                        Button("拖拽授权…") {
+                            PermissionDragController.shared.present(pane: .accessibility)
+                            refresh()
+                        }
+                        Button("打开系统设置") { AccessibilityPermission.openSystemSettings() }
+                    }
+                } label: {
+                    Text("授权操作")
+                }
+            } header: {
+                SettingsSectionHeader(title: "辅助功能")
             } footer: {
                 Text(
-                    "授权状态每秒复查一次，从系统设置切回来会立刻更新。\n"
+                    "授权状态每秒复查一次，从系统设置切回来会立刻更新；"
+                        + "辅助功能授权是**现读**的，不用重启。\n"
                         + "自签名 / Debug 构建有时不会自动出现在系统设置的列表里"
                         + "（但授权本身照样生效），用「拖拽授权…」把本 App 拖进去即可。"
                 )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -388,8 +416,18 @@ struct PermissionSettingsPane: View {
         ) { _ in refresh() }
     }
 
+    private func statusLabel(granted: Bool) -> some View {
+        Label(
+            granted ? "已授权" : "未授权",
+            systemImage: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+        )
+        .foregroundStyle(granted ? Color.green : Color.orange)
+    }
+
     private func refresh() {
-        let current = ScreenCapturePermission.isGranted
-        if current != granted { granted = current }
+        let screen = ScreenCapturePermission.isGranted
+        if screen != screenRecordingGranted { screenRecordingGranted = screen }
+        let ax = AccessibilityPermission.isGranted
+        if ax != accessibilityGranted { accessibilityGranted = ax }
     }
 }

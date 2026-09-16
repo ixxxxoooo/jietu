@@ -14,16 +14,20 @@ final class ScrollingCapturePanelController {
     var onFinish: (() -> Void)?
     var onCancel: (() -> Void)?
 
+    private var mode: ScrollingCaptureSession.Mode = .manual
+
     private static var size: NSSize { Theme.Size.scrollingPanel }
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
     /// 贴着选区下方展示（下方放不下就挪到上方）。
-    func present(near screenRect: CGRect) {
+    func present(near screenRect: CGRect, mode: ScrollingCaptureSession.Mode) {
         close()
+        self.mode = mode
 
         let root = ScrollingCapturePanelView(
             height: 0,
+            mode: mode,
             onFinish: { [weak self] in self?.onFinish?() },
             onCancel: { [weak self] in self?.onCancel?() }
         )
@@ -63,6 +67,7 @@ final class ScrollingCapturePanelController {
         guard let hosting else { return }
         hosting.rootView = ScrollingCapturePanelView(
             height: height,
+            mode: mode,
             onFinish: { [weak self] in self?.onFinish?() },
             onCancel: { [weak self] in self?.onCancel?() }
         )
@@ -80,6 +85,7 @@ final class ScrollingCapturePanelController {
 /// @author ixxxxoooo
 struct ScrollingCapturePanelView: View {
     var height: Int
+    var mode: ScrollingCaptureSession.Mode = .manual
     var onFinish: () -> Void
     var onCancel: () -> Void
 
@@ -93,11 +99,15 @@ struct ScrollingCapturePanelView: View {
                     .font(Theme.Typography.bar)
                     .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer(minLength: Theme.Spacing.md)
-                Text(height > 0 ? "已拼接 \(height) px" : "等待滚动…")
+                Text(height > 0 ? "已拼接 \(height) px" : (mode == .automatic ? "准备滚动…" : "等待滚动…"))
                     .font(Theme.Typography.numeric)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
-            Text("匀速滚动，停止约 1.5 秒自动完成。")
+            Text(
+                mode == .automatic
+                    ? "正在自动滚动…任意键停止，也会在到底后自动完成。"
+                    : "匀速滚动，停止约 1.5 秒自动完成。"
+            )
                 .font(Theme.Typography.rowSubtitle)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .lineLimit(1)

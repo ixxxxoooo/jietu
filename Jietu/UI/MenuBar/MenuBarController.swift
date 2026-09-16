@@ -17,7 +17,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onCaptureWindow: (() -> Void)?
     var onCaptureFullScreen: (() -> Void)?
     var onCaptureTimed: ((TimeInterval) -> Void)?
-    var onCaptureScrolling: (() -> Void)?
+    /// 自动滚动（需要辅助功能权限）。
+    var onCaptureScrollingAuto: (() -> Void)?
+    /// 手动滚动。
+    var onCaptureScrollingManual: (() -> Void)?
     var onOpenRecent: ((URL) -> Void)?
     var onClearRecents: (() -> Void)?
     var onOpenFolder: (() -> Void)?
@@ -88,7 +91,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(item("窗口截图", #selector(handleCaptureWindow), symbol: "macwindow"))
         menu.addItem(item("全屏截图", #selector(handleCaptureFullScreen), symbol: "rectangle.fill"))
         menu.addItem(timedCaptureItem())
-        menu.addItem(item("滚动长图…", #selector(handleCaptureScrolling), symbol: "scroll"))
+        menu.addItem(
+            item("滚动长图（自动滚动）…", #selector(handleCaptureScrollingAuto), symbol: "scroll")
+        )
+        menu.addItem(
+            item("滚动长图（手动滚动）…", #selector(handleCaptureScrollingManual), symbol: "scroll")
+        )
 
         menu.addItem(.separator())
 
@@ -309,8 +317,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         onCaptureTimed?(seconds)
     }
 
-    @objc private func handleCaptureScrolling() {
-        onCaptureScrolling?()
+    @objc private func handleCaptureScrollingAuto() {
+        onCaptureScrollingAuto?()
+    }
+
+    @objc private func handleCaptureScrollingManual() {
+        onCaptureScrollingManual?()
     }
 
     @objc private func handleOpenRecent(_ sender: NSMenuItem) {

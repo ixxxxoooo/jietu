@@ -109,13 +109,22 @@ final class PermissionDragController {
 
     private init() {}
 
+    /// 当前正在引导的面板（面板文案 / 打开哪一栏都跟着它）。
+    private var currentPane: PermissionPane = .screenRecording
+
     var isPresenting: Bool { panel != nil }
 
-    /// 打开「屏幕录制」系统设置，并浮出「把 App 拖进去」的面板。
-    func present() {
-        // 先申请一次：没问过会弹窗、同时把本 App 注册进列表；被拒过则直接走拖拽授权。
-        _ = ScreenCapturePermission.request()
-        ScreenCapturePermission.openSystemSettings()
+    /// 打开指定的隐私面板，并浮出「把 App 拖进去」的面板。
+    ///
+    /// - Parameter pane: 屏幕录制 / 辅助功能；默认屏幕录制（保持既有调用点不变）。
+    func present(pane: PermissionPane = .screenRecording) {
+        currentPane = pane
+        // 屏幕录制先申请一次：没问过会弹窗、同时把本 App 注册进列表；
+        // 辅助功能不用在这里申请（`AXIsProcessTrustedWithOptions` 已经问过了）。
+        if pane == .screenRecording {
+            _ = ScreenCapturePermission.request()
+        }
+        pane.openSystemSettings()
         // URL 在「系统设置已经停在这一栏」时是 no-op，再显式激活一次把它拉到前台。
         SystemSettingsWindow.activate()
         showPanel()
@@ -132,9 +141,11 @@ final class PermissionDragController {
     private func showPanel() {
         if panel == nil {
             let appURL = Bundle.main.bundleURL
+            let pane = currentPane
             panel = PermissionDragPanel(
                 content: PermissionDragView(
                     appURL: appURL,
+                    pane: pane,
                     onClose: { [weak self] in self?.close() },
                     onDragStateChange: { [weak self] dragging in
                         self?.isDraggingApp = dragging
@@ -186,6 +197,8 @@ final class PermissionDragController {
 /// @author ixxxxoooo
 struct PermissionDragView: View {
     let appURL: URL
+    /// 正在引导的面板：决定说明文案。
+    var pane: PermissionPane = .screenRecording
     var onClose: () -> Void
     var onDragStateChange: (Bool) -> Void
 
@@ -224,7 +237,7 @@ struct PermissionDragView: View {
 
     private var footer: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.md) {
-            Text("那一栏是接受拖入的：拖进去就等于把它加进列表并授权。")
+            Text(pane.dragHint)
                 .font(Theme.Typography.rowSubtitle)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

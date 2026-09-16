@@ -19,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var scrollingPanel: ScrollingCapturePanelController?
     private var scrollingEscapeMonitor: Any?
     private var isScrollingCancelled = false
+    /// 本次滚动长图的模式（自动 / 手动）。
+    private var scrollingMode: ScrollingCaptureSession.Mode = .manual
     /// 会话内的截图历史（新截的即时可见，不必先保存）。
     private var sessionHistory: [HistoryItem] = []
     private var annotationEditors: [AnnotationEditorWindowController] = []
@@ -77,7 +79,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onCaptureWindow = { [weak self] in self?.handleWindowCapture() }
         menuBar.onCaptureFullScreen = { [weak self] in self?.handleFullScreenCapture() }
         menuBar.onCaptureTimed = { [weak self] seconds in self?.handleTimedCapture(after: seconds) }
-        menuBar.onCaptureScrolling = { [weak self] in self?.handleScrollingCapture() }
+        menuBar.onCaptureScrollingAuto = { [weak self] in
+            self?.handleScrollingCapture(mode: .automatic)
+        }
+        menuBar.onCaptureScrollingManual = { [weak self] in
+            self?.handleScrollingCapture(mode: .manual)
+        }
         menuBar.onOpenRecent = { url in
             NSWorkspace.shared.activateFileViewerSelecting([url])
         }
@@ -114,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .timedCapture:
             handleTimedCapture(after: HotkeyAction.timedCaptureDelay)
         case .scrollingCapture:
-            handleScrollingCapture()
+            handleScrollingCapture(mode: .automatic)
         }
     }
 
@@ -332,9 +339,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Scrolling capture
 
     /// 滚动长图：先用遮罩取一块选区，再由 `ScrollingCaptureSession` 连续采样拼接。
-    private func handleScrollingCapture() {
+    ///
+    /// - Parameter mode: 自动滚动（合成滚轮）/ 手动滚动；自动需要「辅助功能」权限。
+    private func handleScrollingCapture(mode: ScrollingCaptureSession.Mode) {
         guard !overlays.isPresenting, scrollingSession == nil else { return }
         guard requireScreenCapturePermission() else { return }
+        scrollingMode = resolveScrollingMode(mode)
 
         Task { @MainActor in
             do {
@@ -352,7 +362,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 选区确定后启动采样：控制条浮在选区下方，用户手动滚动内容。
+    /// 自动滚动要「辅助功能」权限：没有就先申请，并让用户选「改用手动」或「去系统设置」。
+    private func resolveScrollingMode(
+        _ requested: ScrollingCaptureSession.Mode
+    ) -> ScrollingCaptureSession.Mode {
+        guard requested == .automatic, !AccessibilityPermission.isGranted else { return requested }
+        AccessibilityPermission.request()
+
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "自动滚动需要「辅助功能」权限"
+        alert.informativeText =
+            "系统已弹出授权申请；授权后重试即可自动滚动。\n"
+            + "也可以现在就改用手动滚动：把鼠标放进选区，自己往下滚。"
+        alert.addButton(withTitle: "改用手动滚动")
+        alert.addButton(withTitle: "打开系统设置")
+        if alert.runModal() == .alertSecondButtonReturn {
+            AccessibilityPermission.openSystemSettings()
+        }
+        logger.notice("auto scroll unavailable, falling back to manual")
+        return .manual
+    }
+
+    /// 选区确定后启动采样：控制条浮在选区下方，自动或手动滚动内容。
     private func startScrollingCapture(snapshot: DisplaySnapshot, localRect: CGRect) {
         overlays.purpose = .screenshot
 
@@ -369,13 +402,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // 自动滚动要往「全局 cg 坐标」发事件（原点主屏左上），这里换算一次。
+        let screen = NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID }
+        let globalRect = CGRect(
+            origin: screen.map {
+                DisplayGeometry.cgPoint(fromLocal: localRect.origin, screen: $0)
+            } ?? localRect.origin,
+            size: localRect.size
+        )
+
         let session = ScrollingCaptureSession(
             engine: capture,
             target: ScrollingCaptureSession.Target(
                 displayID: snapshot.displayID,
-                regionInPoints: region
+                regionInPoints: region,
+                regionInGlobalCGPoints: globalRect
             )
         )
+        session.mode = scrollingMode
+        // 自动滚动没有「人手停顿」，4 拍（1 秒）就够判定到底；手动保留 6 拍（1.5 秒）。
+        session.idleIntervalsToStop = scrollingMode == .automatic ? 4 : 6
         let panel = ScrollingCapturePanelController()
         scrollingSession = session
         scrollingPanel = panel
@@ -397,7 +443,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 y: screenFrame.minY + localRect.minY,
                 width: localRect.width,
                 height: localRect.height
-            )
+            ),
+            mode: scrollingMode
         )
         registerScrollingEscapeMonitor()
 
