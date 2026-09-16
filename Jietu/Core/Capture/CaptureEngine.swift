@@ -6,7 +6,7 @@ import os
 /// - 只负责「拿到干净的画面」，不负责任何 UI
 /// - 所有失败路径都必须抛出可诊断的错误（SCK 会静默失败，不能吞掉）
 final class CaptureEngine {
-    private let logger = Logger(subsystem: "com.liwenjiao.jietu", category: "capture")
+    private let logger = Logger(subsystem: "com.ixxxxoooo.jietu", category: "capture")
 
     /// 冻结全部显示器。
     ///

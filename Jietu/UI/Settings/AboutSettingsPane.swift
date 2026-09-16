@@ -52,6 +52,14 @@ struct AboutSettingsPane: View {
                 } header: {
                     SettingsSectionHeader(title: "信息")
                 }
+
+                Section {
+                    ForEach(AboutLink.all) { link in
+                        AboutLinkRow(link: link)
+                    }
+                } header: {
+                    SettingsSectionHeader(title: "链接")
+                }
             }
             .formStyle(.grouped)
 
@@ -91,5 +99,66 @@ struct AboutSettingsPane: View {
         Text("© 2026 Jietu · 截图与标注全部在本机完成")
             .font(.caption2)
             .foregroundStyle(.tertiary)
+    }
+}
+
+/// 关于页「链接」卡片里的一条外部目标。
+///
+/// @author ixxxxoooo
+private struct AboutLink: Identifiable {
+    let id: String
+    let symbol: String
+    let title: String
+    let detail: String
+    let url: URL
+
+    /// 仓库地址取自 git remote，避免写死漂移。
+    private static let repository = "https://github.com/ixxxxoooo/jietu"
+
+    static let all: [AboutLink] = [
+        AboutLink(
+            id: "github", symbol: "chevron.left.forwardslash.chevron.right",
+            title: "GitHub", detail: "github.com/ixxxxoooo/jietu",
+            url: URL(string: repository)!),
+        AboutLink(
+            id: "issues", symbol: "exclamationmark.bubble",
+            title: "问题反馈", detail: "github.com/ixxxxoooo/jietu/issues",
+            url: URL(string: repository + "/issues")!),
+    ]
+}
+
+/// 一条链接：字形 + 标题，右侧是地址与 ↗，点击用浏览器打开。
+///
+/// @author ixxxxoooo
+private struct AboutLinkRow: View {
+    let link: AboutLink
+
+    @State private var hovered = false
+
+    var body: some View {
+        Button {
+            NSWorkspace.shared.open(link.url)
+        } label: {
+            LabeledContent {
+                HStack(spacing: Theme.Spacing.sm) {
+                    Text(link.detail)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(hovered ? .secondary : .tertiary)
+                }
+            } label: {
+                Label {
+                    Text(link.title)
+                } icon: {
+                    Image(systemName: link.symbol)
+                        .font(.system(size: 13, weight: .medium))
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
     }
 }

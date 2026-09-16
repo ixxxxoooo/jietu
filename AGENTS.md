@@ -9,9 +9,9 @@
 xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
   -destination 'platform=macOS' -derivedDataPath .build build
 
-# 2. 重启（先杀旧进程，再从 .build 启动新产物）
-pkill -f "jietu/.build/Build/Products/Debug/Jietu Dev.app"; sleep 1
-open "/Users/liwenjiao/jietu/.build/Build/Products/Debug/Jietu Dev.app"
+# 2. 重启（先杀旧进程，再从 .build 启动新产物；在仓库根目录执行）
+pkill -f "Build/Products/Debug/Jietu Dev.app"; sleep 1
+open ".build/Build/Products/Debug/Jietu Dev.app"
 
 # 3. 提交
 git add -A && git commit -m "<type>: <描述>"
@@ -28,7 +28,7 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
 | | Debug | Release |
 |---|---|---|
 | `PRODUCT_NAME` | `Jietu Dev` | `Jietu` |
-| `PRODUCT_BUNDLE_IDENTIFIER` | `com.liwenjiao.jietu.dev` | `com.liwenjiao.jietu` |
+| `PRODUCT_BUNDLE_IDENTIFIER` | `com.ixxxxoooo.jietu.dev` | `com.ixxxxoooo.jietu` |
 | `PRODUCT_MODULE_NAME` | `Jietu`（固定，否则 `@testable import Jietu` 会断） | `Jietu` |
 | 产物路径 | `.build/Build/Products/Debug/Jietu Dev.app` | `.../Release/Jietu.app` |
 

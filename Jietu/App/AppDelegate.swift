@@ -2,7 +2,7 @@ import AppKit
 import os
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let logger = Logger(subsystem: "com.liwenjiao.jietu", category: "app")
+    private let logger = Logger(subsystem: "com.ixxxxoooo.jietu", category: "app")
 
     private let settings = SettingsStore()
     private let hotkeys = HotkeyCenter()
@@ -458,9 +458,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if settings.playShutterSound {
                 CaptureOutput.playShutterSound()
             }
+            // 截完立刻进剪贴板：就地编辑期间（甚至取消编辑）也能直接去别处粘贴。
+            // 编辑器中点 ✓ 会再写一次，把带标注的成图覆盖上去。
+            copyToClipboard(image)
             openAnnotationEditor(image, anchor: screenRect)
         case .window:
             deliver(image, onDisplay: displayID)
+        }
+    }
+
+    /// 按设置把成图写进剪贴板（关掉就不再写）。
+    private func copyToClipboard(_ image: CGImage) {
+        guard settings.copyToClipboard else { return }
+        if !CaptureOutput.copyToPasteboard(image) {
+            logger.error("clipboard write failed")
         }
     }
 
@@ -472,9 +483,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if settings.playShutterSound {
             CaptureOutput.playShutterSound()
         }
-        if settings.copyToClipboard, !CaptureOutput.copyToPasteboard(image) {
-            logger.error("clipboard write failed")
-        }
+        copyToClipboard(image)
         if settings.saveToDisk {
             save(image)
         }

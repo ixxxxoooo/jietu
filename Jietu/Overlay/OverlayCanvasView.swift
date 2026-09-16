@@ -8,7 +8,7 @@ import os
 /// 鼠标移动只更新十字线、放大镜、尺寸标签这几个小图层。若把图像画进 `draw(_:)`，
 /// 6K 分辨率下每帧都要重新合成整屏，拖动会明显掉帧。
 final class OverlayCanvasView: NSView {
-    private let logger = Logger(subsystem: "com.liwenjiao.jietu", category: "overlay")
+    private let logger = Logger(subsystem: "com.ixxxxoooo.jietu", category: "overlay")
 
     // MARK: - Inputs
 

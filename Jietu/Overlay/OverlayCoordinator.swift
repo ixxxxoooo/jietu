@@ -14,7 +14,7 @@ final class OverlayCoordinator {
         )
     }
 
-    private let logger = Logger(subsystem: "com.liwenjiao.jietu", category: "overlay")
+    private let logger = Logger(subsystem: "com.ixxxxoooo.jietu", category: "overlay")
     private var controllers: [OverlayWindowController] = []
     private var session: CaptureSession?
     private var escapeMonitor: Any?

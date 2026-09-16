@@ -2,7 +2,7 @@ import Foundation
 
 /// 当前构建的身份信息。
 ///
-/// Debug 构建是**独立的开发渠道**（独立 bundle id `com.liwenjiao.jietu.dev` 与展示名
+/// Debug 构建是**独立的开发渠道**（独立 bundle id `com.ixxxxoooo.jietu.dev` 与展示名
 /// 「Jietu Dev」，对齐参考项目 `project.yml` 里 Debug 用 `PRODUCT_NAME` +
 /// `PRODUCT_BUNDLE_IDENTIFIER` 分渠道的做法）：本地调试产生的 TCC 授权、偏好、
 /// 登录项都不会和正式版互相污染，系统设置里也能一眼认出该给哪一条打勾。
