@@ -177,17 +177,6 @@ enum AnnotationRenderer {
                     imageHeight: imageHeight
                 )
 
-            case .magnifier(let rect, let zoom):
-                drawMagnifier(
-                    rect,
-                    zoom: zoom,
-                    base: base,
-                    lineWidth: annotation.lineWidth,
-                    color: annotation.color,
-                    in: context,
-                    imageHeight: imageHeight
-                )
-
             case .counter(let center, let value, let leader):
                 drawCounter(
                     value,
@@ -522,45 +511,6 @@ enum AnnotationRenderer {
                 height: source.height
             )
         )
-        context.restoreGState()
-    }
-
-    /// 放大镜：把框内的画面按倍率放大后填进椭圆，再描一圈边。
-    private static func drawMagnifier(
-        _ rect: CGRect,
-        zoom: CGFloat,
-        base: CGImage,
-        lineWidth: CGFloat,
-        color: RGBAColor,
-        in context: CGContext,
-        imageHeight: Int
-    ) {
-        guard rect.width > 2, rect.height > 2 else { return }
-        let factor = max(1, zoom)
-        let target = contextRect(rect, imageHeight: imageHeight)
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-
-        // 以框中心为锚点放大：取框内 1/zoom 大小的源区域填满整框。
-        let sourceSize = CGSize(width: rect.width / factor, height: rect.height / factor)
-        let sourceRect = CGRect(
-            x: center.x - sourceSize.width / 2,
-            y: center.y - sourceSize.height / 2,
-            width: sourceSize.width,
-            height: sourceSize.height
-        ).integral.intersection(CGRect(x: 0, y: 0, width: base.width, height: base.height))
-        guard !sourceRect.isEmpty, let crop = base.cropping(to: sourceRect) else { return }
-
-        context.saveGState()
-        context.addEllipse(in: target)
-        context.clip()
-        context.interpolationQuality = .high
-        context.draw(crop, in: target)
-        context.restoreGState()
-
-        context.saveGState()
-        context.setStrokeColor(color.cgColor)
-        context.setLineWidth(max(2, lineWidth))
-        context.strokeEllipse(in: target)
         context.restoreGState()
     }
 

@@ -115,22 +115,4 @@ struct AnnotationRendererTests {
         #expect(farLeft.red <= 40)
     }
 
-    @Test("放大镜把内容放大显示")
-    func magnifierZoomsContent() throws {
-        // 只有正中间一个红点，其余全白。
-        let base = TestImage.make(width: 32, height: 32) { x, y in
-            (x == 16 && y == 16) ? (255, 0, 0) : (255, 255, 255)
-        }
-        let annotation = Annotation(
-            kind: .magnifier(CGRect(x: 0, y: 0, width: 32, height: 32), zoom: 4),
-            color: .black,
-            lineWidth: 2
-        )
-        let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [annotation]))
-
-        // 原来 (15,15) 是白的；放大 4 倍后它落在红点边缘，被红点染上颜色。
-        let near = try sample(rendered, 15, 15)
-        #expect(near.red == 255)
-        #expect(near.green < 255)
-    }
 }

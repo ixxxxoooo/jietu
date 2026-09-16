@@ -14,7 +14,6 @@ struct AnnotationDefaults: Equatable, Codable {
     var fontSize: CGFloat
     var mosaicBlock: CGFloat
     var blurRadius: CGFloat
-    var magnifierZoom: CGFloat
     var eraserSize: CGFloat
 
     static let standard = AnnotationDefaults()
@@ -26,7 +25,6 @@ struct AnnotationDefaults: Equatable, Codable {
         fontSize: CGFloat = 22,
         mosaicBlock: CGFloat = 10,
         blurRadius: CGFloat = 12,
-        magnifierZoom: CGFloat = 2,
         eraserSize: CGFloat = 28
     ) {
         self.tool = tool
@@ -35,7 +33,6 @@ struct AnnotationDefaults: Equatable, Codable {
         self.fontSize = fontSize
         self.mosaicBlock = mosaicBlock
         self.blurRadius = blurRadius
-        self.magnifierZoom = magnifierZoom
         self.eraserSize = eraserSize
     }
 
@@ -46,7 +43,6 @@ struct AnnotationDefaults: Equatable, Codable {
         copy.fontSize = Self.clamp(fontSize, 10...100, fallback: 22)
         copy.mosaicBlock = Self.clamp(mosaicBlock, 4...40, fallback: 10)
         copy.blurRadius = Self.clamp(blurRadius, 2...60, fallback: 12)
-        copy.magnifierZoom = Self.clamp(magnifierZoom, 1.5...6, fallback: 2)
         copy.eraserSize = Self.clamp(eraserSize, 8...120, fallback: 28)
         copy.color = color.sanitized
         return copy

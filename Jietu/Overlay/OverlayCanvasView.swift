@@ -1039,7 +1039,7 @@ final class OverlayCanvasView: NSView {
     private func isMeaningfulDraft(_ annotation: Annotation) -> Bool {
         switch annotation.kind {
         case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _),
-            .blur(let rect, _), .magnifier(let rect, _):
+            .blur(let rect, _):
             return rect.width >= 1.5 || rect.height >= 1.5
         case .arrow(let from, let to, _):
             return hypot(to.x - from.x, to.y - from.y) >= 2
@@ -1210,7 +1210,6 @@ final class OverlayCanvasView: NSView {
         model.eraserSize = seed.eraserSize
         model.mosaicBlock = seed.mosaicBlock
         model.blurRadius = seed.blurRadius
-        model.magnifierZoom = seed.magnifierZoom
         model.onConfirm = { [weak self] in self?.confirmInline() }
         model.onCancel = { [weak self] in self?.onCancel?() }
         model.onUndo = { [weak self] in self?.inlineUndo() }
@@ -1246,7 +1245,6 @@ final class OverlayCanvasView: NSView {
             _ = model.eraserSize
             _ = model.mosaicBlock
             _ = model.blurRadius
-            _ = model.magnifierZoom
         } onChange: { [weak self] in
             DispatchQueue.main.async {
                 guard let self, self.toolbarModel === model else { return }
@@ -1258,7 +1256,6 @@ final class OverlayCanvasView: NSView {
                         fontSize: self.annotationDefaults.fontSize,
                         mosaicBlock: model.mosaicBlock,
                         blurRadius: model.blurRadius,
-                        magnifierZoom: model.magnifierZoom,
                         eraserSize: model.eraserSize
                     )
                 )
@@ -1281,9 +1278,16 @@ final class OverlayCanvasView: NSView {
             _ = model.showColor
             _ = model.showWidth
             _ = model.isLiveTextActive
+            // 编辑文字时改颜色 / 粗细，输入框要跟着变（所见即所得）。
+            _ = model.color
+            _ = model.lineWidth
         } onChange: { [weak self] in
             DispatchQueue.main.async {
                 guard let self else { return }
+                if let field = self.textField, self.inlineEditingTextID != nil {
+                    self.applyInlineTextStyle(field, model: model)
+                    self.fitInlineTextField()
+                }
                 self.rebuildOptionsToolbar()
                 self.updateLiveTextOverlay()
                 if self.toolbarModel === model {
@@ -1345,12 +1349,18 @@ final class OverlayCanvasView: NSView {
         guard let options = optionsToolbarHost else { return }
         options.layoutSubtreeIfNeeded()
         let size = options.fittingSize
-        // 靠右对齐到颜色 / 粗细按钮下方。
-        let optionsOrigin = CGPoint(
-            x: main.frame.maxX - size.width,
-            y: main.frame.minY - 8 - size.height
+        // 居中到**刚才点的那个按钮**下方（按钮的 midX 由 SwiftUI 上报）。
+        let anchorX = main.frame.minX + (toolbarModel?.optionsAnchorX ?? mainSize.width)
+        let x = min(
+            max(anchorX - size.width / 2, bounds.minX + 8),
+            max(bounds.minX + 8, bounds.maxX - size.width - 8)
         )
-        options.frame = CGRect(origin: optionsOrigin, size: size)
+        options.frame = CGRect(
+            x: x,
+            y: main.frame.minY - 8 - size.height,
+            width: size.width,
+            height: size.height
+        )
     }
 
     // MARK: Eraser (see compose)
@@ -1391,7 +1401,6 @@ final class OverlayCanvasView: NSView {
         case .highlight: return Annotation(kind: .highlight(rect), color: model.color, lineWidth: model.lineWidth)
         case .pixelate: return Annotation(kind: .pixelate(rect, block: model.mosaicBlock), color: model.color, lineWidth: model.lineWidth)
         case .blur: return Annotation(kind: .blur(rect, radius: model.blurRadius), color: model.color, lineWidth: model.lineWidth)
-        case .magnifier: return Annotation(kind: .magnifier(rect, zoom: model.magnifierZoom), color: model.color, lineWidth: model.lineWidth)
         case .arrow: return Annotation(kind: .arrow(from: start, to: current, control: nil), color: model.color, lineWidth: model.lineWidth)
         case .line: return Annotation(kind: .line(from: start, to: current), color: model.color, lineWidth: model.lineWidth)
         case .pen: return Annotation(kind: .pen(points: [start, current]), color: model.color, lineWidth: model.lineWidth)
@@ -1409,7 +1418,7 @@ final class OverlayCanvasView: NSView {
     private func isValidInlineDraft(_ annotation: Annotation) -> Bool {
         switch annotation.kind {
         case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _),
-            .blur(let rect, _), .magnifier(let rect, _):
+            .blur(let rect, _):
             return rect.width >= 3 && rect.height >= 3
         case .arrow(let from, let to, _):
             return hypot(to.x - from.x, to.y - from.y) >= 3
@@ -1422,6 +1431,8 @@ final class OverlayCanvasView: NSView {
 
     /// 统一的原地鼠标处理：先命中已有对象（任意工具下都可编辑），空白处才新建。
     private func inlineMouseDown(_ point: CGPoint, clickCount: Int) {
+        // 点别处一律先把正在编辑的文字落地。
+        commitPendingInlineText()
         let crop = annotationPoint(from: point)
         let tool = toolbarModel?.tool ?? .rectangle
 
@@ -1563,6 +1574,8 @@ final class OverlayCanvasView: NSView {
     private var inlineTextOrigin: CGPoint = .zero
     private var inlineCounterValue = 1
 
+    /// 就地输入文字：**直接落在点击位置**，按最终的字号与颜色显示（所见即所得），
+    /// 不弹任何面板、不铺底色，只有一圈很细的同色边框标出编辑框。
     private func beginInlineText(at cropPoint: CGPoint, editing: Annotation? = nil) {
         guard let model = toolbarModel else { return }
         commitPendingInlineText()
@@ -1576,25 +1589,73 @@ final class OverlayCanvasView: NSView {
             existing = ""
         }
 
-        let scale = max(1, snapshot.effectiveScale)
-        let view = viewPoint(fromAnnotation: cropPoint)
-        let font = NSFont.systemFont(ofSize: max(11, model.lineWidth * 6 / scale))
-        _ = scale
-        let field = NSTextField(
-            frame: CGRect(x: view.x, y: view.y - 16, width: 220, height: 30)
-        )
+        let field = NSTextField(frame: .zero)
         field.stringValue = existing
-        field.isBordered = true
-        field.drawsBackground = true
-        field.backgroundColor = NSColor.black.withAlphaComponent(0.45)
-        field.font = font
-        field.textColor = .white
+        field.isBordered = false
+        field.isBezeled = false
+        field.drawsBackground = false
         field.focusRingType = .none
+        field.usesSingleLineMode = true
+        field.cell?.wraps = false
+        field.cell?.isScrollable = true
+        field.alignment = .left
+        field.wantsLayer = true
         field.target = self
         field.action = #selector(handleInlineTextCommit)
+        applyInlineTextStyle(field, model: model)
         addSubview(field)
         textField = field
+        fitInlineTextField()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(inlineTextDidChange),
+            name: NSControl.textDidChangeNotification,
+            object: field
+        )
         window?.makeFirstResponder(field)
+    }
+
+    /// 写入标注的字号（图像像素）：与提交时用的同一条公式。
+    private static func inlineTextFontSize(lineWidth: CGFloat) -> CGFloat {
+        max(12, lineWidth * 6)
+    }
+
+    /// 字号 / 颜色都跟最终渲染一致（Helvetica + 标注色），这才是「所见即所得」。
+    private func applyInlineTextStyle(_ field: NSTextField, model: InlineToolbarModel) {
+        let scale = max(1, snapshot.effectiveScale)
+        let pointSize = Self.inlineTextFontSize(lineWidth: model.lineWidth) / scale
+        field.font = NSFont(name: "Helvetica", size: pointSize)
+            ?? NSFont.systemFont(ofSize: pointSize)
+        let color = NSColor(cgColor: model.color.cgColor) ?? .labelColor
+        field.textColor = color
+        field.layer?.borderWidth = 1
+        field.layer?.cornerRadius = 2
+        field.layer?.borderColor = color.withAlphaComponent(0.45).cgColor
+        field.frame.origin = inlineTextFieldOrigin(pointSize: pointSize)
+    }
+
+    /// 编辑框左上角对齐点击位置（AppKit 坐标 y 向上）。
+    private func inlineTextFieldOrigin(pointSize: CGFloat) -> CGPoint {
+        let view = viewPoint(fromAnnotation: inlineTextOrigin)
+        return CGPoint(x: view.x, y: view.y - pointSize * 1.4)
+    }
+
+    /// 框贴着文字宽度：不然它会吞掉旁边的点击。
+    private func fitInlineTextField() {
+        guard let field = textField, let font = field.font else { return }
+        let textWidth = (field.stringValue as NSString)
+            .size(withAttributes: [.font: font]).width
+        field.frame = CGRect(
+            x: field.frame.origin.x,
+            y: field.frame.origin.y,
+            width: max(18, textWidth + 8),
+            height: font.pointSize * 1.4
+        )
+    }
+
+    @objc private func inlineTextDidChange() {
+        fitInlineTextField()
     }
 
     @objc private func handleInlineTextCommit() {
@@ -1606,6 +1667,9 @@ final class OverlayCanvasView: NSView {
         let string = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let origin = inlineTextOrigin
         let editingID = inlineEditingTextID
+        NotificationCenter.default.removeObserver(
+            self, name: NSControl.textDidChangeNotification, object: field
+        )
         field.removeFromSuperview()
         textField = nil
         inlineEditingTextID = nil

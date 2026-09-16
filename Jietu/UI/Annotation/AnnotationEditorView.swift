@@ -51,7 +51,6 @@ struct AnnotationEditorView: View {
         _fontSize = State(initialValue: defaults.fontSize)
         _mosaicBlock = State(initialValue: defaults.mosaicBlock)
         _blurRadius = State(initialValue: defaults.blurRadius)
-        _magnifierZoom = State(initialValue: defaults.magnifierZoom)
         _eraserSize = State(initialValue: defaults.eraserSize)
     }
 
@@ -91,7 +90,6 @@ struct AnnotationEditorView: View {
     @State private var fontSize: CGFloat = 22
     @State private var mosaicBlock: CGFloat = 10
     @State private var blurRadius: CGFloat = 12
-    @State private var magnifierZoom: CGFloat = 2
     @State private var counterValue = 1
 
     // MARK: - Interaction
@@ -213,7 +211,6 @@ struct AnnotationEditorView: View {
             fontSize: fontSize,
             mosaicBlock: mosaicBlock,
             blurRadius: blurRadius,
-            magnifierZoom: magnifierZoom,
             eraserSize: eraserSize
         )
     }
@@ -450,19 +447,17 @@ struct AnnotationEditorView: View {
             let width = max(90, measured.width * pointsPerPixel + 16)
             let height = max(24, font * 1.6 + 8)
 
+            // 就地输入：和最终渲染同一套字体 / 颜色，不铺底色，
+            // 只有一圈很细的同色边框标出编辑框（所见即所得）。
             TextField("文字", text: $inlineText)
                 .textFieldStyle(.plain)
-                .font(.system(size: max(11, font)))
+                .font(.custom("Helvetica", size: max(11, font)))
                 .foregroundStyle(color.swiftUIColor)
                 .padding(.horizontal, 6)
                 .frame(width: width, height: height)
-                .background(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(Color.black.opacity(0.35))
-                )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .strokeBorder(Color.accentColor, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .strokeBorder(color.swiftUIColor.opacity(0.45), lineWidth: 1)
                 )
                 .position(
                     x: inlineOriginView.x + width / 2,
@@ -516,9 +511,10 @@ struct AnnotationEditorView: View {
             colorButton
             widthButton
 
-            Spacer(minLength: Theme.Spacing.xl)
-
+            // 缩放紧跟在颜色 / 粗细后面：左边不再留一大片空。
             zoomControls
+
+            Spacer(minLength: Theme.Spacing.md)
 
             separator
 
@@ -538,7 +534,6 @@ struct AnnotationEditorView: View {
             iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
             iconButton("保存", symbol: "square.and.arrow.down") { exportToSave() }
             iconButton("钉图", symbol: "pin") { exportToPin() }
-            iconButton("关闭", symbol: "xmark", key: .escape, modifiers: []) { onClose() }
         }
         .padding(.horizontal, Theme.Spacing.xl)
         .padding(.vertical, Theme.Spacing.md)
@@ -616,8 +611,8 @@ struct AnnotationEditorView: View {
         ) {
             Circle()
                 .fill(color.swiftUIColor)
-                .frame(width: 20, height: 20)
-                .overlay(Circle().strokeBorder(Theme.Colors.border, lineWidth: 1.2))
+                .frame(width: 14, height: 14)
+                .overlay(Circle().strokeBorder(Theme.Colors.border, lineWidth: 1))
                 .frame(width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
         }
     }
@@ -656,12 +651,6 @@ struct AnnotationEditorView: View {
                 contextualSlider(symbol: "drop.halffull", value: $blurRadius, range: 2...60) {
                     newValue in
                     applyToSelected { $0.withBlurRadius(newValue) }
-                }
-            case .magnifier:
-                contextualSlider(
-                    symbol: "magnifyingglass.circle", value: $magnifierZoom, range: 1.5...6
-                ) { newValue in
-                    applyToSelected { $0.withMagnifierZoom(newValue) }
                 }
             default:
                 EmptyView()
@@ -735,20 +724,16 @@ struct AnnotationEditorView: View {
         )
     }
 
+    /// 缩放：缩小 / 百分比 / 放大 / 恢复原始大小（图标，不带文字）。
     private var zoomControls: some View {
         HStack(spacing: Theme.Size.toolbarItemSpacing) {
-            Button("适应") { zoomToFit() }
-                .buttonStyle(.link)
-                .font(Theme.Typography.compactKeyCap)
             iconButton("缩小", symbol: "minus.magnifyingglass") { zoomOut() }
             Text("\(Int((zoom * 100).rounded()))%")
                 .font(Theme.Typography.numeric)
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .frame(width: 46)
+                .frame(width: 42)
             iconButton("放大", symbol: "plus.magnifyingglass") { zoomIn() }
-            Button("原始") { zoomToOriginal() }
-                .buttonStyle(.link)
-                .font(Theme.Typography.compactKeyCap)
+            iconButton("恢复原始大小", symbol: "arrow.counterclockwise") { zoomToOriginal() }
         }
     }
 
@@ -815,7 +800,6 @@ struct AnnotationEditorView: View {
             switch hit.kind {
             case .pixelate(_, let block): mosaicBlock = block
             case .blur(_, let radius): blurRadius = radius
-            case .magnifier(_, let zoom): magnifierZoom = zoom
             case .text(_, _, let size), .callout(_, _, _, _, let size): fontSize = size
             default: break
             }
@@ -920,8 +904,6 @@ struct AnnotationEditorView: View {
             return Annotation(kind: .line(from: start, to: current), color: color, lineWidth: lineWidth)
         case .blur:
             return Annotation(kind: .blur(rect, radius: blurRadius), color: color, lineWidth: lineWidth)
-        case .magnifier:
-            return Annotation(kind: .magnifier(rect, zoom: magnifierZoom), color: color, lineWidth: lineWidth)
         case .pen:
             return Annotation(kind: .pen(points: [start, current]), color: color, lineWidth: lineWidth)
         case .counter:
@@ -1156,7 +1138,7 @@ struct AnnotationEditorView: View {
 
         if !rotated {
             switch annotation.kind {
-            case .rectangle, .ellipse, .highlight, .pixelate, .pen, .text, .blur, .magnifier:
+            case .rectangle, .ellipse, .highlight, .pixelate, .pen, .text, .blur:
                 handles.append(contentsOf: ShapeGeometry.resizeHandles(for: annotation))
             default:
                 break
@@ -1210,11 +1192,6 @@ struct AnnotationEditorView: View {
     private func zoomOut() {
         hasUserZoomed = true
         zoom = max(Self.minZoom, zoom / 1.25)
-    }
-
-    private func zoomToFit() {
-        hasUserZoomed = false
-        zoom = min(1, fitFactor(for: availableSize))
     }
 
     private func zoomToOriginal() {
@@ -1364,7 +1341,7 @@ struct AnnotationEditorView: View {
     private func isValid(_ annotation: Annotation) -> Bool {
         switch annotation.kind {
         case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _),
-            .blur(let rect, _), .magnifier(let rect, _):
+            .blur(let rect, _):
             return rect.width >= 4 && rect.height >= 4
         case .arrow(let from, let to, _):
             return hypot(to.x - from.x, to.y - from.y) >= 4

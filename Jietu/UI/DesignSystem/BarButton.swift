@@ -46,6 +46,8 @@ struct BarButton<Label: View>: View {
                 .background(shape.fill(fill))
         }
         .buttonStyle(.plain)
+        // 去掉键盘焦点那圈蓝环：工具条靠悬停 / 选中底表达状态，蓝色焦点环只会打架。
+        .focusEffectDisabled()
         .onHover { hovered = $0 }
         .animation(.easeOut(duration: Theme.Duration.hover), value: hovered)
         .keyboardShortcut(if: key, modifiers: modifiers)

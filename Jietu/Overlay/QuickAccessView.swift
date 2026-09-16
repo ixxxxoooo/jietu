@@ -75,17 +75,19 @@ struct QuickAccessView: View {
 
     /// 极细内描边：顶部略亮、往下淡出，就是那层「轻量微光」。
     ///
-    /// 颜色取 ramp（深色偏白、浅色偏黑），悬停时提一档。
+    /// 刻意做得**淡而细**（半个点 + 低透明度），只在需要时给出一条边，
+    /// 不喧宾夺主地框住截图。
     private var rim: some View {
-        let base = isHovering ? Theme.Colors.border : Theme.Colors.cardStroke
+        let base = isHovering
+            ? Theme.Colors.border.opacity(0.55) : Theme.Colors.cardStroke.opacity(0.45)
         return RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
             .strokeBorder(
                 LinearGradient(
-                    colors: [base, base.opacity(0.35)],
+                    colors: [base, base.opacity(0.3)],
                     startPoint: .top,
                     endPoint: .bottom
                 ),
-                lineWidth: Theme.Size.hairline
+                lineWidth: Theme.Size.hairline / 2
             )
     }
 

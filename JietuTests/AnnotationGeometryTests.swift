@@ -188,8 +188,8 @@ struct AnnotationGeometryTests {
         #expect(to == CGPoint(x: 0, y: 100))
     }
 
-    @Test("模糊与放大镜：跟随矩形缩放，参数各自独立")
-    func blurAndMagnifier() {
+    @Test("模糊：跟随矩形缩放，参数独立")
+    func blurFollowsResize() {
         let rect = CGRect(x: 10, y: 10, width: 40, height: 40)
         let blur = Annotation(kind: .blur(rect, radius: 8), color: .red, lineWidth: 3)
         #expect(blur.localBounds == rect)
@@ -199,18 +199,13 @@ struct AnnotationGeometryTests {
         #expect(blur.withBlurRadius(20).kind == .blur(rect, radius: 20))
         #expect(resized.withBlurRadius(20).kind == .blur(CGRect(x: 10, y: 10, width: 80, height: 80), radius: 20))
 
-        // 放大镜不因缩放改变倍率。
-        let magnifier = Annotation(kind: .magnifier(rect, zoom: 3), color: .red)
-        let zoomed = magnifier.resized(handle: .bottomRight, to: CGPoint(x: 90, y: 90), lockAspect: false)
-        #expect(zoomed.localBounds == CGRect(x: 10, y: 10, width: 80, height: 80))
-        #expect(magnifier.withMagnifierZoom(5).kind == .magnifier(rect, zoom: 5))
-
         // 样式搬运带上各自的参数。
         let style = AnnotationStyle(from: blur)
         #expect(style.blurRadius == 8)
-        #expect(style.magnifierZoom == nil)
-        let styled = style.applied(to: magnifier)
-        #expect(styled.kind == .magnifier(rect, zoom: 3))
+        // 样式搬运只作用在同类标注上：矩形不吃模糊半径。
+        let rectangle = Annotation(kind: .rectangle(rect), color: .red, lineWidth: 3)
+        let styled = style.applied(to: rectangle)
+        #expect(styled.kind == .rectangle(rect))
         #expect(styled.color == .red)
     }
 

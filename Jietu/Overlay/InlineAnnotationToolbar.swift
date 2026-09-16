@@ -13,12 +13,13 @@ final class InlineToolbarModel {
     var eraserSize: CGFloat = 28
     var mosaicBlock: CGFloat = 12
     var blurRadius: CGFloat = 12
-    var magnifierZoom: CGFloat = 2
     var canUndo = false
     var canRedo = false
     /// 展开状态由模型持有，便于宿主视图观察并自适应高度。
     var showColor = false
     var showWidth = false
+    /// 展开时子工具栏要对齐到哪个按钮的 midX（工具条自身坐标，由 SwiftUI 上报）。
+    var optionsAnchorX: CGFloat = 0
     /// 实况文本是否开启（OCR 按钮触发）。
     var isLiveTextActive = false
 
@@ -41,8 +42,11 @@ struct InlineMainToolbar: View {
 
     private static let tools: [AnnotationTool] = [
         .select, .rectangle, .ellipse, .arrow, .line, .pen, .highlight, .pixelate, .blur,
-        .magnifier, .text, .counter, .eraser,
+        .text, .counter, .eraser,
     ]
+
+    /// 上报子工具栏锚点用的坐标空间。
+    private static let space = "inlineToolbar"
 
     var body: some View {
         HStack(spacing: Theme.Size.toolbarItemSpacing) {
@@ -113,9 +117,12 @@ struct InlineMainToolbar: View {
         }
         .padding(.horizontal, Theme.Spacing.xl)
         .padding(.vertical, Theme.Spacing.lg)
+        .coordinateSpace(name: Self.space)
         .fixedSize()
         .floatingSurface()
     }
+
+
 
     private var separator: some View {
         Rectangle()
@@ -131,11 +138,14 @@ struct InlineMainToolbar: View {
         } label: {
             Circle()
                 .fill(model.color.swiftUIColor)
-                .frame(width: 20, height: 20)
-                .overlay(Circle().strokeBorder(Theme.Colors.border, lineWidth: 1.2))
+                .frame(width: 14, height: 14)
+                .overlay(Circle().strokeBorder(Theme.Colors.border, lineWidth: 1))
                 .frame(width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
         }
         .help("颜色")
+        .modifier(
+            OptionsAnchorReporter(
+                isExpanded: model.showColor, space: Self.space, model: model))
     }
 
     private var widthButton: some View {
@@ -147,6 +157,9 @@ struct InlineMainToolbar: View {
             model.showWidth.toggle()
             if model.showWidth { model.showColor = false }
         }
+        .modifier(
+            OptionsAnchorReporter(
+                isExpanded: model.showWidth, space: Self.space, model: model))
     }
 
     private func toolButton(_ item: AnnotationTool) -> some View {
@@ -216,5 +229,31 @@ struct InlineOptionsToolbar: View {
         .padding(.vertical, Theme.Spacing.lg)
         .fixedSize()
         .floatingSurface()
+    }
+}
+
+
+/// 把自己在工具条里的 midX 报给模型：展开子工具栏时据此居中到被点的按钮下方。
+///
+/// @author ixxxxoooo
+private struct OptionsAnchorReporter: ViewModifier {
+    let isExpanded: Bool
+    let space: String
+    let model: InlineToolbarModel
+
+    func body(content: Content) -> some View {
+        content.background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear {
+                        guard isExpanded else { return }
+                        model.optionsAnchorX = proxy.frame(in: .named(space)).midX
+                    }
+                    .onChange(of: isExpanded) { _, expanded in
+                        guard expanded else { return }
+                        model.optionsAnchorX = proxy.frame(in: .named(space)).midX
+                    }
+            }
+        )
     }
 }
