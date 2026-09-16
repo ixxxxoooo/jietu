@@ -46,4 +46,15 @@ enum CaptureError: LocalizedError {
             return "请把鼠标移到要截取的窗口上再试一次。"
         }
     }
+
+    /// 这类失败重启一下基本就好（屏幕录制的授权在授权时的那个进程里不生效）。
+    var suggestsRelaunch: Bool {
+        switch self {
+        case .permissionDenied, .noShareableContent, .displayNotShareable, .emptyImage,
+            .windowNotCapturable:
+            return true
+        case .noDisplays, .emptyRegion, .noWindowUnderCursor:
+            return false
+        }
+    }
 }

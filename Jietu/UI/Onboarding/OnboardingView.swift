@@ -184,9 +184,10 @@ struct OnboardingView: View {
                 OnboardingRow(
                     title: "屏幕录制",
                     subtitle: model.isGranted
-                        ? "Jietu 可以正常冻结屏幕并截图。" : "没有它，截图会返回空白画面。",
+                        ? (model.needsRelaunch ? "已经勾选，重启后生效。" : "Jietu 可以正常冻结屏幕并截图。")
+                        : "没有它，截图会返回空白画面。",
                     systemImage: "camera.viewfinder",
-                    tint: Theme.Colors.accent
+                    tint: model.isGranted ? Theme.Colors.success : Theme.Colors.accent
                 ) {
                     OnboardingStatusBadge(
                         title: model.isGranted ? "已授权" : "未授权",
@@ -210,20 +211,30 @@ struct OnboardingView: View {
                         }
                     }
                 }
-                if model.needsRelaunch {
+                if model.suggestsRelaunch {
                     OnboardingDivider()
                     OnboardingRow(
                         title: "需要重启",
-                        subtitle: "macOS 的限制：授权不会对正在运行的进程生效。",
+                        subtitle: "macOS 的限制：授权只在授权之后启动的进程里生效。",
                         systemImage: "arrow.clockwise",
                         tint: Theme.Colors.warning
                     ) {
-                        Button("重启") { ScreenCapturePermission.relaunchApp() }
+                        Button("重启 Jietu") { ScreenCapturePermission.relaunchApp() }
                             .controlSize(.small)
                     }
                 }
             }
-            caption("可以点「稍后」跳过，之后再从菜单栏的「权限…」进来。")
+            HStack(spacing: Theme.Spacing.md) {
+                caption(
+                    model.suggestsRelaunch
+                        ? "已经勾选却还是未授权？点「重启 Jietu」立刻生效。"
+                        : "可以点「稍后」跳过，之后再从菜单栏的「权限…」进来。"
+                )
+                Spacer(minLength: 0)
+                Button("重新检测") { model.refresh() }
+                    .buttonStyle(.link)
+                    .font(.caption)
+            }
         }
     }
 
@@ -323,13 +334,7 @@ struct OnboardingView: View {
     private func primaryAction() {
         switch step {
         case 1 where !model.isGranted:
-            // 关键：必须先调用这个 API，macOS 才会把本 App 注册进
-            // 「隐私与安全性 › 屏幕录制」列表，否则用户根本找不到可勾选项。
-            if ScreenCapturePermission.request() {
-                model.isGranted = true
-            } else {
-                ScreenCapturePermission.openSystemSettings()
-            }
+            model.requestAccess()
         case 1 where model.needsRelaunch:
             ScreenCapturePermission.relaunchApp()
         case Self.lastStep:
@@ -371,23 +376,33 @@ struct OnboardingView: View {
     }()
 }
 
-/// 权限状态的轮询。
+/// 权限引导的状态：实时状态 + 1 秒轮询 + App 重新激活时复查。
+///
+/// 为什么不做启动时快照：用户去系统设置勾完再回来，快照还停在「未授权」，
+/// 界面和截图入口就会一直说没权限。参考项目的做法也是「每次读活值 + 轮询」。
 ///
 /// @author ixxxxoooo
 @Observable
 final class OnboardingModel {
-    /// 进程启动那一刻是否已有权限。用于判断「刚授权 → 必须重启」。
-    let wasGrantedAtLaunch: Bool
-
     var isGranted: Bool
     var isPolling = false
+    /// 这次会话里是否已经引导过授权（点了「授权屏幕录制」或打开过系统设置）。
+    ///
+    /// 用过之后如果状态还是「未授权」，多半是 macOS 不刷新进程内状态，
+    /// 这时要给出「重启 Jietu」这个出口。
+    var hasTriedGranting = false
 
     private let settings: SettingsStore
 
     private var timer: Timer?
+    private var activationObserver: NSObjectProtocol?
 
-    var needsRelaunch: Bool {
-        !wasGrantedAtLaunch && isGranted
+    /// 授权晚于本次启动：已勾选，但当前进程用不了。
+    var needsRelaunch: Bool { ScreenCapturePermission.needsRelaunch }
+
+    /// 该不该给「重启 Jietu」这个出口。
+    var suggestsRelaunch: Bool {
+        needsRelaunch || (hasTriedGranting && !isGranted)
     }
 
     /// 引导页里要读写的设置（先落到设置里，向导结束后设置页能直接接着用）。
@@ -407,10 +422,8 @@ final class OnboardingModel {
     var areaCaptureHotkey: Hotkey? { settings.hotkey(for: .areaCapture) }
 
     init(settings: SettingsStore = SettingsStore()) {
-        let granted = ScreenCapturePermission.isGranted
         self.settings = settings
-        self.wasGrantedAtLaunch = granted
-        self.isGranted = granted
+        self.isGranted = ScreenCapturePermission.isGranted
     }
 
     func hotkey(for action: HotkeyAction) -> Hotkey? { settings.hotkey(for: action) }
@@ -419,23 +432,49 @@ final class OnboardingModel {
         settings.setHotkey(hotkey, for: action)
     }
 
+    /// 现读一次授权状态（「重新检测」按钮走这里）。
+    func refresh() {
+        let granted = ScreenCapturePermission.isGranted
+        if granted != isGranted {
+            isGranted = granted
+        }
+    }
+
+    /// 点「授权屏幕录制」：先走系统申请（只在没问过时弹窗），没弹窗就直接把人送到系统设置。
+    func requestAccess() {
+        hasTriedGranting = true
+        if ScreenCapturePermission.request() {
+            refresh()
+        } else {
+            ScreenCapturePermission.openSystemSettings()
+            // 人切去系统设置期间窗口还在，回来时轮询会接上。
+            refresh()
+        }
+    }
+
     func startPolling() {
         guard !isPolling else { return }
         isPolling = true
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                let granted = ScreenCapturePermission.isGranted
-                if granted != self.isGranted {
-                    self.isGranted = granted
-                }
-            }
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+        // 从系统设置切回来时能立刻更新，不用等下一次 tick。
+        activationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
         }
     }
 
     func stopPolling() {
         timer?.invalidate()
         timer = nil
+        if let activationObserver {
+            NotificationCenter.default.removeObserver(activationObserver)
+            self.activationObserver = nil
+        }
         isPolling = false
     }
 }

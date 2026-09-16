@@ -32,9 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 关键语义：`CGPreflightScreenCaptureAccess()` 会在用户刚授权后立刻返回 true，
     /// 但 ScreenCaptureKit 在**同一个进程**里仍然拿不到内容，必须重启。
     /// 所以这个值在启动时确定后就不再改，Onboarding 只负责提示重启。
-    private(set) var hasUsableScreenCapturePermission = ScreenCapturePermission.isGranted
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 必须在任何权限读取之前记下来：这是判断「要不要重启」的基准。
+        ScreenCapturePermission.recordLaunchState()
         NSApp.setActivationPolicy(.accessory)
         // 外观跟着设置走：跟随系统（nil）或锁定浅色 / 深色。
         settings.appearance.apply()
@@ -209,15 +210,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Capture flow
 
+    /// 需要「屏幕录制」权限的入口统一走这里。
+    ///
+    /// 每次都**现读**，不缓存启动时的快照——用户刚在系统设置里勾完就回来时，
+    /// 缓存的旧值会让入口一直说「没权限」。不可用就打开权限引导：
+    /// 引导页里既能看到实时状态，也有「重新检测」和「重启 Jietu」两个出口。
+    private func requireScreenCapturePermission() -> Bool {
+        guard !ScreenCapturePermission.isGranted else { return true }
+        logger.notice("capture requested without screen recording permission")
+        showOnboarding()
+        return false
+    }
+
     private func handleAreaCapture() {
         guard !overlays.isPresenting else { return }
 
-        // 权限是启动后才有 → 当前进程用不了，直接引导重启。
-        guard hasUsableScreenCapturePermission else {
-            logger.notice("capture requested without usable permission")
-            showOnboarding()
-            return
-        }
+        guard requireScreenCapturePermission() else { return }
 
         Task { @MainActor in
             do {
@@ -240,10 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 全屏截图：直接抓鼠标所在显示器，不弹遮罩。
     private func handleFullScreenCapture() {
         guard !overlays.isPresenting else { return }
-        guard hasUsableScreenCapturePermission else {
-            showOnboarding()
-            return
-        }
+        guard requireScreenCapturePermission() else { return }
 
         Task { @MainActor in
             do {
@@ -261,10 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 窗口截图：抓鼠标当前悬停的那个窗口，不弹遮罩。
     private func handleWindowCapture() {
         guard !overlays.isPresenting else { return }
-        guard hasUsableScreenCapturePermission else {
-            showOnboarding()
-            return
-        }
+        guard requireScreenCapturePermission() else { return }
 
         let mouse = NSEvent.mouseLocation
         let cgPoint = CGPoint(x: mouse.x, y: DisplayGeometry.referenceHeight - mouse.y)
@@ -299,10 +301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 滚动长图：先用遮罩取一块选区，再由 `ScrollingCaptureSession` 连续采样拼接。
     private func handleScrollingCapture() {
         guard !overlays.isPresenting, scrollingSession == nil else { return }
-        guard hasUsableScreenCapturePermission else {
-            showOnboarding()
-            return
-        }
+        guard requireScreenCapturePermission() else { return }
 
         Task { @MainActor in
             do {
@@ -697,11 +696,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.messageText = (error as? CaptureError)?.errorDescription ?? "截图失败"
         alert.informativeText = (error as? CaptureError)?.recoverySuggestion
             ?? error.localizedDescription
-        alert.addButton(withTitle: "打开系统设置")
+        // 屏幕录制的授权在授权时的那个进程里不生效，所以这类失败给「重启」这条捷径。
+        let suggestion = (error as? CaptureError)?.suggestsRelaunch ?? false
+        alert.addButton(withTitle: suggestion ? "重启 Jietu" : "打开系统设置")
         alert.addButton(withTitle: "好")
 
         if alert.runModal() == .alertFirstButtonReturn {
-            ScreenCapturePermission.openSystemSettings()
+            if suggestion {
+                ScreenCapturePermission.relaunchApp()
+            } else {
+                ScreenCapturePermission.openSystemSettings()
+            }
         }
     }
 }

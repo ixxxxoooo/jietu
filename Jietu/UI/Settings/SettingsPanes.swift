@@ -290,25 +290,44 @@ struct AnnotationSettingsPane: View {
 /// 权限：屏幕录制状态 + 授权对象 + 授权操作。
 ///
 /// 状态字形放在**尾部**（和参考项目一致），标题那侧只放文字。
+/// 状态是**现读 + 1 秒轮询**的：用户去系统设置勾完切回来，这里会自己变，
+/// 另外给了「重新检测」和「重启 Jietu」两个出口（屏幕录制的授权在授权时的那个进程里不生效）。
 ///
 /// @author ixxxxoooo
 struct PermissionSettingsPane: View {
-    private var granted: Bool { ScreenCapturePermission.isGranted }
+    @State private var granted = ScreenCapturePermission.isGranted
+    @State private var triedGranting = false
+
+    private let refreshTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    /// 授权晚于本次启动，或引导过授权但状态还没变 → 给「重启」。
+    private var suggestsRelaunch: Bool {
+        ScreenCapturePermission.needsRelaunch || (triedGranting && !granted)
+    }
 
     var body: some View {
         Form {
             Section {
                 LabeledContent {
-                    Label(
-                        granted ? "已授权" : "未授权",
-                        systemImage: granted
-                            ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
-                    )
-                    .foregroundStyle(granted ? Color.green : Color.orange)
+                    HStack(spacing: Theme.Spacing.lg) {
+                        Label(
+                            granted ? "已授权" : "未授权",
+                            systemImage: granted
+                                ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                        )
+                        .foregroundStyle(granted ? Color.green : Color.orange)
+
+                        Button("重新检测") { refresh() }
+                            .controlSize(.small)
+                            .help("立刻再读一次系统里的授权状态")
+                    }
                 } label: {
                     Text("屏幕录制")
                     Text(
-                        granted ? "Jietu 可以正常冻结屏幕并截图。" : "没有它，截图会返回空白画面。"
+                        granted
+                            ? (ScreenCapturePermission.needsRelaunch
+                                ? "已经勾选，重启后生效。" : "Jietu 可以正常冻结屏幕并截图。")
+                            : "没有它，截图会返回空白画面。"
                     )
                 }
 
@@ -327,9 +346,16 @@ struct PermissionSettingsPane: View {
 
                 LabeledContent {
                     HStack(spacing: Theme.Spacing.md) {
-                        Button("打开系统设置") { ScreenCapturePermission.openSystemSettings() }
+                        Button("打开系统设置") {
+                            triedGranting = true
+                            ScreenCapturePermission.openSystemSettings()
+                        }
                         Button("授权屏幕录制") {
-                            if !ScreenCapturePermission.request() {
+                            triedGranting = true
+                            if ScreenCapturePermission.request() {
+                                refresh()
+                            } else {
+                                // 已经问过 / 被拒过，系统不会再弹窗，直接把人送过去。
                                 ScreenCapturePermission.openSystemSettings()
                             }
                         }
@@ -337,14 +363,33 @@ struct PermissionSettingsPane: View {
                 } label: {
                     Text("授权操作")
                 }
+
+                if suggestsRelaunch {
+                    LabeledContent {
+                        Button("重启 Jietu") { ScreenCapturePermission.relaunchApp() }
+                    } label: {
+                        Text("需要重启")
+                        Text("macOS 的限制：授权只在授权之后启动的进程里生效。")
+                    }
+                }
             } header: {
                 SettingsSectionHeader(title: "权限")
             } footer: {
-                Text("授权后需重启 Jietu 才会生效（macOS 限制）。")
+                Text("授权状态每秒复查一次；从系统设置切回来会立刻更新。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .onAppear(perform: refresh)
+        .onReceive(refreshTimer) { _ in refresh() }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in refresh() }
+    }
+
+    private func refresh() {
+        let current = ScreenCapturePermission.isGranted
+        if current != granted { granted = current }
     }
 }
