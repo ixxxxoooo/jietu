@@ -46,7 +46,7 @@ enum QuickAccessPosition: String, CaseIterable, Identifiable {
 ///
 /// @author ixxxxoooo
 enum EditorMode: String, CaseIterable, Identifiable {
-    /// 就地编辑：截完直接在当前截图上编辑，工具栏就地出现，`✓/✗` 决定。
+    /// 原地编辑：截完直接在当前截图上编辑，工具栏原地出现，`✓/✗` 决定。
     case inline
     /// 独立窗口：截完先显示浮窗，点开后在单独窗口里编辑。
     case window
@@ -55,7 +55,7 @@ enum EditorMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .inline: return "就地编辑"
+        case .inline: return "原地编辑"
         case .window: return "独立窗口"
         }
     }
@@ -178,7 +178,7 @@ final class SettingsStore {
         didSet { defaults.set(quickAccessPosition.rawValue, forKey: Key.quickAccessPosition) }
     }
 
-    /// 标注编辑方式（就地 / 独立窗口）。
+    /// 标注编辑方式（原地 / 独立窗口）。
     var editorMode: EditorMode {
         didSet { defaults.set(editorMode.rawValue, forKey: Key.editorMode) }
     }
@@ -227,7 +227,7 @@ final class SettingsStore {
         self.showSaveNotification =
             defaults.object(forKey: Key.showSaveNotification) as? Bool ?? true
         self.quickAccessAutoCloseDelay =
-            defaults.object(forKey: Key.quickAccessAutoCloseDelay) as? Double ?? 3
+            defaults.object(forKey: Key.quickAccessAutoCloseDelay) as? Double ?? 30
         self.launchAtLogin = defaults.object(forKey: Key.launchAtLogin) as? Bool ?? false
         self.recentCapturePaths = defaults.stringArray(forKey: Key.recentCapturePaths) ?? []
         self.saveFormat =
@@ -237,7 +237,7 @@ final class SettingsStore {
         self.jpegQuality = defaults.object(forKey: Key.jpegQuality) as? Double ?? 0.9
         self.quickAccessPosition =
             (defaults.string(forKey: Key.quickAccessPosition)
-                .flatMap(QuickAccessPosition.init(rawValue:))) ?? .bottomRight
+                .flatMap(QuickAccessPosition.init(rawValue:))) ?? .bottomLeft
         self.editorMode =
             (defaults.string(forKey: Key.editorMode).flatMap(EditorMode.init(rawValue:))) ?? .inline
         if let data = defaults.data(forKey: Key.annotationDefaults),

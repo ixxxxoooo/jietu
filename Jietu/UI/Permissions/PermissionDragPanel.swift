@@ -116,6 +116,8 @@ final class PermissionDragController {
         // 先申请一次：没问过会弹窗、同时把本 App 注册进列表；被拒过则直接走拖拽授权。
         _ = ScreenCapturePermission.request()
         ScreenCapturePermission.openSystemSettings()
+        // URL 在「系统设置已经停在这一栏」时是 no-op，再显式激活一次把它拉到前台。
+        SystemSettingsWindow.activate()
         showPanel()
     }
 
@@ -133,7 +135,6 @@ final class PermissionDragController {
             panel = PermissionDragPanel(
                 content: PermissionDragView(
                     appURL: appURL,
-                    onOpenSettings: { [weak self] in self?.reopenSettings() },
                     onClose: { [weak self] in self?.close() },
                     onDragStateChange: { [weak self] dragging in
                         self?.isDraggingApp = dragging
@@ -145,13 +146,6 @@ final class PermissionDragController {
             panel?.orderFrontRegardless()
         }
         startTracking()
-    }
-
-    /// 「设置」按钮：URL 在「已经停在这一栏」时是 no-op，所以还要显式激活一次。
-    private func reopenSettings() {
-        ScreenCapturePermission.openSystemSettings()
-        SystemSettingsWindow.activate()
-        panel?.orderFrontRegardless()
     }
 
     private func startTracking() {
@@ -192,7 +186,6 @@ final class PermissionDragController {
 /// @author ixxxxoooo
 struct PermissionDragView: View {
     let appURL: URL
-    var onOpenSettings: () -> Void
     var onClose: () -> Void
     var onDragStateChange: (Bool) -> Void
 
@@ -220,12 +213,6 @@ struct PermissionDragView: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .lineLimit(1)
             Spacer(minLength: Theme.Spacing.md)
-            // 系统设置被别的东西挡住时，用它拉回前台。
-            BarIconButton(
-                title: "把系统设置拉到前面",
-                systemImage: "gearshape",
-                action: onOpenSettings
-            )
             BarIconButton(
                 title: "关闭",
                 systemImage: "xmark",

@@ -232,7 +232,7 @@ enum Theme {
         /// 控件响应悬停。
         static let hover: TimeInterval = 0.12
         static let tooltip: TimeInterval = 0.15
-        /// 就地工具栏淡入。
+        /// 原地工具栏淡入。
         static let toolbarFadeIn: TimeInterval = 0.15
         /// QAO 侧滑。
         static let quickAccessSlideIn: TimeInterval = 0.25

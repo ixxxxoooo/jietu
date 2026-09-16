@@ -5,7 +5,7 @@ import os
 final class OverlayCoordinator {
     enum Outcome {
         case cancelled
-        /// `annotated` 为 true 表示已在遮罩里就地标注过，不再走编辑器。
+        /// `annotated` 为 true 表示已在遮罩里原地标注过，不再走编辑器。
         case captured(
             image: CGImage,
             displayID: CGDirectDisplayID,
@@ -22,11 +22,11 @@ final class OverlayCoordinator {
     private var previousApplication: NSRunningApplication?
 
     var onFinish: ((Outcome) -> Void)?
-    /// 就地工具栏的下载 / 钉图。
+    /// 原地工具栏的下载 / 钉图。
     var onSaveImage: ((CGImage) -> Void)?
     /// 钉图（参数二是屏幕坐标矩形，用于原地钉）。
     var onPinImage: ((CGImage, CGRect) -> Void)?
-    /// 就地标注的默认样式（present 时传给工具栏；改动后经 `onAnnotationDefaultsChange` 回报）。
+    /// 原地标注的默认样式（present 时传给工具栏；改动后经 `onAnnotationDefaultsChange` 回报）。
     var annotationDefaults: AnnotationDefaults = .standard
     var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)?
 
@@ -106,7 +106,7 @@ final class OverlayCoordinator {
         }
 
         // Esc 兜底：焦点可能落在另一块屏的遮罩窗上。
-        // 注意：这里绝不能记录按键内容。就地标注阶段交给画布自己处理 Esc。
+        // 注意：这里绝不能记录按键内容。原地标注阶段交给画布自己处理 Esc。
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.isPresenting else { return event }
             if event.keyCode == 53 {
@@ -164,7 +164,7 @@ final class OverlayCoordinator {
         )
     }
 
-    /// 就地标注确认：画布已经给了烘焙好标注的最终图。
+    /// 原地标注确认：画布已经给了烘焙好标注的最终图。
     private func commitAnnotated(image: CGImage, snapshot: DisplaySnapshot, localRect: CGRect) {
         let screenRect = screenRect(forLocalRect: localRect, snapshot: snapshot)
         finish(

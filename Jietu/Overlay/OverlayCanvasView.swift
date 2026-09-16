@@ -54,16 +54,16 @@ final class OverlayCanvasView: NSView {
 
     // MARK: - Inline annotation
 
-    /// 就地编辑模式：选区定下来后不立刻截图，而是在选框下方弹出工具栏就地标注。
+    /// 原地编辑模式：选区定下来后不立刻截图，而是在选框下方弹出工具栏原地标注。
     var inlineMode = false
-    /// 就地标注完成：参数是已经裁好、并烘焙了标注的最终图，以及选区（local）。
+    /// 原地标注完成：参数是已经裁好、并烘焙了标注的最终图，以及选区（local）。
     var onCommitAnnotated: ((CGImage, CGRect) -> Void)?
-    /// 进入就地标注时通知 Coordinator（用于同步其它显示器的状态）。
+    /// 进入原地标注时通知 Coordinator（用于同步其它显示器的状态）。
     var onInlineEditingChanged: ((Bool) -> Void)?
-    /// 就地工具栏的「下载 / 钉图」回调（钉图额外带选区 local rect，用于原地钉）。
+    /// 原地工具栏的「下载 / 钉图」回调（钉图额外带选区 local rect，用于原地钉）。
     var onSaveImage: ((CGImage) -> Void)?
     var onPinImage: ((CGImage, CGRect) -> Void)?
-    /// 标注默认样式：就地工具栏开出来时用它，改完回报给外部记住。
+    /// 标注默认样式：原地工具栏开出来时用它，改完回报给外部记住。
     var annotationDefaults: AnnotationDefaults = .standard
     var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)?
 
@@ -73,7 +73,7 @@ final class OverlayCanvasView: NSView {
     }
 
     private var phase: Phase = .selecting
-    /// 是否正处于就地标注阶段（供 Coordinator 判断 Esc 归属）。
+    /// 是否正处于原地标注阶段（供 Coordinator 判断 Esc 归属）。
     var isAnnotationPhase: Bool { phase == .annotating }
     private struct EraserStroke {
         var points: [CGPoint]
@@ -204,7 +204,7 @@ final class OverlayCanvasView: NSView {
         imageLayer.frame = bounds
         root.addSublayer(imageLayer)
 
-        // 就地标注层：叠在冻结图之上、压暗层之下（选区被挖空，所以标注可见）。
+        // 原地标注层：叠在冻结图之上、压暗层之下（选区被挖空，所以标注可见）。
         annotationLayer.frame = bounds
         annotationLayer.contentsGravity = .resize
         annotationLayer.magnificationFilter = .nearest
@@ -220,7 +220,7 @@ final class OverlayCanvasView: NSView {
         ]
         root.addSublayer(annotationLayer)
 
-        // 就地选择态：虚线包围盒 + 控制点。
+        // 原地选择态：虚线包围盒 + 控制点。
         inlineSelectionBorderLayer.fillColor = nil
         inlineSelectionBorderLayer.strokeColor = NSColor(Theme.selectionGreen).cgColor
         inlineSelectionBorderLayer.lineWidth = 1.2
@@ -652,7 +652,7 @@ final class OverlayCanvasView: NSView {
         guard isInputArmed else { return }
         let point = convert(event.locationInWindow, from: nil)
         if phase == .annotating {
-            // 正在拖选区边缘 → 继续改区域；否则交给就地标注。
+            // 正在拖选区边缘 → 继续改区域；否则交给原地标注。
             if case .resizing(let handle, let original) = interaction {
                 cursorPoint = point
                 let updated = SelectionGeometry.resized(
@@ -756,7 +756,7 @@ final class OverlayCanvasView: NSView {
             break
         }
 
-        // 就地模式：鼠标一松开（拖拽结束）就弹出标注工具栏。
+        // 原地模式：鼠标一松开（拖拽结束）就弹出标注工具栏。
         if inlineMode, isSettled, phase == .selecting, selection != nil {
             enterAnnotating()
             return
@@ -806,7 +806,7 @@ final class OverlayCanvasView: NSView {
 
     // MARK: - Inline annotation
 
-    /// 选区定下来后进入就地标注：工具栏出现在选框下方，直接在冻结画面上标注。
+    /// 选区定下来后进入原地标注：工具栏出现在选框下方，直接在冻结画面上标注。
     private func enterAnnotating() {
         guard inlineMode, let selection, selection.width > 1, selection.height > 1 else { return }
         phase = .annotating
@@ -1401,7 +1401,7 @@ final class OverlayCanvasView: NSView {
                 color: model.color,
                 lineWidth: model.lineWidth
             )
-        // 裁剪只在标注编辑器窗口里提供，就地编辑不参与。
+        // 裁剪只在标注编辑器窗口里提供，原地编辑不参与。
         case .text, .select, .eraser, .crop: return nil
         }
     }
@@ -1420,7 +1420,7 @@ final class OverlayCanvasView: NSView {
         }
     }
 
-    /// 统一的就地鼠标处理：先命中已有对象（任意工具下都可编辑），空白处才新建。
+    /// 统一的原地鼠标处理：先命中已有对象（任意工具下都可编辑），空白处才新建。
     private func inlineMouseDown(_ point: CGPoint, clickCount: Int) {
         let crop = annotationPoint(from: point)
         let tool = toolbarModel?.tool ?? .rectangle

@@ -2,7 +2,7 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// 就地标注工具栏的状态模型。
+/// 原地标注工具栏的状态模型。
 ///
 /// @author ixxxxoooo
 @Observable
@@ -30,7 +30,7 @@ final class InlineToolbarModel {
     var onCancel: (() -> Void)?
 }
 
-/// 就地标注的**主工具栏**：固定尺寸，展开选项时也不重算，避免闪烁。
+/// 原地标注的**主工具栏**：固定尺寸，展开选项时也不重算，避免闪烁。
 ///
 /// 表面走 `FloatingSurface`（磨砂 + scrim），控件用 `BarButton` 家族：
 /// 选中常驻 `controlSurface`，未选中悬停才压一层墨。
@@ -166,7 +166,7 @@ struct InlineMainToolbar: View {
     }
 }
 
-/// 就地标注的**展开选项条**（颜色 / 粗细）：单独一条，出现在主栏下方。
+/// 原地标注的**展开选项条**（颜色 / 粗细）：单独一条，出现在主栏下方。
 ///
 /// @author ixxxxoooo
 struct InlineOptionsToolbar: View {

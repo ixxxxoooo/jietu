@@ -25,7 +25,7 @@ struct SettingsStoreTests {
         #expect(store.playShutterSound == true)
         #expect(store.saveToDisk == false)
         #expect(store.showSaveNotification == true)
-        #expect(store.quickAccessAutoCloseDelay == 3)
+        #expect(store.quickAccessAutoCloseDelay == 30)
         #expect(store.saveFormat == .png)
         #expect(store.hotkeyAreaCapture == nil)
     }

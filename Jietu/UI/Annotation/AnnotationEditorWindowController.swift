@@ -9,7 +9,7 @@ import SwiftUI
 /// @author ixxxxoooo
 final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
     private let image: CGImage
-    /// 就地编辑时选区在屏幕上的矩形，用来把窗口放到选区附近。
+    /// 原地编辑时选区在屏幕上的矩形，用来把窗口放到选区附近。
     private let anchor: CGRect?
     /// 标注默认样式：开窗时用，改完回写。
     private let annotationDefaults: AnnotationDefaults
@@ -70,7 +70,7 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
 
         let window: NSWindow
         if inline {
-            // 无边框：图片在上、工具栏贴在下，直接贴着选区，看起来像「就地编辑」。
+            // 无边框：图片在上、工具栏贴在下，直接贴着选区，看起来像「原地编辑」。
             let keyable = KeyableBorderlessWindow(
                 contentRect: NSRect(origin: .zero, size: size),
                 styleMask: [.borderless],
@@ -110,7 +110,7 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
         NSApp.activate()
     }
 
-    /// 就地编辑窗口尺寸：图片原始大小 + 底部工具栏。
+    /// 原地编辑窗口尺寸：图片原始大小 + 底部工具栏。
     private func inlineWindowSize(for image: CGImage) -> CGSize {
         let scale = max(1, anchorScreen()?.backingScaleFactor ?? 2)
         let imageSize = CGSize(
@@ -121,7 +121,7 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
         return CGSize(width: width, height: imageSize.height + AnnotationEditorView.toolbarHeight)
     }
 
-    /// 就地编辑：让图片区域正好覆盖选区，工具栏落在选区下方。
+    /// 原地编辑：让图片区域正好覆盖选区，工具栏落在选区下方。
     private func positionInline(_ window: NSWindow, size: CGSize) {
         guard let anchor else {
             window.center()
@@ -184,7 +184,7 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
         NSApp.setActivationPolicy(previousActivationPolicy)
     }
 
-    /// 就地编辑：把窗口放到选区附近；否则居中。
+    /// 原地编辑：把窗口放到选区附近；否则居中。
     private func positionWindow(_ window: NSWindow, size: CGSize) {
         guard let anchor, anchor.width > 1, anchor.height > 1 else {
             window.center()

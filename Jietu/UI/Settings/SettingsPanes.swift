@@ -254,7 +254,7 @@ struct AnnotationSettingsPane: View {
                     }
                 } label: {
                     Text("编辑方式")
-                    Text("就地编辑：截完直接在当前画面上标注。\n独立窗口：截完先显示浮窗，点开后在单独窗口编辑。")
+                    Text("原地编辑：截完直接在当前画面上标注。\n独立窗口：截完先显示浮窗，点开后在单独窗口编辑。")
                 }
             } header: {
                 SettingsSectionHeader(title: "标注")

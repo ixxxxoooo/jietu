@@ -15,16 +15,16 @@ final class OverlayWindowController {
         set { canvas.onCommit = newValue }
     }
 
-    /// 就地标注确认后的最终图 + 选区。
+    /// 原地标注确认后的最终图 + 选区。
     var onCommitAnnotated: ((CGImage, CGRect) -> Void)? {
         get { canvas.onCommitAnnotated }
         set { canvas.onCommitAnnotated = newValue }
     }
 
-    /// 是否正在就地标注（Esc 归属判断）。
+    /// 是否正在原地标注（Esc 归属判断）。
     var isInlineEditing: Bool { canvas.isAnnotationPhase }
 
-    /// 就地工具栏「下载 / 钉图」。
+    /// 原地工具栏「下载 / 钉图」。
     var onSaveImage: ((CGImage) -> Void)? {
         get { canvas.onSaveImage }
         set { canvas.onSaveImage = newValue }
@@ -34,7 +34,7 @@ final class OverlayWindowController {
         set { canvas.onPinImage = newValue }
     }
 
-    /// 就地标注的样式变更（工具 / 颜色 / 参数），由 Coordinator 转给外部记住。
+    /// 原地标注的样式变更（工具 / 颜色 / 参数），由 Coordinator 转给外部记住。
     var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)? {
         get { canvas.onAnnotationDefaultsChange }
         set { canvas.onAnnotationDefaultsChange = newValue }

@@ -439,7 +439,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             break
         case .captured(let image, let displayID, let screenRect, let annotated):
             if annotated {
-                // 已在遮罩里就地标注完成，直接走交付流程。
+                // 已在遮罩里原地标注完成，直接走交付流程。
                 deliver(image, onDisplay: displayID)
             } else {
                 handleCaptured(image, onDisplay: displayID, screenRect: screenRect)
@@ -447,7 +447,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 截图完成后的分流：就地编辑 / 浮窗预览。
+    /// 截图完成后的分流：原地编辑 / 浮窗预览。
     private func handleCaptured(
         _ image: CGImage,
         onDisplay displayID: CGDirectDisplayID,
@@ -458,7 +458,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if settings.playShutterSound {
                 CaptureOutput.playShutterSound()
             }
-            // 截完立刻进剪贴板：就地编辑期间（甚至取消编辑）也能直接去别处粘贴。
+            // 截完立刻进剪贴板：原地编辑期间（甚至取消编辑）也能直接去别处粘贴。
             // 编辑器中点 ✓ 会再写一次，把带标注的成图覆盖上去。
             copyToClipboard(image)
             openAnnotationEditor(image, anchor: screenRect)
@@ -499,7 +499,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 打开标注编辑器。
     ///
-    /// - Parameter anchor: 选区在屏幕上的矩形（就地编辑时把窗口放到选区附近）。
+    /// - Parameter anchor: 选区在屏幕上的矩形（原地编辑时把窗口放到选区附近）。
     private func openAnnotationEditor(_ image: CGImage, anchor: CGRect? = nil) {
         let controller = AnnotationEditorWindowController(
             image: image,

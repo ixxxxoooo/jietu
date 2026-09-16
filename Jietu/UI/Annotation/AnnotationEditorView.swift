@@ -13,7 +13,7 @@ import SwiftUI
 /// @author ixxxxoooo
 struct AnnotationEditorView: View {
     let baseImage: CGImage
-    /// 就地模式：图片在上、工具栏贴在下方，无窗口边框。
+    /// 原地模式：图片在上、工具栏贴在下方，无窗口边框。
     var inline = false
     /// 初始样式（沿用上次用的工具 / 颜色 / 参数）。
     var defaults: AnnotationDefaults = .standard
@@ -175,7 +175,7 @@ struct AnnotationEditorView: View {
     var body: some View {
         Group {
             if inline {
-                // 就地模式：图片在上，工具栏贴在下方。
+                // 原地模式：图片在上，工具栏贴在下方。
                 VStack(spacing: 0) {
                     canvasArea
                     toolbar
@@ -487,7 +487,7 @@ struct AnnotationEditorView: View {
                 optionsBar
             }
         }
-        // 就地模式窗口是透明的，工具栏得自己兜一层底，否则跟着系统主题切换时看不清。
+        // 原地模式窗口是透明的，工具栏得自己兜一层底，否则跟着系统主题切换时看不清。
         .background(inline ? Color(nsColor: .windowBackgroundColor) : Color.clear)
     }
 
