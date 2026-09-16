@@ -36,6 +36,7 @@ final class OverlayCoordinator {
         case regionPick
     }
 
+    /// 遮罩这一次要干什么（截图 / 只要一个矩形）。**用完即复位**，见 `finish()`。
     var purpose: Purpose = .screenshot
     /// `purpose == .regionPick` 时，选区确定后回调（参数是选区所在显示器与 local 矩形）。
     var onRegionPicked: ((DisplaySnapshot, CGRect) -> Void)?
@@ -189,6 +190,9 @@ final class OverlayCoordinator {
 
     private func finish(_ outcome: Outcome, reason: String) {
         guard isPresenting else { return }
+        // 用途用完即复位，调用方不必记着清：
+        // 否则「滚动长图取消选区」会把 .regionPick 留下，下一次普通区域截图误走滚动长图。
+        defer { purpose = .screenshot }
         logger.notice("overlay finish reason=\(reason, privacy: .public)")
 
         if let escapeMonitor {

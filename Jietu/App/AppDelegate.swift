@@ -191,7 +191,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             PinWindowController.pin(image: image, on: NSScreen.main)
         }
         overlays.onFinish = { [weak self] outcome in
-            self?.handleOverlayOutcome(outcome)
+            guard let self else { return }
+            // 遮罩只服务一次：**无论结果如何**都把用途复位。
+            // 否则「滚动长图那次取消选区」会把 .regionPick 留在原地，
+            // 下一次普通区域截图就会误走滚动长图（弹出「自动截图」面板）。
+            self.overlays.purpose = .screenshot
+            self.handleOverlayOutcome(outcome)
         }
         overlays.onSaveImage = { [weak self] image in
             guard let self else { return }
@@ -256,6 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleAreaCapture() {
+        overlays.purpose = .screenshot
         guard !overlays.isPresenting else { return }
 
         guard requireScreenCapturePermission() else { return }
@@ -333,7 +339,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 滚动长图：先用遮罩取一块选区；框选完成后由控制条上的按钮决定怎么滚。
     private func handleScrollingCapture() {
-        guard !overlays.isPresenting, scrollingSession == nil else { return }
+        // 上一次可能停在「待开始」的控制条上（用户没点开始也没取消）：先收干净，
+        // 否则新面板会把它盖住、旧的那条一直留在屏幕上。
+        if let panel = scrollingPanel, scrollingSession == nil {
+            logger.notice("dismissing leftover scrolling panel")
+            panel.close()
+            scrollingPanel = nil
+        }
+        guard !overlays.isPresenting else {
+            logger.notice("scrolling capture ignored: overlay is presenting")
+            return
+        }
+        guard scrollingSession == nil else {
+            logger.notice("scrolling capture ignored: a session is running")
+            return
+        }
         guard requireScreenCapturePermission() else { return }
 
         Task { @MainActor in
@@ -475,8 +495,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func registerScrollingEscapeMonitor() {
         removeScrollingEscapeMonitor()
         scrollingEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 53, let self, self.scrollingSession != nil else { return event }
-            self.scrollingSession?.stop()
+            guard event.keyCode == 53, let self, self.scrollingPanel != nil else { return event }
+            // 运行中就停会话；还停在「待开始」就直接收掉控制条。
+            if self.scrollingSession != nil {
+                self.scrollingSession?.stop()
+            } else {
+                self.cancelScrollingCapture()
+            }
             return nil
         }
     }
