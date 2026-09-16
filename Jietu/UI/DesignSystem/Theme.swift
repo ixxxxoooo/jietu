@@ -179,9 +179,9 @@ enum Theme {
         /// 行悬停胶囊的宽度上限。
         static let popoverMenuWidth: CGFloat = 276
 
-        /// QAO 卡片尺寸与阴影留白。
-        static let quickAccessCard = CGSize(width: 236, height: 152)
-        static let quickAccessShadowPadding: CGFloat = 14
+        /// QAO 卡片的**最大**尺寸：截图按原始宽高比等比缩进来，永不拉伸。
+        /// 阴影由系统窗口阴影负责，不留白。
+        static let quickAccessCardMax = CGSize(width: 260, height: 180)
         /// QAO 距屏幕边缘。
         static let quickAccessInset: CGFloat = 20
 
@@ -265,10 +265,9 @@ enum Theme {
     static let toolbarPadding = Size.toolbarPadding
     static let toolbarItemSpacing = Size.toolbarItemSpacing
     static let toolbarIconSize = Size.toolbarIconSize
-    static let quickAccessWidth = Size.quickAccessCard.width
+    static let quickAccessWidth = Size.quickAccessCardMax.width
     static let quickAccessCornerRadius = Radius.menuPanel
     static let quickAccessInset = Size.quickAccessInset
-    static let quickAccessShadowPadding = Size.quickAccessShadowPadding
 }
 
 // MARK: - 玻璃

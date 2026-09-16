@@ -13,6 +13,8 @@ final class QuickAccessPanelController {
         let id: UUID
         let panel: NSPanel
         let image: CGImage
+        /// 这张卡片的尺寸（按截图宽高比算出来的，叠放时按它占位）。
+        let size: CGSize
         let displayID: CGDirectDisplayID
         let saveDirectory: URL
         let dragURL: URL?
@@ -23,6 +25,7 @@ final class QuickAccessPanelController {
             id: UUID,
             panel: NSPanel,
             image: CGImage,
+            size: CGSize,
             displayID: CGDirectDisplayID,
             saveDirectory: URL,
             dragURL: URL?
@@ -30,6 +33,7 @@ final class QuickAccessPanelController {
             self.id = id
             self.panel = panel
             self.image = image
+            self.size = size
             self.displayID = displayID
             self.saveDirectory = saveDirectory
             self.dragURL = dragURL
@@ -63,7 +67,10 @@ final class QuickAccessPanelController {
 
     func present(image: CGImage, onDisplay displayID: CGDirectDisplayID, saveDirectory: URL) {
         let id = UUID()
-        let panelSize = QuickAccessView.panelSize
+        // 卡片尺寸按截图宽高比算：尺寸不同的截图走同一套交互，只是框大小不同。
+        let panelSize = QuickAccessView.panelSize(
+            for: CGSize(width: image.width, height: image.height)
+        )
         let nsImage = NSImage(
             cgImage: image,
             size: NSSize(width: image.width, height: image.height)
@@ -72,6 +79,7 @@ final class QuickAccessPanelController {
 
         let root = QuickAccessView(
             image: nsImage,
+            cardSize: panelSize,
             onCopy: { [weak self] in
                 self?.onCopy?(image)
             },
@@ -112,14 +120,15 @@ final class QuickAccessPanelController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = false
+        // 阴影交给系统：内容是圆角卡片 + 透明窗口，AppKit 会按内容 alpha 画出贴合的阴影。
+        panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
         panel.isReleasedWhenClosed = false
         panel.contentView = hosting
 
         let screen = NSScreen.screens.first { $0.jietu_displayID == displayID } ?? NSScreen.main
-        let target = frameFor(index: entries.count, screen: screen)
+        let target = frameFor(index: entries.count, size: panelSize, screen: screen)
         panel.setFrame(offscreenFrame(from: target, screen: screen), display: false)
         panel.alphaValue = 0
         panel.orderFrontRegardless()
@@ -128,6 +137,7 @@ final class QuickAccessPanelController {
             id: id,
             panel: panel,
             image: image,
+            size: panelSize,
             displayID: displayID,
             saveDirectory: saveDirectory,
             dragURL: dragURL
@@ -167,14 +177,14 @@ final class QuickAccessPanelController {
     }
 
     private func maxVisible(on screen: NSScreen) -> Int {
-        let slot = QuickAccessView.panelSize.height + gap
+        // 用最大卡片高度当槽位：尺寸各异的截图不会溢出屏幕。
+        let slot = Theme.Size.quickAccessCardMax.height + gap
         let available = screen.visibleFrame.height - inset * 2 + gap
         return max(1, Int(available / slot))
     }
 
-    private func frameFor(index: Int, screen: NSScreen?) -> NSRect {
+    private func frameFor(index: Int, size: CGSize, screen: NSScreen?) -> NSRect {
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let size = QuickAccessView.panelSize
         let x: CGFloat
         switch position {
         case .bottomRight:
@@ -182,7 +192,11 @@ final class QuickAccessPanelController {
         case .bottomLeft:
             x = visible.minX + inset
         }
-        let y = visible.minY + inset + CGFloat(index) * (size.height + gap)
+        // 从下往上叠：每张按**自己的高度**占位，尺寸不同也不会互相压住。
+        var y = visible.minY + inset
+        for entry in entries.prefix(index) {
+            y += entry.size.height + gap
+        }
         return NSRect(x: x, y: y, width: size.width, height: size.height)
     }
 
@@ -213,17 +227,21 @@ final class QuickAccessPanelController {
     private func layout(animated: Bool) {
         let screen = currentScreen()
         for (index, entry) in entries.enumerated() {
-            let frame = frameFor(index: index, screen: screen)
+            let frame = frameFor(index: index, size: entry.size, screen: screen)
             if animated {
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = appearDuration
                     context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                     entry.panel.animator().setFrame(frame, display: true)
                     entry.panel.animator().alphaValue = 1
+                } completionHandler: {
+                    // AppKit 按「首次绘制时的 frame」缓存并缩放阴影，进场结束后要重算一次。
+                    MainActor.assumeIsolated { entry.panel.invalidateShadow() }
                 }
             } else {
                 entry.panel.setFrame(frame, display: true)
                 entry.panel.alphaValue = 1
+                entry.panel.invalidateShadow()
             }
         }
     }
