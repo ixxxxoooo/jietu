@@ -30,6 +30,8 @@ struct AnnotationEditorView: View {
     @State private var undoStack: [EditorSnapshot] = []
     @State private var redoStack: [EditorSnapshot] = []
     @State private var selectedID: UUID?
+    /// 「复制样式」暂存的样式，供「粘贴样式」用。
+    @State private var styleClipboard: AnnotationStyle?
     @State private var eraserSize: CGFloat = 28
 
     struct EditorSnapshot {
@@ -255,14 +257,26 @@ struct AnnotationEditorView: View {
         .allowsHitTesting(false)
     }
 
-    /// 选中框右侧的操作按钮：关闭 / 编辑文字。
+    /// 选中框右侧的操作按钮：层级 / 复制 / 样式 / 删除。
     @ViewBuilder
     private var selectionControls: some View {
         if let selected = selectedAnnotation, editingTextID == nil {
             let box = selected.localBounds
             let rightMid = viewPoint(selected.toWorld(CGPoint(x: box.maxX, y: box.midY)))
             VStack(spacing: 6) {
-                selectionButton("xmark", "删除") { deleteSelected() }
+                selectionButton("arrow.up.to.line", "置顶 ⇧⌘]") { bringSelectedToFront() }
+                    .keyboardShortcut("]", modifiers: [.command, .shift])
+                selectionButton("arrow.down.to.line", "置底 ⇧⌘[") { sendSelectedToBack() }
+                    .keyboardShortcut("[", modifiers: [.command, .shift])
+                selectionButton("plus.square.on.square", "复制一份 ⌘D") { duplicateSelected() }
+                    .keyboardShortcut("d", modifiers: .command)
+                selectionButton("paintbrush", "复制样式 ⌥⌘C") { copySelectedStyle() }
+                    .keyboardShortcut("c", modifiers: [.option, .command])
+                selectionButton("doc.on.clipboard", "粘贴样式 ⌥⌘V") { pasteStyleToSelected() }
+                    .keyboardShortcut("v", modifiers: [.option, .command])
+                    .disabled(styleClipboard == nil)
+                    .opacity(styleClipboard == nil ? 0.4 : 1)
+                selectionButton("trash", "删除 ⌫") { deleteSelected() }
                 if case .text = selected.kind {
                     selectionButton("pencil", "编辑文字") { startTextEditing(id: selected.id) }
                 }
@@ -291,31 +305,27 @@ struct AnnotationEditorView: View {
     @ViewBuilder
     private var textEditorOverlay: some View {
         if editingTextID != nil {
-            let isCallout = false
             let font = inlineFontSize * pointsPerPixel
             let measured = Annotation.textSize(
                 string: inlineText.isEmpty ? "文字" : inlineText,
                 fontSize: inlineFontSize
             )
-            let width = max(isCallout ? 120 : 90, measured.width * pointsPerPixel + (isCallout ? 24 : 16))
-            let height = max(isCallout ? 30 : 24, font * 1.6 + 8)
+            let width = max(90, measured.width * pointsPerPixel + 16)
+            let height = max(24, font * 1.6 + 8)
 
             TextField("文字", text: $inlineText)
                 .textFieldStyle(.plain)
                 .font(.system(size: max(11, font)))
-                .foregroundStyle(isCallout ? .white : color.swiftUIColor)
-                .padding(.horizontal, isCallout ? 10 : 6)
+                .foregroundStyle(color.swiftUIColor)
+                .padding(.horizontal, 6)
                 .frame(width: width, height: height)
                 .background(
-                    RoundedRectangle(cornerRadius: isCallout ? 9 : 4, style: .continuous)
-                        .fill(isCallout ? color.swiftUIColor : Color.black.opacity(0.35))
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.black.opacity(0.35))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: isCallout ? 9 : 4, style: .continuous)
-                        .strokeBorder(
-                            isCallout ? Color.white.opacity(0.25) : Color.accentColor,
-                            lineWidth: 1
-                        )
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .strokeBorder(Color.accentColor, lineWidth: 1)
                 )
                 .position(
                     x: inlineOriginView.x + width / 2,
@@ -356,6 +366,7 @@ struct AnnotationEditorView: View {
                 .keyboardShortcut("z", modifiers: [.command, .shift])
             iconButton("删除", symbol: "trash") { deleteSelected() }
                 .disabled(selectedID == nil)
+                .keyboardShortcut(.delete, modifiers: [])
 
             separator
 
@@ -780,6 +791,80 @@ struct AnnotationEditorView: View {
         pushUndo()
         annotations.removeAll { $0.id == selectedID }
         self.selectedID = nil
+    }
+
+    /// 置顶：挪到数组末尾（渲染顺序即数组顺序）。
+    private func bringSelectedToFront() {
+        guard let selectedID, let index = annotations.firstIndex(where: { $0.id == selectedID }),
+            index != annotations.count - 1
+        else { return }
+        pushUndo()
+        let annotation = annotations.remove(at: index)
+        annotations.append(annotation)
+    }
+
+    /// 置底：挪到数组开头。
+    private func sendSelectedToBack() {
+        guard let selectedID, let index = annotations.firstIndex(where: { $0.id == selectedID }),
+            index != 0
+        else { return }
+        pushUndo()
+        let annotation = annotations.remove(at: index)
+        annotations.insert(annotation, at: 0)
+    }
+
+    /// 复制一份并略微错位，便于拖出第二个同类标注。
+    private func duplicateSelected() {
+        guard let selected = selectedAnnotation else { return }
+        pushUndo()
+
+        let shifted = selected.translated(by: CGSize(width: 16, height: 16))
+        var kind = shifted.kind
+        // 序号 / 气泡复制出来要拿一个新号，避免重号。
+        switch kind {
+        case .counter(let center, _, let leader):
+            kind = .counter(center: center, value: counterValue, leader: leader)
+            counterValue += 1
+        case .callout(let center, _, let labelOrigin, let string, let size):
+            kind = .callout(
+                center: center,
+                value: counterValue,
+                labelOrigin: labelOrigin,
+                string: string,
+                fontSize: size
+            )
+            counterValue += 1
+        default:
+            break
+        }
+
+        let copy = Annotation(
+            id: UUID(),
+            kind: kind,
+            color: shifted.color,
+            lineWidth: shifted.lineWidth,
+            rotation: shifted.rotation
+        )
+        annotations.append(copy)
+        selectedID = copy.id
+    }
+
+    /// 复制当前标注的样式（颜色 / 线宽 / 字号 / 马赛克块）。
+    private func copySelectedStyle() {
+        guard let selected = selectedAnnotation else { return }
+        styleClipboard = AnnotationStyle(from: selected)
+    }
+
+    /// 把暂存的样式套到当前选中的标注上。
+    private func pasteStyleToSelected() {
+        guard let style = styleClipboard, let selectedID,
+            let index = annotations.firstIndex(where: { $0.id == selectedID })
+        else { return }
+        pushUndo()
+        let styled = style.applied(to: annotations[index])
+        annotations[index] = styled
+        color = styled.color
+        lineWidth = styled.lineWidth
     }
 
     /// 进入文字内联编辑。

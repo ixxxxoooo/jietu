@@ -77,6 +77,64 @@ struct RGBAColor: Equatable, Hashable {
     static let palette: [RGBAColor] = [.red, .orange, .yellow, .green, .blue, .white, .black]
 }
 
+/// 可复制的标注样式：颜色 / 线宽 / 字号 / 马赛克块大小。
+///
+/// 「复制样式 → 粘贴样式」用它在不同标注之间搬运外观，几何量不动。
+///
+/// @author ixxxxoooo
+struct AnnotationStyle: Equatable {
+    var color: RGBAColor
+    var lineWidth: CGFloat
+    /// 仅当被复制的对象是文字 / 气泡时才有值。
+    var fontSize: CGFloat?
+    /// 仅当被复制的对象是马赛克时才有值。
+    var mosaicBlock: CGFloat?
+
+    init(color: RGBAColor, lineWidth: CGFloat, fontSize: CGFloat? = nil, mosaicBlock: CGFloat? = nil) {
+        self.color = color
+        self.lineWidth = lineWidth
+        self.fontSize = fontSize
+        self.mosaicBlock = mosaicBlock
+    }
+
+    /// 从一条已有标注里提取样式：只带上与该类型相关的字段，
+    /// 这样「马赛克 → 文字」不会把文字字号改掉。
+    init(from annotation: Annotation) {
+        var fontSize: CGFloat?
+        switch annotation.kind {
+        case .text(_, _, let size), .callout(_, _, _, _, let size):
+            fontSize = size
+        default:
+            break
+        }
+        var mosaicBlock: CGFloat?
+        if case .pixelate(_, let block) = annotation.kind {
+            mosaicBlock = block
+        }
+        self.init(
+            color: annotation.color,
+            lineWidth: annotation.lineWidth,
+            fontSize: fontSize,
+            mosaicBlock: mosaicBlock
+        )
+    }
+
+    /// 把样式套到标注上。目标类型缺什么就不改什么：字号只作用于文字 / 气泡，
+    /// 马赛克块只作用于马赛克。
+    func applied(to annotation: Annotation) -> Annotation {
+        var copy = annotation.withColor(color).withLineWidth(lineWidth)
+        switch annotation.kind {
+        case .text, .callout:
+            if let fontSize { copy = copy.withFontSize(fontSize) }
+        case .pixelate:
+            if let mosaicBlock { copy = copy.withPixelateBlock(mosaicBlock) }
+        default:
+            break
+        }
+        return copy
+    }
+}
+
 /// 一次橡皮擦除笔迹（图像像素坐标，原点左上）。
 ///
 /// @author ixxxxoooo
@@ -283,7 +341,7 @@ extension Annotation {
                 )
             }
             copy.kind = .pen(points: scaled)
-        case .text(let origin, let string, let fontSize):
+        case .text(_, let string, let fontSize):
             let box = localBounds
             let newBox = ShapeGeometry.resizedRect(box, handle: handle, to: local, lockAspect: false)
             let ratio = box.height > 0 ? newBox.height / box.height : 1
@@ -309,7 +367,7 @@ extension Annotation {
             default:
                 break
             }
-        case .counter(let center, let value, let leader):
+        case .counter(let center, let value, _):
             if handle == .counterLeader {
                 copy.kind = .counter(center: center, value: value, leader: local)
             }

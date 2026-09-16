@@ -112,4 +112,60 @@ struct AnnotationGeometryTests {
         #expect(value == 3)
         #expect(leader == CGPoint(x: 90, y: 90))
     }
+
+    @Test("复制样式：颜色与线宽搬运到另一条标注")
+    func copiesStyleBetweenAnnotations() {
+        let source = Annotation(
+            kind: .rectangle(CGRect(x: 0, y: 0, width: 10, height: 10)),
+            color: .blue,
+            lineWidth: 9
+        )
+        let style = AnnotationStyle(from: source)
+
+        let target = Annotation(
+            kind: .ellipse(CGRect(x: 50, y: 50, width: 20, height: 20)),
+            color: .red,
+            lineWidth: 2
+        )
+        let styled = style.applied(to: target)
+
+        #expect(styled.color == .blue)
+        #expect(styled.lineWidth == 9)
+        // 几何量不受影响。
+        #expect(styled.kind == target.kind)
+    }
+
+    @Test("复制样式：字号与马赛克块只在同类标注上生效")
+    func appliesStyleOnlyToRelevantKinds() {
+        let text = Annotation(
+            kind: .text(origin: .zero, string: "hi", fontSize: 42),
+            color: .green,
+            lineWidth: 5
+        )
+        let mosaic = Annotation(
+            kind: .pixelate(CGRect(x: 0, y: 0, width: 40, height: 40), block: 20),
+            color: .black,
+            lineWidth: 1
+        )
+
+        // 从文字取样式贴到马赛克：字号不该污染马赛克块。
+        let style = AnnotationStyle(from: text)
+        let styledMosaic = style.applied(to: mosaic)
+        guard case .pixelate(_, let block) = styledMosaic.kind else {
+            Issue.record("kind 不再是 pixelate")
+            return
+        }
+        #expect(block == 20)
+        #expect(styledMosaic.color == .green)
+
+        // 反过来：从马赛克取样式贴到文字，字号保持原值。
+        let mosaicStyle = AnnotationStyle(from: mosaic)
+        let styledText = mosaicStyle.applied(to: text)
+        guard case .text(_, _, let fontSize) = styledText.kind else {
+            Issue.record("kind 不再是 text")
+            return
+        }
+        #expect(fontSize == 42)
+        #expect(styledText.lineWidth == 1)
+    }
 }
