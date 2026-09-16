@@ -42,8 +42,8 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 /// @author ixxxxoooo
 struct SettingsView: View {
     @Bindable var settings: SettingsStore
-    /// 某个动作的热键改变时通知外部重新注册。
-    var onHotkeyChange: (HotkeyAction, Hotkey) -> Void
+    /// 某个动作的热键改变时通知外部重新注册（nil 表示清除）。
+    var onHotkeyChange: (HotkeyAction, Hotkey?) -> Void
 
     @State private var section: SettingsSection = .general
 
@@ -190,7 +190,7 @@ struct SettingsView: View {
                 )
             }
             Divider()
-            Text("全局热键，点击右侧按钮后按下新的组合键；至少需要一个修饰键，Esc 取消。")
+            Text("默认都不设置快捷键，点了「未设置」再按组合键即可录入；「清除」可删掉。\n全局热键会抢占其它 App 的同名组合键，建议避开常用组合。")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }

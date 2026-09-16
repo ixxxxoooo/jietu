@@ -27,24 +27,21 @@ struct SettingsStoreTests {
         #expect(store.showSaveNotification == true)
         #expect(store.quickAccessAutoCloseDelay == 3)
         #expect(store.saveFormat == .png)
-        #expect(store.hotkeyAreaCapture == .captureArea)
+        #expect(store.hotkeyAreaCapture == nil)
     }
 
-    @Test("每个动作都有默认热键")
-    func defaultHotkeysPerAction() {
+    @Test("默认不设置任何热键")
+    func defaultHotkeysAreEmpty() {
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let store = SettingsStore(defaults: defaults)
         for action in HotkeyAction.allCases {
-            #expect(store.hotkey(for: action) == action.defaultHotkey)
+            #expect(store.hotkey(for: action) == nil)
         }
-        // 默认组合键两两不同，否则注册会互相顶掉。
-        let combos = Set(HotkeyAction.allCases.map { store.hotkey(for: $0) })
-        #expect(combos.count == HotkeyAction.allCases.count)
     }
 
-    @Test("多个热键各自独立持久化")
+    @Test("多个热键各自独立持久化，清除后不再存在")
     func persistsMultipleHotkeys() {
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -52,12 +49,18 @@ struct SettingsStoreTests {
         let store = SettingsStore(defaults: defaults)
         let windowKey = Hotkey(keyCode: 7, carbonModifiers: UInt32(optionKey))
         store.setHotkey(windowKey, for: .windowCapture)
+        store.setHotkey(Hotkey(keyCode: 9, carbonModifiers: UInt32(controlKey)), for: .timedCapture)
 
         let reloaded = SettingsStore(defaults: defaults)
         #expect(reloaded.hotkey(for: .windowCapture) == windowKey)
-        // 未改动的动作仍回落到默认值。
-        #expect(reloaded.hotkey(for: .areaCapture) == .captureArea)
-        #expect(reloaded.hotkey(for: .timedCapture) == .captureTimed)
+        #expect(reloaded.hotkey(for: .timedCapture)?.keyCode == 9)
+        #expect(reloaded.hotkey(for: .areaCapture) == nil)
+
+        // 清除只影响该动作。
+        reloaded.setHotkey(nil, for: .windowCapture)
+        let again = SettingsStore(defaults: defaults)
+        #expect(again.hotkey(for: .windowCapture) == nil)
+        #expect(again.hotkey(for: .timedCapture)?.keyCode == 9)
     }
 
     @Test("旧版本的单热键记录会迁移到区域截图")
@@ -130,7 +133,7 @@ struct SettingsStoreTests {
         let reloaded = SettingsStore(defaults: defaults)
         #expect(reloaded.copyToClipboard == false)
         #expect(reloaded.saveToDisk == true)
-        #expect(reloaded.hotkeyAreaCapture.keyCode == 5)
+        #expect(reloaded.hotkeyAreaCapture?.keyCode == 5)
     }
 
     @Test("最近截图按新到旧排序，且去重、限长")

@@ -15,8 +15,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var previousActivationPolicy: NSApplication.ActivationPolicy = .accessory
 
-    /// 热键改变回调，由 AppDelegate 负责注销旧热键、注册新热键。
-    var onHotkeyChange: ((HotkeyAction, Hotkey) -> Void)?
+    /// 热键改变回调，由 AppDelegate 负责注销旧热键、注册新热键（nil 表示清除）。
+    var onHotkeyChange: ((HotkeyAction, Hotkey?) -> Void)?
 
     init(settings: SettingsStore) {
         self.settings = settings

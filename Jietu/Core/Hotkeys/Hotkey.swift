@@ -5,34 +5,10 @@ struct Hotkey: Codable, Hashable {
     var keyCode: UInt32
     var carbonModifiers: UInt32
 
-    static let captureArea = Hotkey(
-        keyCode: UInt32(kVK_ANSI_A),
-        carbonModifiers: UInt32(cmdKey | shiftKey)
-    )
-
-    static let captureWindow = Hotkey(
-        keyCode: UInt32(kVK_ANSI_W),
-        carbonModifiers: UInt32(cmdKey | shiftKey)
-    )
-
-    static let captureFullScreen = Hotkey(
-        keyCode: UInt32(kVK_ANSI_F),
-        carbonModifiers: UInt32(cmdKey | shiftKey)
-    )
-
-    static let captureTimed = Hotkey(
-        keyCode: UInt32(kVK_ANSI_T),
-        carbonModifiers: UInt32(cmdKey | shiftKey)
-    )
-
-    static let captureScrolling = Hotkey(
-        keyCode: UInt32(kVK_ANSI_L),
-        carbonModifiers: UInt32(cmdKey | shiftKey)
-    )
-
     /// 空格：截图后「未做任何操作」时，唤回最近一张浮窗。
     ///
     /// 只在很短的时间窗内注册，避免长期占用系统空格键。
+    /// 注意：这是内部临时热键，不影响用户在设置页的热键配置（那五个动作默认都不设）。
     static let recallLastCapture = Hotkey(
         keyCode: UInt32(kVK_Space),
         carbonModifiers: 0

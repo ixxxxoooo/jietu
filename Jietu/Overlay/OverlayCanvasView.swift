@@ -44,8 +44,6 @@ final class OverlayCanvasView: NSView {
     private var hoveredWindow: WindowInfo?
     private var cursorPoint: CGPoint?
 
-    private var sampledColor: PixelSampler.Sample?
-    private var lastSampledPixel: CGPoint?
 
     /// 上次用过的选区，按显示器记忆，Tab 恢复。
     private static var rememberedSelection: [CGDirectDisplayID: CGRect] = [:]
@@ -132,16 +130,6 @@ final class OverlayCanvasView: NSView {
     private let selectionBorderInnerLayer = CAShapeLayer()
     private let handlesLayer = CAShapeLayer()
     private let crosshairLayer = CAShapeLayer()
-    private let magnifierLayer = CALayer()
-    private let magnifierRingLayer = CAShapeLayer()
-    /// 暗色外环。放大镜里的内容本身可能就是纯白，白环白底会整个消失。
-    private let magnifierRingShadowLayer = CAShapeLayer()
-    private let magnifierCrosshairLayer = CAShapeLayer()
-    /// 十字线的黑色描边层。白线落在白色内容上会「消失」，必须有描边。
-    private let magnifierCrosshairShadowLayer = CAShapeLayer()
-    private let magnifierPillLayer = CALayer()
-    private let magnifierSwatchLayer = CALayer()
-    private let magnifierLabelLayer = CATextLayer()
     private let sizeLabelLayer = CATextLayer()
     private let windowLabelLayer = CATextLayer()
     private let hintLayer = CATextLayer()
@@ -296,7 +284,6 @@ final class OverlayCanvasView: NSView {
         crosshairLayer.frame = bounds
         root.addSublayer(crosshairLayer)
 
-        configureMagnifier(scale: scale, root: root)
 
         for textLayer in [sizeLabelLayer, windowLabelLayer, hintLayer] {
             configurePillTextLayer(textLayer, scale: scale)
@@ -327,62 +314,6 @@ final class OverlayCanvasView: NSView {
         textLayer.isHidden = true
     }
 
-    private func configureMagnifier(scale: CGFloat, root: CALayer) {
-        magnifierLayer.contents = snapshot.image
-        magnifierLayer.contentsGravity = .resize
-        magnifierLayer.magnificationFilter = .nearest
-        magnifierLayer.minificationFilter = .nearest
-        magnifierLayer.cornerRadius = Theme.magnifierSize / 2
-        magnifierLayer.masksToBounds = true
-        magnifierLayer.contentsScale = scale
-        magnifierLayer.isHidden = true
-        root.addSublayer(magnifierLayer)
-
-        magnifierRingShadowLayer.fillColor = nil
-        magnifierRingShadowLayer.strokeColor = NSColor.black.withAlphaComponent(0.55).cgColor
-        magnifierRingShadowLayer.lineWidth = 5
-        magnifierRingShadowLayer.isHidden = true
-        root.addSublayer(magnifierRingShadowLayer)
-
-        magnifierRingLayer.fillColor = nil
-        magnifierRingLayer.strokeColor = NSColor.white.cgColor
-        magnifierRingLayer.lineWidth = 2
-        magnifierRingLayer.isHidden = true
-        root.addSublayer(magnifierRingLayer)
-
-        // 十字线白底白线看不清，用黑色描边垫底。
-        magnifierCrosshairShadowLayer.fillColor = nil
-        magnifierCrosshairShadowLayer.strokeColor = NSColor.black.withAlphaComponent(0.55).cgColor
-        magnifierCrosshairShadowLayer.lineWidth = 3
-        magnifierCrosshairShadowLayer.isHidden = true
-        root.addSublayer(magnifierCrosshairShadowLayer)
-
-        magnifierCrosshairLayer.fillColor = nil
-        magnifierCrosshairLayer.strokeColor = NSColor.white.withAlphaComponent(0.95).cgColor
-        magnifierCrosshairLayer.lineWidth = 1
-        magnifierCrosshairLayer.isHidden = true
-        root.addSublayer(magnifierCrosshairLayer)
-        magnifierPillLayer.backgroundColor = NSColor.black.withAlphaComponent(0.68).cgColor
-        magnifierPillLayer.cornerRadius = 6
-        magnifierPillLayer.isHidden = true
-        root.addSublayer(magnifierPillLayer)
-
-        magnifierSwatchLayer.cornerRadius = 3
-        magnifierSwatchLayer.borderWidth = 1
-        magnifierSwatchLayer.borderColor = NSColor.white.withAlphaComponent(0.55).cgColor
-        magnifierSwatchLayer.isHidden = true
-        root.addSublayer(magnifierSwatchLayer)
-
-        magnifierLabelLayer.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-        magnifierLabelLayer.fontSize = 11
-        magnifierLabelLayer.foregroundColor = NSColor.white.cgColor
-        magnifierLabelLayer.alignmentMode = .left
-        magnifierLabelLayer.truncationMode = .none
-        magnifierLabelLayer.contentsScale = scale
-        magnifierLabelLayer.isHidden = true
-        root.addSublayer(magnifierLabelLayer)
-    }
-
     override func layout() {
         super.layout()
         let scale = window?.backingScaleFactor ?? snapshot.nominalScaleFactor
@@ -396,7 +327,7 @@ final class OverlayCanvasView: NSView {
         imageLayer.contentsScale = scale
         // 标注层尺寸由 updateAnnotationLayer() 按选区设置，这里不能重置成整屏。
         annotationLayer.contentsScale = scale
-        for textLayer in [sizeLabelLayer, windowLabelLayer, hintLayer, magnifierLabelLayer] {
+        for textLayer in [sizeLabelLayer, windowLabelLayer, hintLayer] {
             textLayer.contentsScale = scale
         }
         updateAllLayers()
@@ -432,7 +363,6 @@ final class OverlayCanvasView: NSView {
         updateDimPath()
         updateSelectionLayers()
         updateCrosshair()
-        updateMagnifier()
         updateHint()
     }
 
@@ -536,132 +466,6 @@ final class OverlayCanvasView: NSView {
         path.move(to: CGPoint(x: cursorPoint.x, y: bounds.minY))
         path.addLine(to: CGPoint(x: cursorPoint.x, y: bounds.maxY))
         crosshairLayer.path = path
-    }
-
-    private func updateMagnifier() {
-        let shouldShow = cursorPoint != nil && !isSettled
-        for layer in [
-            magnifierLayer, magnifierRingShadowLayer, magnifierRingLayer,
-            magnifierCrosshairShadowLayer, magnifierCrosshairLayer, magnifierPillLayer,
-            magnifierSwatchLayer, magnifierLabelLayer,
-        ] {
-            layer.isHidden = !shouldShow
-        }
-        guard shouldShow, let cursorPoint else { return }
-
-        let size = Theme.magnifierSize
-        let pixel = snapshot.pixelPoint(fromLocalPoint: cursorPoint)
-        updateMagnifierContents(pixel: pixel, size: size)
-
-        // 跟在光标的右上角，贴边时自动翻到另一侧。
-        let gap: CGFloat = 16
-        var origin = CGPoint(x: cursorPoint.x + gap, y: cursorPoint.y + gap)
-        if origin.x + size > bounds.maxX - 8 {
-            origin.x = cursorPoint.x - gap - size
-        }
-        if origin.y + size > bounds.maxY - 8 {
-            origin.y = cursorPoint.y - gap - size
-        }
-        origin.x = min(max(origin.x, bounds.minX + 8), bounds.maxX - size - 8)
-        origin.y = min(max(origin.y, bounds.minY + 8), bounds.maxY - size - 8)
-        let circleFrame = CGRect(origin: origin, size: CGSize(width: size, height: size))
-
-        magnifierLayer.frame = circleFrame
-        magnifierRingShadowLayer.frame = circleFrame
-        magnifierRingShadowLayer.path = CGPath(
-            ellipseIn: CGRect(origin: .zero, size: circleFrame.size),
-            transform: nil
-        )
-        magnifierRingLayer.frame = circleFrame
-        magnifierRingLayer.path = CGPath(
-            ellipseIn: CGRect(origin: .zero, size: circleFrame.size),
-            transform: nil
-        )
-
-        let crosshair = CGMutablePath()
-        let arm: CGFloat = 9
-        crosshair.move(to: CGPoint(x: size / 2 - arm, y: size / 2))
-        crosshair.addLine(to: CGPoint(x: size / 2 + arm, y: size / 2))
-        crosshair.move(to: CGPoint(x: size / 2, y: size / 2 - arm))
-        crosshair.addLine(to: CGPoint(x: size / 2, y: size / 2 + arm))
-        magnifierCrosshairShadowLayer.frame = circleFrame
-        magnifierCrosshairShadowLayer.path = crosshair
-        magnifierCrosshairLayer.frame = circleFrame
-        magnifierCrosshairLayer.path = crosshair
-
-        updateMagnifierReadout(circleFrame: circleFrame, pixel: pixel)
-    }
-
-    /// 用 `contentsRect` 做放大：不需要生成中间位图，只是换一个采样窗口。
-    private func updateMagnifierContents(pixel: CGPoint, size: CGFloat) {
-        let imageWidth = CGFloat(snapshot.image.width)
-        let imageHeight = CGFloat(snapshot.image.height)
-        let sourcePixels = size / Theme.magnifierZoom * snapshot.effectiveScale
-        let unitWidth = min(1, sourcePixels / imageWidth)
-        let unitHeight = min(1, sourcePixels / imageHeight)
-        magnifierLayer.contentsRect = CGRect(
-            x: min(max((pixel.x - sourcePixels / 2) / imageWidth, 0), 1 - unitWidth),
-            y: min(max((pixel.y - sourcePixels / 2) / imageHeight, 0), 1 - unitHeight),
-            width: unitWidth,
-            height: unitHeight
-        )
-    }
-
-    private func updateMagnifierReadout(circleFrame: CGRect, pixel: CGPoint) {
-        // 只在跨过一个像素时才重新取样，天然节流。
-        let pixelKey = CGPoint(x: pixel.x.rounded(.down), y: pixel.y.rounded(.down))
-        if lastSampledPixel != pixelKey {
-            lastSampledPixel = pixelKey
-            sampledColor = PixelSampler.sample(snapshot.image, atPixel: pixelKey)
-        }
-
-        let text: String
-        if let sampledColor {
-            text = String(
-                format: "%@   %.0f, %.0f",
-                sampledColor.hexString,
-                pixelKey.x,
-                pixelKey.y
-            )
-            magnifierSwatchLayer.isHidden = false
-            magnifierSwatchLayer.backgroundColor = NSColor(
-                srgbRed: CGFloat(sampledColor.red) / 255,
-                green: CGFloat(sampledColor.green) / 255,
-                blue: CGFloat(sampledColor.blue) / 255,
-                alpha: 1
-            ).cgColor
-        } else {
-            text = ""
-            magnifierSwatchLayer.isHidden = true
-        }
-
-        let height: CGFloat = 20
-        let swatchSize: CGFloat = 12
-        let textWidth = max(60, CGFloat(text.count) * 7.0)
-        let pillWidth = 7 + swatchSize + 6 + textWidth + 8
-        let pillOrigin = CGPoint(
-            x: min(max(circleFrame.minX, bounds.minX + 6), bounds.maxX - pillWidth - 6),
-            y: max(circleFrame.minY - height - 6, bounds.minY + 6)
-        )
-        let pillFrame = CGRect(
-            origin: pillOrigin,
-            size: CGSize(width: pillWidth, height: height)
-        )
-
-        magnifierPillLayer.frame = pillFrame
-        magnifierSwatchLayer.frame = CGRect(
-            x: pillFrame.minX + 7,
-            y: pillFrame.midY - swatchSize / 2,
-            width: swatchSize,
-            height: swatchSize
-        )
-        magnifierLabelLayer.string = text
-        magnifierLabelLayer.frame = CGRect(
-            x: pillFrame.minX + 7 + swatchSize + 6,
-            y: pillFrame.minY,
-            width: textWidth + 4,
-            height: height
-        )
     }
 
     private func updateWindowHighlight() {
@@ -775,7 +579,6 @@ final class OverlayCanvasView: NSView {
         cursorPoint = point
         updateHoveredWindow(at: point)
         updateCrosshair()
-        updateMagnifier()
         updateCursor(at: point)
     }
 
@@ -784,7 +587,6 @@ final class OverlayCanvasView: NSView {
         hoveredWindow = nil
         updateWindowHighlight()
         updateCrosshair()
-        updateMagnifier()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -880,7 +682,6 @@ final class OverlayCanvasView: NSView {
         updateDimPath()
         updateSelectionLayers()
         updateCrosshair()
-        updateMagnifier()
         updateHint()
     }
 

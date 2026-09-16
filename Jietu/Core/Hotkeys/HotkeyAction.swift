@@ -2,8 +2,8 @@ import Foundation
 
 /// 可绑定全局热键的动作。
 ///
-/// 每个动作一组默认组合键，用户可在设置页逐一改写；改完由 AppDelegate
-/// 注销旧键、注册新键。
+/// 每个动作默认**不设**热键（避免和系统 / 其它 App 抢组合键），
+/// 用户想用哪个就在设置页自己录一个，也可以随时清除。
 ///
 /// @author ixxxxoooo
 enum HotkeyAction: String, CaseIterable, Identifiable, Codable {
@@ -38,15 +38,4 @@ enum HotkeyAction: String, CaseIterable, Identifiable, Codable {
 
     /// 定时截图热键使用的延时（秒）。
     static let timedCaptureDelay: TimeInterval = 5
-
-    /// 出厂默认组合键。
-    var defaultHotkey: Hotkey {
-        switch self {
-        case .areaCapture: return .captureArea
-        case .windowCapture: return .captureWindow
-        case .fullScreenCapture: return .captureFullScreen
-        case .timedCapture: return .captureTimed
-        case .scrollingCapture: return .captureScrolling
-        }
-    }
 }

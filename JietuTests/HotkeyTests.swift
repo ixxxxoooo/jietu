@@ -10,7 +10,10 @@ import Testing
 struct HotkeyTests {
     @Test("修饰键符号顺序为 ⌃⌥⇧⌘")
     func displayString() {
-        let hotkey = Hotkey.captureArea
+        let hotkey = Hotkey(
+            keyCode: UInt32(kVK_ANSI_A),
+            carbonModifiers: UInt32(cmdKey | shiftKey)
+        )
         #expect(hotkey.displayString == "⇧⌘A")
     }
 

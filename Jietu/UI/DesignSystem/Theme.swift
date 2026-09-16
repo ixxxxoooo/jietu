@@ -35,9 +35,6 @@ enum Theme {
     /// 小于这个尺寸的框选视为误触。与 `SelectionGeometry.minimumSide` 同源。
     static let minimumSelectionSize: CGFloat = SelectionGeometry.minimumSide
 
-    static let magnifierSize: CGFloat = 128
-    static let magnifierZoom: CGFloat = 8
-
     static let quickAccessWidth: CGFloat = 240
     static let quickAccessCornerRadius: CGFloat = 12
     static let quickAccessInset: CGFloat = 20

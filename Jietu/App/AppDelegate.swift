@@ -90,8 +90,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setUpHotkeys() {
+        // 默认全部不设：只有用户自己配过的动作才注册。
         for action in HotkeyAction.allCases {
-            applyHotkey(settings.hotkey(for: action), for: action)
+            guard let hotkey = settings.hotkey(for: action) else { continue }
+            applyHotkey(hotkey, for: action)
         }
     }
 
@@ -123,17 +125,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    /// 注销某个动作的旧热键并注册新热键。
+    private func unregisterHotkey(for action: HotkeyAction) {
+        if let id = hotkeyIDs.removeValue(forKey: action) {
+            hotkeys.unregister(id)
+        }
+        activeHotkeys.removeValue(forKey: action)
+    }
+
+    /// 注销某个动作的旧热键并注册新热键；`hotkey` 为 nil 表示清除该动作的快捷键。
     ///
     /// Carbon 热键不能原地修改，设置页改了组合键只能走这条路径重注册。
     /// 注册失败（被别的 App 占用，或与另一个动作撞车）时回滚到上一个可用组合键并返回 false。
     @discardableResult
-    private func applyHotkey(_ hotkey: Hotkey, for action: HotkeyAction) -> Bool {
+    private func applyHotkey(_ hotkey: Hotkey?, for action: HotkeyAction) -> Bool {
         let previous = activeHotkeys[action]
+        unregisterHotkey(for: action)
 
-        if let id = hotkeyIDs[action] {
-            hotkeys.unregister(id)
-            hotkeyIDs[action] = nil
+        guard let hotkey else {
+            logger.notice("cleared \(action.rawValue, privacy: .public) hotkey")
+            return true
         }
 
         // 同一组合键不能绑两个动作，Carbon 那边只会静默失败，这里先给出可读原因。
@@ -694,10 +704,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 guard self.applyHotkey(hotkey, for: action) else {
                     // 回滚设置里的组合键，并提示占用。
-                    if let active = self.activeHotkeys[action], self.settings.hotkey(for: action) != active {
-                        self.settings.setHotkey(active, for: action)
+                    if self.settings.hotkey(for: action) != self.activeHotkeys[action] {
+                        self.settings.setHotkey(self.activeHotkeys[action], for: action)
                     }
-                    self.presentHotkeyFailure(hotkey, action: action)
+                    if let hotkey {
+                        self.presentHotkeyFailure(hotkey, action: action)
+                    }
                     return
                 }
             }

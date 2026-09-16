@@ -89,23 +89,27 @@ final class SettingsStore {
 
     private let defaults: UserDefaults
 
-    /// 各动作的全局热键。缺失的动作回落到 `HotkeyAction.defaultHotkey`。
+    /// 各动作的全局热键。**没设置的动作不在表里**（默认全部不设）。
     var hotkeys: [HotkeyAction: Hotkey] {
         didSet { persistHotkeys() }
     }
 
-    /// 读取某个动作的热键。
-    func hotkey(for action: HotkeyAction) -> Hotkey {
-        hotkeys[action] ?? action.defaultHotkey
+    /// 读取某个动作的热键；nil 表示用户还没设置。
+    func hotkey(for action: HotkeyAction) -> Hotkey? {
+        hotkeys[action]
     }
 
-    /// 改写某个动作的热键。
-    func setHotkey(_ hotkey: Hotkey, for action: HotkeyAction) {
-        hotkeys[action] = hotkey
+    /// 设置（或传 nil 清除）某个动作的热键。
+    func setHotkey(_ hotkey: Hotkey?, for action: HotkeyAction) {
+        if let hotkey {
+            hotkeys[action] = hotkey
+        } else {
+            hotkeys.removeValue(forKey: action)
+        }
     }
 
     /// 区域截图热键（多热键之前的旧入口，保留给已有调用方）。
-    var hotkeyAreaCapture: Hotkey {
+    var hotkeyAreaCapture: Hotkey? {
         get { hotkey(for: .areaCapture) }
         set { setHotkey(newValue, for: .areaCapture) }
     }
@@ -261,10 +265,8 @@ final class SettingsStore {
     }
 
     private func persistHotkeys() {
-        let resolved = Dictionary(
-            uniqueKeysWithValues: HotkeyAction.allCases.map { ($0.rawValue, hotkey(for: $0)) }
-        )
-        guard let data = try? JSONEncoder().encode(resolved) else { return }
+        let raw = Dictionary(uniqueKeysWithValues: hotkeys.map { ($0.key.rawValue, $0.value) })
+        guard let data = try? JSONEncoder().encode(raw) else { return }
         defaults.set(data, forKey: Key.hotkeys)
     }
 
