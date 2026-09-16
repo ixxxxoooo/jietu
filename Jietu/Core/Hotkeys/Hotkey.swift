@@ -24,6 +24,11 @@ extension Hotkey {
         modifierSymbols + keySymbol
     }
 
+    /// 逐个按键符号，设置页的录制器按芯片逐个排。
+    var keycaps: [String] {
+        modifierSymbols.map(String.init) + [keySymbol]
+    }
+
     /// 从一次本地键盘事件构造热键；用于设置页录制组合键。
     static func from(event: NSEvent) -> Hotkey? {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)

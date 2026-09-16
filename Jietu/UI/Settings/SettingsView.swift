@@ -3,9 +3,6 @@ import SwiftUI
 
 /// 设置页左侧的分类。
 ///
-/// 每个分类带一个 `Theme.Colors.Accent` 主题色：侧边栏图标与内容区行图标共用它，
-/// 这样左右两栏的配色是一致的。
-///
 /// @author ixxxxoooo
 enum SettingsSection: String, CaseIterable, Identifiable {
     case general
@@ -38,24 +35,13 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .permission: return "lock.shield"
         }
     }
-
-    /// 该分区的主题色（图标专用，文本仍走墨色 ramp）。
-    var tint: Color {
-        switch self {
-        case .general: return Theme.Colors.Accent.blue
-        case .capture: return Theme.Colors.Accent.green
-        case .hotkeys: return Theme.Colors.Accent.amber
-        case .quickAccess: return Theme.Colors.Accent.teal
-        case .annotation: return Theme.Colors.Accent.violet
-        case .permission: return Theme.Colors.Accent.rose
-        }
-    }
 }
 
 /// 偏好设置主界面：左侧分类，右侧分组表单。
 ///
 /// 风格对齐 Tinycast 的设置页——侧栏 `List(.sidebar)`，详情用系统 `Form(.grouped)`
-/// 分组卡片；图标用分区主题色，文本 / 间距 / 圆角全部走 `Theme`。
+/// 分组卡片；图标统一用 `Theme.Colors.icon`（取自强调色），开关 / 分段 / 焦点态
+/// 统一用 `Theme.Colors.accent`，文本 / 间距 / 圆角走墨色 ramp 与 token。
 ///
 /// @author ixxxxoooo
 struct SettingsView: View {
@@ -72,7 +58,7 @@ struct SettingsView: View {
                     Text(item.title)
                 } icon: {
                     Image(systemName: item.symbol)
-                        .foregroundStyle(item.tint)
+                        .foregroundStyle(Theme.Colors.icon)
                 }
                 .tag(item)
             }
@@ -94,6 +80,8 @@ struct SettingsView: View {
                         .ignoresSafeArea()
                 )
         }
+        // 开关打开态、分段与单选选中态、聚焦环都走同一个强调色。
+        .tint(Theme.Colors.accent)
         .onChange(of: settings.launchAtLogin) { _, newValue in
             LaunchAtLogin.setEnabled(newValue)
         }
@@ -114,33 +102,28 @@ struct SettingsView: View {
     // MARK: - 通用
 
     private var generalSection: some View {
-        let tint = SettingsSection.general.tint
-        return Form {
+        Form {
             Section {
                 SettingsToggleRow(
                     icon: "power",
-                    tint: tint,
                     title: "登录时启动",
                     subtitle: "开机后自动启动 Jietu，随菜单栏常驻。",
                     isOn: $settings.launchAtLogin
                 )
                 SettingsToggleRow(
                     icon: "speaker.wave.2",
-                    tint: tint,
                     title: "截图后播放快门音",
                     subtitle: "截图成功时播放系统快门声。",
                     isOn: $settings.playShutterSound
                 )
                 SettingsToggleRow(
                     icon: "doc.on.clipboard",
-                    tint: tint,
                     title: "截图后自动复制到剪贴板",
                     subtitle: "截图后立即写入剪贴板，可直接粘贴。",
                     isOn: $settings.copyToClipboard
                 )
                 SettingsToggleRow(
                     icon: "bell",
-                    tint: tint,
                     title: "保存后显示系统通知",
                     subtitle: "保存到磁盘后弹出通知，点击可定位文件。",
                     isOn: $settings.showSaveNotification
@@ -159,19 +142,16 @@ struct SettingsView: View {
     // MARK: - 截图
 
     private var captureSection: some View {
-        let tint = SettingsSection.capture.tint
-        return Form {
+        Form {
             Section {
                 SettingsToggleRow(
                     icon: "externaldrive",
-                    tint: tint,
                     title: "自动保存到磁盘",
                     subtitle: "截图后自动写入下面选定的保存位置。",
                     isOn: $settings.saveToDisk
                 )
                 SettingsControlRow(
                     icon: "folder",
-                    tint: tint,
                     title: "保存位置",
                     subtitle: settings.saveDirectory.path,
                     subtitleLineLimit: 1,
@@ -189,7 +169,6 @@ struct SettingsView: View {
             Section {
                 SettingsControlRow(
                     icon: "photo",
-                    tint: tint,
                     title: "保存格式",
                     subtitle: "PNG 无损体积大，JPEG 可调质量。"
                 ) {
@@ -205,7 +184,6 @@ struct SettingsView: View {
                 }
                 SettingsControlRow(
                     icon: "slider.horizontal.3",
-                    tint: tint,
                     title: "JPEG 质量",
                     subtitle: "只在 JPEG 格式下生效。",
                     isActive: settings.saveFormat == .jpeg
@@ -224,7 +202,6 @@ struct SettingsView: View {
             Section {
                 SettingsControlRow(
                     icon: "textformat.abc",
-                    tint: tint,
                     title: "文件名模板",
                     subtitle: "\(FilenameTemplate.placeholderHint)\n示例：\(previewFilename)",
                     subtitleLineLimit: 3,
@@ -257,15 +234,13 @@ struct SettingsView: View {
     // MARK: - 快捷键
 
     private var hotkeysSection: some View {
-        let tint = SettingsSection.hotkeys.tint
-        return Form {
+        Form {
             Section {
                 ForEach(HotkeyAction.allCases) { action in
                     HotkeyRecorderView(
                         title: action.title,
                         subtitle: action.subtitle,
                         icon: action.symbol,
-                        tint: tint,
                         hotkey: Binding(
                             get: { settings.hotkey(for: action) },
                             set: { newValue in
@@ -279,7 +254,8 @@ struct SettingsView: View {
                 SettingsSectionHeader(title: "快捷键")
             } footer: {
                 Text(
-                    "默认都不设置快捷键，点了「未设置」再按组合键即可录入；「清除」可删掉。\n"
+                    "默认都不设置快捷键，点一下录制器再按组合键即可录入；"
+                        + "悬停录制器时右侧的 ✕ 可清除。\n"
                         + "全局热键会抢占其它 App 的同名组合键，建议避开常用组合。"
                 )
                 .font(Theme.Typography.rowSubtitle)
@@ -292,12 +268,10 @@ struct SettingsView: View {
     // MARK: - 预览浮窗
 
     private var quickAccessSection: some View {
-        let tint = SettingsSection.quickAccess.tint
-        return Form {
+        Form {
             Section {
                 SettingsControlRow(
                     icon: "rectangle.on.rectangle",
-                    tint: tint,
                     title: "停靠位置",
                     subtitle: "截图后浮窗出现在屏幕的哪个角。"
                 ) {
@@ -314,7 +288,6 @@ struct SettingsView: View {
 
                 SettingsControlRow(
                     icon: "timer",
-                    tint: tint,
                     title: "自动关闭",
                     subtitle: "浮窗多久后自动消失，「永不」则需手动关闭。"
                 ) {
@@ -341,12 +314,10 @@ struct SettingsView: View {
     // MARK: - 标注
 
     private var annotationSection: some View {
-        let tint = SettingsSection.annotation.tint
-        return Form {
+        Form {
             Section {
                 SettingsControlRow(
                     icon: "pencil.tip.crop.circle",
-                    tint: tint,
                     title: "编辑方式",
                     subtitle: "就地编辑：截完直接在当前画面上标注。\n独立窗口：截完先显示浮窗，点开后在单独窗口编辑。"
                 ) {
@@ -366,7 +337,6 @@ struct SettingsView: View {
             Section {
                 SettingsControlRow(
                     icon: "paintpalette",
-                    tint: tint,
                     title: "默认样式",
                     subtitle: styleSummary
                 ) {
@@ -397,15 +367,12 @@ struct SettingsView: View {
     // MARK: - 权限
 
     private var permissionSection: some View {
-        let tint = SettingsSection.permission.tint
         let granted = ScreenCapturePermission.isGranted
         return Form {
             Section {
                 SettingsRow(
                     title: granted ? "屏幕录制：已授权" : "屏幕录制：未授权",
-                    subtitle: granted
-                        ? "Jietu 可以正常冻结屏幕并截图。"
-                        : "没有它，截图会返回空白画面。",
+                    subtitle: granted ? "Jietu 可以正常冻结屏幕并截图。" : "没有它，截图会返回空白画面。",
                     icon: {
                         SettingsIcon(
                             systemImage: granted
@@ -417,9 +384,32 @@ struct SettingsView: View {
                     EmptyView()
                 }
 
+                // dev 渠道是独立 bundle id，系统设置里是另一条授权，得让用户知道勾哪个。
+                SettingsControlRow(
+                    icon: "app.badge.checkmark",
+                    title: "授权对象",
+                    subtitle: "在「系统设置 › 隐私与安全性 › 屏幕录制」里勾选它。"
+                ) {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        Text(AppIdentity.displayName)
+                            .font(Theme.Typography.bar)
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        if AppIdentity.isDevChannel {
+                            Text("dev")
+                                .font(Theme.Typography.compactKeyCap)
+                                .foregroundStyle(Theme.Colors.accent)
+                                .padding(.horizontal, Theme.Spacing.sm)
+                                .frame(height: Theme.Size.recorderKeyCap)
+                                .background(
+                                    Capsule().fill(Theme.Colors.accent.opacity(0.15))
+                                )
+                                .help("开发渠道：\(AppIdentity.bundleIdentifier)")
+                        }
+                    }
+                }
+
                 SettingsControlRow(
                     icon: "lock.shield",
-                    tint: tint,
                     title: "授权操作"
                 ) {
                     Button("打开系统设置") { ScreenCapturePermission.openSystemSettings() }

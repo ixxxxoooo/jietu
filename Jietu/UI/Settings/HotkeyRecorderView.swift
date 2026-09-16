@@ -1,13 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// 设置页里的组合键录制控件。
+/// 设置页里的快捷键录制器。
+///
+/// **一个控件就是一个完整组件**：点击进入录制、按下组合键写入、悬停时右侧浮出清除，
+/// 不再单独摆一个「清除」按钮（参考项目的 `ShortcutRecorder` 也是同一个组件干这两件事）。
 ///
 /// 靠**本地**事件监视器抓 `keyDown`：只在 Jietu 自己的窗口拿到焦点时生效，
 /// 不像全局监视器那样需要「辅助功能」权限，也不会偷录其它 App 的输入。
 ///
-/// 默认不设热键（`hotkey == nil` 显示「未设置」），录制后可再点「清除」删掉。
-/// 视觉走 Tinycast 的设置行：标题 + 副标题 + 尾部 keycap / 玻璃按钮。
+/// 默认不设热键（`hotkey == nil` 显示「未设置」）；编辑态下 Esc 取消。
 ///
 /// @author ixxxxoooo
 struct HotkeyRecorderView: View {
@@ -17,12 +19,12 @@ struct HotkeyRecorderView: View {
     var subtitle: String
     /// 行首图标的 SF Symbol。
     var icon: String = "keyboard"
-    /// 行首图标主题色，与所在设置分区一致。
-    var tint: Color = Theme.Colors.textSecondary
     @Binding var hotkey: Hotkey?
 
     @State private var isRecording = false
     @State private var monitor: Any?
+    @State private var hovered = false
+    /// 录制失败（没按修饰键）时的提示。
     @State private var hint: String?
 
     var body: some View {
@@ -31,38 +33,90 @@ struct HotkeyRecorderView: View {
             subtitle: statusText,
             subtitleLineLimit: 1,
             subtitleTint: hint == nil ? nil : Theme.Colors.warning,
-            icon: { SettingsIcon(systemImage: icon, tint: tint) }
+            icon: { SettingsIcon(systemImage: icon) }
         ) {
-            HStack(spacing: Theme.Spacing.md) {
-                if isRecording {
-                    Text("录制中…")
-                        .font(Theme.Typography.bar)
-                        .foregroundStyle(Theme.Colors.brand)
-                    Button("取消") { stopRecording() }
-                        .buttonStyle(.link)
-                } else {
-                    Button {
-                        startRecording()
-                    } label: {
-                        KeyCapChip(
-                            text: hotkey?.displayString ?? "未设置",
-                            style: .filled,
-                            scale: .standard
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .help("点击后按下新的组合键")
-
-                    Button("清除") {
-                        hotkey = nil
-                        hint = nil
-                    }
-                    .buttonStyle(.link)
-                    .disabled(hotkey == nil)
-                }
-            }
+            recorder
         }
         .onDisappear { stopRecording() }
+    }
+
+    /// 固定宽高的录制器：组合键长短变化不会让这一列的对齐跑掉。
+    private var recorder: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.menu, style: .continuous)
+        return content
+            .padding(.horizontal, Theme.Spacing.sm)
+            .frame(
+                width: Theme.Size.shortcutRecorder,
+                height: Theme.Size.shortcutRecorderHeight
+            )
+            .background(shape.fill(Theme.Colors.cardFill).opacity(showsFill ? 1 : 0))
+            .overlay(
+                shape.strokeBorder(
+                    isRecording ? Theme.Colors.accent : Theme.Colors.cardStroke,
+                    lineWidth: Theme.Size.hairline
+                )
+            )
+            // 组合键过长时截断，而不是把控件撑大。
+            .clipShape(shape)
+            .contentShape(shape)
+            .onTapGesture { startRecording() }
+            .onHover { hovered = $0 }
+            .animation(.easeOut(duration: Theme.Duration.hover), value: hovered)
+    }
+
+    /// 未绑定、未录制、也没悬停时收起底色：一排相同的空槽会比内容本身还响。
+    private var showsFill: Bool {
+        hotkey != nil || isRecording || hovered
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if isRecording {
+            Text("请按组合键…")
+                .font(Theme.Typography.keyCap)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .frame(maxWidth: .infinity)
+        } else if let bound = hotkey {
+            HStack(spacing: Theme.Spacing.xxs) {
+                ForEach(Array(bound.keycaps.enumerated()), id: \.offset) { _, cap in
+                    Text(cap)
+                        .font(Theme.Typography.keyCap)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .padding(.horizontal, Theme.Spacing.xs)
+                        .frame(
+                            minWidth: Theme.Size.recorderKeyCap,
+                            minHeight: Theme.Size.recorderKeyCap
+                        )
+                        .background(
+                            RoundedRectangle(
+                                cornerRadius: Theme.Radius.recorderKeyCap, style: .continuous
+                            )
+                            .fill(Theme.Colors.controlSurface)
+                        )
+                }
+            }
+            .frame(maxWidth: .infinity)
+            // 覆盖而不是并排：清除按钮不该占掉按键芯片的宽度。
+            .overlay(alignment: .trailing) {
+                Button {
+                    hotkey = nil
+                    hint = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.Colors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .opacity(hovered ? 1 : 0)
+                .allowsHitTesting(hovered)
+                .help("清除")
+            }
+        } else {
+            Text("未设置")
+                .font(Theme.Typography.keyCap)
+                .foregroundStyle(hovered ? Theme.Colors.textSecondary : Theme.Colors.textTertiary)
+                .frame(maxWidth: .infinity)
+        }
     }
 
     private var statusText: String {

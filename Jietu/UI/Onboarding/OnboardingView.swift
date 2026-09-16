@@ -77,7 +77,7 @@ struct OnboardingView: View {
                 .foregroundStyle(Theme.Colors.brand)
                 .frame(width: Theme.Size.dialogIcon)
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text("Jietu 需要「屏幕录制」权限")
+                Text("\(AppIdentity.displayName) 需要「屏幕录制」权限")
                     .font(Theme.Typography.title)
                 Text("没有它，截图会返回空白画面")
                     .font(Theme.Typography.rowSubtitle)
@@ -94,9 +94,18 @@ struct OnboardingView: View {
                     .foregroundStyle(model.isGranted ? Theme.Colors.success : Theme.Colors.warning)
                 Text(model.isGranted ? "已授权" : "未授权")
                     .font(Theme.Typography.bar)
+                if AppIdentity.isDevChannel {
+                    Text("dev")
+                        .font(Theme.Typography.compactKeyCap)
+                        .foregroundStyle(Theme.Colors.accent)
+                        .padding(.horizontal, Theme.Spacing.sm)
+                        .frame(height: Theme.Size.recorderKeyCap)
+                        .background(Capsule().fill(Theme.Colors.accent.opacity(0.15)))
+                        .help("开发渠道：\(AppIdentity.bundleIdentifier)")
+                }
                 Spacer(minLength: Theme.Spacing.md)
                 if model.needsRelaunch {
-                    Text("需重启 Jietu 才会生效")
+                    Text("需重启才会生效")
                         .font(Theme.Typography.rowSubtitle)
                         .foregroundStyle(Theme.Colors.brand)
                 }
@@ -107,8 +116,8 @@ struct OnboardingView: View {
     private var steps: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             step(1, "点「授权屏幕录制」，在系统弹窗里同意")
-            step(2, "若没弹窗，点「打开系统设置」手动勾选 Jietu")
-            step(3, "回到这里，点「重启 Jietu」让权限生效")
+            step(2, "若没弹窗，点「打开系统设置」手动勾选 \(AppIdentity.displayName)")
+            step(3, "回到这里，点「重启」让权限生效")
             Text("macOS 的限制：授权不会对正在运行的进程生效，这一步无法绕过。")
                 .font(Theme.Typography.rowSubtitle)
                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -134,7 +143,7 @@ struct OnboardingView: View {
             if model.isGranted {
                 if model.needsRelaunch {
                     GlassButton(
-                        title: "重启 Jietu",
+                        title: "重启 \(AppIdentity.displayName)",
                         systemImage: "arrow.clockwise",
                         role: .prominent,
                         isBranded: true

@@ -60,7 +60,7 @@ extension SettingsRow where Icon == EmptyView {
 /// @author ixxxxoooo
 struct SettingsIcon: View {
     let systemImage: String
-    var tint: Color = Theme.Colors.textSecondary
+    var tint: Color = Theme.Colors.icon
 
     var body: some View {
         Image(systemName: systemImage)
@@ -114,7 +114,7 @@ extension View {
 /// @author ixxxxoooo
 struct SettingsControlRow<Trailing: View>: View {
     let icon: String
-    var tint: Color = Theme.Colors.textSecondary
+    var tint: Color = Theme.Colors.icon
     let title: String
     var subtitle: String?
     var subtitleLineLimit = 2
@@ -139,7 +139,7 @@ struct SettingsControlRow<Trailing: View>: View {
 /// @author ixxxxoooo
 struct SettingsToggleRow: View {
     let icon: String
-    var tint: Color = Theme.Colors.textSecondary
+    var tint: Color = Theme.Colors.icon
     let title: String
     var subtitle: String?
     @Binding var isOn: Bool

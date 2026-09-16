@@ -57,26 +57,17 @@ enum Theme {
 
         // MARK: Jietu 功能色（不属于 ramp）
 
-        /// 设置页等处的图标主题色：每个分区一个，侧边栏与内容区共用。
+        /// 统一强调色：取自 `Assets.xcassets/AccentColor`（= 品牌蓝 #0D44E8）。
         ///
-        /// 与 ramp 的墨色分工不同——ramp 管文本 / 分隔 / 控件底，Accent 只给图标上色。
-        enum Accent {
-            /// 通用。
-            static let blue = Color(red: 0x0D / 255, green: 0x44 / 255, blue: 0xE8 / 255)
-            /// 截图。
-            static let green = Color(red: 0.14, green: 0.78, blue: 0.42)
-            /// 快捷键。
-            static let amber = Color(red: 0.96, green: 0.62, blue: 0.04)
-            /// 预览浮窗。
-            static let teal = Color(red: 0.00, green: 0.68, blue: 0.72)
-            /// 标注。
-            static let violet = Color(red: 0.55, green: 0.30, blue: 0.94)
-            /// 权限。
-            static let rose = Color(red: 0.90, green: 0.30, blue: 0.42)
-        }
+        /// 图标、开关打开态、分段 / 单选 / 焦点态都从这一处取色——参考项目里图标配色
+        /// 也只从单一 token 取（`menuSymbol` / `accentColor`），**不逐分区换色**。
+        static let accent = Color.accentColor
 
-        /// Jietu 品牌蓝（自有品牌，不套用 Tinycast 的紫）。
-        static let brand = Color(red: 0x0D / 255, green: 0x44 / 255, blue: 0xE8 / 255)
+        /// 图标统一颜色（侧边栏、设置行、工具条都取它）。
+        static let icon = accent
+
+        /// Jietu 品牌蓝，与 `AccentColor` 资产同源。
+        static let brand = accent
         /// 截图选框 / 控制点绿（功能色，不可被 ramp 替换）。
         static let selectionGreen = Color(red: 0.14, green: 0.87, blue: 0.45)
         /// 破坏性操作：取消、删除。
@@ -121,8 +112,12 @@ enum Theme {
         static let row: CGFloat = 10
         /// 顶部下拉按钮、圆角版按钮悬停胶囊。
         static let barControl: CGFloat = 8
+        /// 小控件（快捷键录制器、侧栏方块）。
+        static let menu: CGFloat = 6
         /// keycap 芯片。
         static let keyCap: CGFloat = 6
+        /// 录制器里的按键芯片，比 keycap 芯片再小一档。
+        static let recorderKeyCap: CGFloat = 4
         /// 缩略图。
         static let thumbnail: CGFloat = 6
         /// 小到用 thumbnail 会被圆成球的小方块。
@@ -156,6 +151,12 @@ enum Theme {
         static let compactKeyCap: CGFloat = 15
         static let keyCap: CGFloat = 18
         static let heroKeyCap: CGFloat = 22
+
+        /// 快捷键录制器：宽高固定，绑定的组合键变化时控件不会变形。
+        static let shortcutRecorder: CGFloat = 120
+        static let shortcutRecorderHeight: CGFloat = 24
+        /// 录制器里的按键芯片，比 keycap 芯片更小一档。
+        static let recorderKeyCap: CGFloat = 16
 
         /// 对话框宽度与前置字形。
         static let dialogWidth: CGFloat = 420
