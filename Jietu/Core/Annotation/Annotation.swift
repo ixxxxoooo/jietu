@@ -10,10 +10,13 @@ enum AnnotationTool: String, CaseIterable, Identifiable {
     case rectangle
     case ellipse
     case arrow
+    case line
     case pen
     case highlight
     case text
     case pixelate
+    case blur
+    case magnifier
     case counter
     case eraser
     /// 截后再裁剪：拖一个框，确认后把底图裁掉。
@@ -27,10 +30,13 @@ enum AnnotationTool: String, CaseIterable, Identifiable {
         case .rectangle: return "矩形"
         case .ellipse: return "椭圆"
         case .arrow: return "箭头"
+        case .line: return "直线"
         case .pen: return "画笔"
         case .highlight: return "高亮"
         case .text: return "文字"
         case .pixelate: return "马赛克"
+        case .blur: return "模糊"
+        case .magnifier: return "放大镜"
         case .counter: return "序号"
         case .eraser: return "橡皮"
         case .crop: return "裁剪"
@@ -43,10 +49,13 @@ enum AnnotationTool: String, CaseIterable, Identifiable {
         case .rectangle: return "rectangle"
         case .ellipse: return "circle"
         case .arrow: return "arrow.up.right"
+        case .line: return "line.diagonal"
         case .pen: return "pencil"
         case .highlight: return "highlighter"
         case .text: return "textformat"
         case .pixelate: return "squareshape.split.3x3"
+        case .blur: return "drop.halffull"
+        case .magnifier: return "magnifyingglass.circle"
         case .counter: return "1.circle"
         case .eraser: return "eraser"
         case .crop: return "crop"
@@ -93,12 +102,25 @@ struct AnnotationStyle: Equatable {
     var fontSize: CGFloat?
     /// 仅当被复制的对象是马赛克时才有值。
     var mosaicBlock: CGFloat?
+    /// 仅当被复制的对象是模糊时才有值。
+    var blurRadius: CGFloat?
+    /// 仅当被复制的对象是放大镜时才有值。
+    var magnifierZoom: CGFloat?
 
-    init(color: RGBAColor, lineWidth: CGFloat, fontSize: CGFloat? = nil, mosaicBlock: CGFloat? = nil) {
+    init(
+        color: RGBAColor,
+        lineWidth: CGFloat,
+        fontSize: CGFloat? = nil,
+        mosaicBlock: CGFloat? = nil,
+        blurRadius: CGFloat? = nil,
+        magnifierZoom: CGFloat? = nil
+    ) {
         self.color = color
         self.lineWidth = lineWidth
         self.fontSize = fontSize
         self.mosaicBlock = mosaicBlock
+        self.blurRadius = blurRadius
+        self.magnifierZoom = magnifierZoom
     }
 
     /// 从一条已有标注里提取样式：只带上与该类型相关的字段，
@@ -112,19 +134,24 @@ struct AnnotationStyle: Equatable {
             break
         }
         var mosaicBlock: CGFloat?
-        if case .pixelate(_, let block) = annotation.kind {
-            mosaicBlock = block
-        }
+        if case .pixelate(_, let block) = annotation.kind { mosaicBlock = block }
+        var blurRadius: CGFloat?
+        if case .blur(_, let radius) = annotation.kind { blurRadius = radius }
+        var magnifierZoom: CGFloat?
+        if case .magnifier(_, let zoom) = annotation.kind { magnifierZoom = zoom }
+
         self.init(
             color: annotation.color,
             lineWidth: annotation.lineWidth,
             fontSize: fontSize,
-            mosaicBlock: mosaicBlock
+            mosaicBlock: mosaicBlock,
+            blurRadius: blurRadius,
+            magnifierZoom: magnifierZoom
         )
     }
 
     /// 把样式套到标注上。目标类型缺什么就不改什么：字号只作用于文字 / 气泡，
-    /// 马赛克块只作用于马赛克。
+    /// 块大小只作用于马赛克，模糊半径只作用于模糊，倍率只作用于放大镜。
     func applied(to annotation: Annotation) -> Annotation {
         var copy = annotation.withColor(color).withLineWidth(lineWidth)
         switch annotation.kind {
@@ -132,6 +159,10 @@ struct AnnotationStyle: Equatable {
             if let fontSize { copy = copy.withFontSize(fontSize) }
         case .pixelate:
             if let mosaicBlock { copy = copy.withPixelateBlock(mosaicBlock) }
+        case .blur:
+            if let blurRadius { copy = copy.withBlurRadius(blurRadius) }
+        case .magnifier:
+            if let magnifierZoom { copy = copy.withMagnifierZoom(magnifierZoom) }
         default:
             break
         }
@@ -155,10 +186,16 @@ struct Annotation: Identifiable, Equatable {
         case rectangle(CGRect)
         case ellipse(CGRect)
         case arrow(from: CGPoint, to: CGPoint, control: CGPoint?)
+        /// 直线（不带箭头）。
+        case line(from: CGPoint, to: CGPoint)
         case pen(points: [CGPoint])
         case highlight(CGRect)
         case text(origin: CGPoint, string: String, fontSize: CGFloat)
         case pixelate(CGRect, block: CGFloat)
+        /// 高斯模糊区域。
+        case blur(CGRect, radius: CGFloat)
+        /// 放大镜：把框内的画面按 `zoom` 放大后画在框里。
+        case magnifier(CGRect, zoom: CGFloat)
         case counter(center: CGPoint, value: Int, leader: CGPoint?)
         /// 标注气泡：序号圆点 + 箭头 + 可输入说明的文字框。
         case callout(center: CGPoint, value: Int, labelOrigin: CGPoint, string: String, fontSize: CGFloat)
@@ -205,7 +242,8 @@ extension Annotation {
     /// 未旋转的包围盒。
     var localBounds: CGRect {
         switch kind {
-        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _):
+        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _),
+            .blur(let rect, _), .magnifier(let rect, _):
             return rect
         case .arrow(let from, let to, let control):
             var minX = min(from.x, to.x)
@@ -219,6 +257,13 @@ extension Annotation {
                 maxY = max(maxY, control.y)
             }
             return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        case .line(let from, let to):
+            return CGRect(
+                x: min(from.x, to.x),
+                y: min(from.y, to.y),
+                width: abs(to.x - from.x),
+                height: abs(to.y - from.y)
+            )
         case .pen(let points):
             guard let first = points.first else { return .zero }
             var minX = first.x
@@ -281,13 +326,16 @@ extension Annotation {
     func contains(_ point: CGPoint, tolerance: CGFloat = 6) -> Bool {
         let local = toLocal(point)
         switch kind {
-        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect):
+        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect),
+            .blur(let rect, _), .magnifier(let rect, _):
             return rect.insetBy(dx: -tolerance, dy: -tolerance).contains(local)
         case .pixelate(let rect, _):
             return rect.contains(local)
         case .arrow(let from, let to, let control):
             return Annotation.distanceToCurve(local, from: from, to: to, control: control)
                 <= max(tolerance, lineWidth)
+        case .line(let from, let to):
+            return Annotation.distanceToSegment(local, from, to) <= max(tolerance, lineWidth)
         case .pen(let points):
             return Annotation.distanceToPolyline(local, points: points) <= max(tolerance, lineWidth)
         case .text:
@@ -328,7 +376,7 @@ extension Annotation {
         var copy = self
 
         switch kind {
-        case .rectangle, .ellipse, .highlight, .pixelate:
+        case .rectangle, .ellipse, .highlight, .pixelate, .blur, .magnifier:
             let box = localBounds
             let newBox = ShapeGeometry.resizedRect(box, handle: handle, to: local, lockAspect: lockAspect)
             copy.replaceRect(newBox)
@@ -350,7 +398,7 @@ extension Annotation {
             let newBox = ShapeGeometry.resizedRect(box, handle: handle, to: local, lockAspect: false)
             let ratio = box.height > 0 ? newBox.height / box.height : 1
             copy.kind = .text(origin: newBox.origin, string: string, fontSize: max(10, fontSize * ratio))
-        case .arrow, .counter, .callout:
+        case .arrow, .line, .counter, .callout:
             break
         }
         return copy
@@ -368,6 +416,15 @@ extension Annotation {
                 copy.kind = .arrow(from: from, to: local, control: control)
             case .arrowControl:
                 copy.kind = .arrow(from: from, to: to, control: local)
+            default:
+                break
+            }
+        case .line(let from, let to):
+            switch handle {
+            case .lineStart:
+                copy.kind = .line(from: local, to: to)
+            case .lineEnd:
+                copy.kind = .line(from: from, to: local)
             default:
                 break
             }
@@ -445,6 +502,20 @@ extension Annotation {
         return copy
     }
 
+    func withBlurRadius(_ radius: CGFloat) -> Annotation {
+        guard case .blur(let rect, _) = kind else { return self }
+        var copy = self
+        copy.kind = .blur(rect, radius: radius)
+        return copy
+    }
+
+    func withMagnifierZoom(_ zoom: CGFloat) -> Annotation {
+        guard case .magnifier(let rect, _) = kind else { return self }
+        var copy = self
+        copy.kind = .magnifier(rect, zoom: zoom)
+        return copy
+    }
+
     func withText(_ string: String) -> Annotation {
         var copy = self
         switch kind {
@@ -485,8 +556,14 @@ extension Annotation {
         case .highlight(let rect): copy.kind = .highlight(sr(rect))
         case .pixelate(let rect, let block):
             copy.kind = .pixelate(sr(rect), block: max(2, block * factor))
+        case .blur(let rect, let radius):
+            copy.kind = .blur(sr(rect), radius: max(1, radius * factor))
+        case .magnifier(let rect, let zoom):
+            copy.kind = .magnifier(sr(rect), zoom: zoom)
         case .arrow(let from, let to, let control):
             copy.kind = .arrow(from: sp(from), to: sp(to), control: control.map(sp))
+        case .line(let from, let to):
+            copy.kind = .line(from: sp(from), to: sp(to))
         case .pen(let points): copy.kind = .pen(points: points.map(sp))
         case .text(let origin, let string, let size):
             copy.kind = .text(origin: sp(origin), string: string, fontSize: size * factor)
@@ -515,6 +592,10 @@ extension Annotation {
             kind = .highlight(rect)
         case .pixelate:
             if case .pixelate(_, let block) = kind { kind = .pixelate(rect, block: block) }
+        case .blur:
+            if case .blur(_, let radius) = kind { kind = .blur(rect, radius: radius) }
+        case .magnifier:
+            if case .magnifier(_, let zoom) = kind { kind = .magnifier(rect, zoom: zoom) }
         default:
             break
         }
@@ -530,8 +611,11 @@ extension Annotation {
         case .ellipse(let rect): return .ellipse(moveRect(rect))
         case .highlight(let rect): return .highlight(moveRect(rect))
         case .pixelate(let rect, let block): return .pixelate(moveRect(rect), block: block)
+        case .blur(let rect, let radius): return .blur(moveRect(rect), radius: radius)
+        case .magnifier(let rect, let zoom): return .magnifier(moveRect(rect), zoom: zoom)
         case .arrow(let from, let to, let control):
             return .arrow(from: move(from), to: move(to), control: control.map(move))
+        case .line(let from, let to): return .line(from: move(from), to: move(to))
         case .pen(let points): return .pen(points: points.map(move))
         case .text(let origin, let string, let fontSize):
             return .text(origin: move(origin), string: string, fontSize: fontSize)
@@ -645,6 +729,7 @@ enum ShapeHandle: Equatable {
     case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
     case rotate
     case arrowStart, arrowEnd, arrowControl
+    case lineStart, lineEnd
     case counterLeader
 }
 

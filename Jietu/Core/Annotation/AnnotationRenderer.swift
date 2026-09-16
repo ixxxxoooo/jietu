@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreImage
 import CoreText
 import Foundation
 
@@ -139,6 +140,11 @@ enum AnnotationRenderer {
                     imageHeight: imageHeight
                 )
 
+            case .line(let from, let to):
+                context.move(to: contextPoint(from, imageHeight: imageHeight))
+                context.addLine(to: contextPoint(to, imageHeight: imageHeight))
+                context.strokePath()
+
             case .pen(let points):
                 drawPen(points, in: context, imageHeight: imageHeight)
 
@@ -158,6 +164,26 @@ enum AnnotationRenderer {
                     block: block,
                     base: base,
                     mosaic: mosaic,
+                    in: context,
+                    imageHeight: imageHeight
+                )
+
+            case .blur(let rect, let radius):
+                drawBlur(
+                    rect,
+                    radius: radius,
+                    base: base,
+                    in: context,
+                    imageHeight: imageHeight
+                )
+
+            case .magnifier(let rect, let zoom):
+                drawMagnifier(
+                    rect,
+                    zoom: zoom,
+                    base: base,
+                    lineWidth: annotation.lineWidth,
+                    color: annotation.color,
                     in: context,
                     imageHeight: imageHeight
                 )
@@ -463,6 +489,82 @@ enum AnnotationRenderer {
         context.draw(crop, in: contextRect(rect, imageHeight: imageHeight))
         context.restoreGState()
     }
+
+    /// 高斯模糊：对底图对应的那块做 CIGaussianBlur，再按矩形裁回。
+    private static func drawBlur(
+        _ rect: CGRect,
+        radius: CGFloat,
+        base: CGImage,
+        in context: CGContext,
+        imageHeight: Int
+    ) {
+        let target = contextRect(rect, imageHeight: imageHeight).integral
+        let bounds = CGRect(x: 0, y: 0, width: base.width, height: base.height)
+        // 模糊会向外扩散，多取一圈再裁回来，避免边缘发虚。
+        let padding = max(2, radius * 2)
+        let source = target.insetBy(dx: -padding, dy: -padding).intersection(bounds)
+        guard !source.isEmpty, let filter = CIFilter(name: "CIGaussianBlur") else { return }
+
+        filter.setValue(CIImage(cgImage: base).cropped(to: source), forKey: kCIInputImageKey)
+        filter.setValue(max(1, radius), forKey: kCIInputRadiusKey)
+        guard let output = filter.outputImage?.cropped(to: source),
+            let blurred = ciContext.createCGImage(output, from: source)
+        else { return }
+
+        context.saveGState()
+        context.clip(to: contextRect(rect, imageHeight: imageHeight))
+        context.draw(
+            blurred,
+            in: CGRect(
+                x: source.minX,
+                y: CGFloat(imageHeight) - source.maxY,
+                width: source.width,
+                height: source.height
+            )
+        )
+        context.restoreGState()
+    }
+
+    /// 放大镜：把框内的画面按倍率放大后填进椭圆，再描一圈边。
+    private static func drawMagnifier(
+        _ rect: CGRect,
+        zoom: CGFloat,
+        base: CGImage,
+        lineWidth: CGFloat,
+        color: RGBAColor,
+        in context: CGContext,
+        imageHeight: Int
+    ) {
+        guard rect.width > 2, rect.height > 2 else { return }
+        let factor = max(1, zoom)
+        let target = contextRect(rect, imageHeight: imageHeight)
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+
+        // 以框中心为锚点放大：取框内 1/zoom 大小的源区域填满整框。
+        let sourceSize = CGSize(width: rect.width / factor, height: rect.height / factor)
+        let sourceRect = CGRect(
+            x: center.x - sourceSize.width / 2,
+            y: center.y - sourceSize.height / 2,
+            width: sourceSize.width,
+            height: sourceSize.height
+        ).integral.intersection(CGRect(x: 0, y: 0, width: base.width, height: base.height))
+        guard !sourceRect.isEmpty, let crop = base.cropping(to: sourceRect) else { return }
+
+        context.saveGState()
+        context.addEllipse(in: target)
+        context.clip()
+        context.interpolationQuality = .high
+        context.draw(crop, in: target)
+        context.restoreGState()
+
+        context.saveGState()
+        context.setStrokeColor(color.cgColor)
+        context.setLineWidth(max(2, lineWidth))
+        context.strokeEllipse(in: target)
+        context.restoreGState()
+    }
+
+    private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
     private static func makeLine(_ string: String, font: CTFont, color: RGBAColor) -> CTLine {
         let attributes: [CFString: Any] = [

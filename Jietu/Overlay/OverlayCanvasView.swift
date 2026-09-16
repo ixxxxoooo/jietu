@@ -1165,9 +1165,12 @@ final class OverlayCanvasView: NSView {
     /// 草稿是否已经「成形」（用于避免单击时的零尺寸闪烁）。
     private func isMeaningfulDraft(_ annotation: Annotation) -> Bool {
         switch annotation.kind {
-        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _):
+        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _),
+            .blur(let rect, _), .magnifier(let rect, _):
             return rect.width >= 1.5 || rect.height >= 1.5
         case .arrow(let from, let to, _):
+            return hypot(to.x - from.x, to.y - from.y) >= 2
+        case .line(let from, let to):
             return hypot(to.x - from.x, to.y - from.y) >= 2
         case .pen(let points):
             return points.count >= 2
@@ -1458,8 +1461,11 @@ final class OverlayCanvasView: NSView {
         case .rectangle: return Annotation(kind: .rectangle(rect), color: model.color, lineWidth: model.lineWidth)
         case .ellipse: return Annotation(kind: .ellipse(rect), color: model.color, lineWidth: model.lineWidth)
         case .highlight: return Annotation(kind: .highlight(rect), color: model.color, lineWidth: model.lineWidth)
-        case .pixelate: return Annotation(kind: .pixelate(rect, block: 12), color: model.color, lineWidth: model.lineWidth)
+        case .pixelate: return Annotation(kind: .pixelate(rect, block: model.mosaicBlock), color: model.color, lineWidth: model.lineWidth)
+        case .blur: return Annotation(kind: .blur(rect, radius: model.blurRadius), color: model.color, lineWidth: model.lineWidth)
+        case .magnifier: return Annotation(kind: .magnifier(rect, zoom: model.magnifierZoom), color: model.color, lineWidth: model.lineWidth)
         case .arrow: return Annotation(kind: .arrow(from: start, to: current, control: nil), color: model.color, lineWidth: model.lineWidth)
+        case .line: return Annotation(kind: .line(from: start, to: current), color: model.color, lineWidth: model.lineWidth)
         case .pen: return Annotation(kind: .pen(points: [start, current]), color: model.color, lineWidth: model.lineWidth)
         case .counter:
             return Annotation(
@@ -1474,9 +1480,12 @@ final class OverlayCanvasView: NSView {
 
     private func isValidInlineDraft(_ annotation: Annotation) -> Bool {
         switch annotation.kind {
-        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _):
+        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _),
+            .blur(let rect, _), .magnifier(let rect, _):
             return rect.width >= 3 && rect.height >= 3
         case .arrow(let from, let to, _):
+            return hypot(to.x - from.x, to.y - from.y) >= 3
+        case .line(let from, let to):
             return hypot(to.x - from.x, to.y - from.y) >= 3
         case .counter, .callout, .pen, .text:
             return true

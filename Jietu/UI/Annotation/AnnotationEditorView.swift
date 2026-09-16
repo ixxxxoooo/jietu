@@ -56,6 +56,8 @@ struct AnnotationEditorView: View {
     @State private var lineWidth: CGFloat = 7
     @State private var fontSize: CGFloat = 22
     @State private var mosaicBlock: CGFloat = 10
+    @State private var blurRadius: CGFloat = 12
+    @State private var magnifierZoom: CGFloat = 2
     @State private var counterValue = 1
 
     // MARK: - Interaction
@@ -612,6 +614,32 @@ struct AnnotationEditorView: View {
                             applyToSelected { $0.withPixelateBlock(value) }
                         }
                 }
+            case .blur:
+                separator
+                HStack(spacing: 6) {
+                    Image(systemName: "drop.halffull")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.6))
+                    Slider(value: $blurRadius, in: 2...60)
+                        .frame(width: 90)
+                        .tint(.white)
+                        .onChange(of: blurRadius) { _, value in
+                            applyToSelected { $0.withBlurRadius(value) }
+                        }
+                }
+            case .magnifier:
+                separator
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass.circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.6))
+                    Slider(value: $magnifierZoom, in: 1.5...6)
+                        .frame(width: 90)
+                        .tint(.white)
+                        .onChange(of: magnifierZoom) { _, value in
+                            applyToSelected { $0.withMagnifierZoom(value) }
+                        }
+                }
             default:
                 EmptyView()
             }
@@ -731,6 +759,14 @@ struct AnnotationEditorView: View {
             selectedID = hit.id
             color = hit.color
             lineWidth = hit.lineWidth
+            // 把该类型的参数也同步到选项条，便于直接微调。
+            switch hit.kind {
+            case .pixelate(_, let block): mosaicBlock = block
+            case .blur(_, let radius): blurRadius = radius
+            case .magnifier(_, let zoom): magnifierZoom = zoom
+            case .text(_, _, let size), .callout(_, _, _, _, let size): fontSize = size
+            default: break
+            }
             pushUndo()
             dragMode = .moving(id: hit.id, start: startPx, original: hit)
             return
@@ -828,6 +864,12 @@ struct AnnotationEditorView: View {
             return Annotation(kind: .pixelate(rect, block: mosaicBlock), color: color, lineWidth: lineWidth)
         case .arrow:
             return Annotation(kind: .arrow(from: start, to: current, control: nil), color: color, lineWidth: lineWidth)
+        case .line:
+            return Annotation(kind: .line(from: start, to: current), color: color, lineWidth: lineWidth)
+        case .blur:
+            return Annotation(kind: .blur(rect, radius: blurRadius), color: color, lineWidth: lineWidth)
+        case .magnifier:
+            return Annotation(kind: .magnifier(rect, zoom: magnifierZoom), color: color, lineWidth: lineWidth)
         case .pen:
             return Annotation(kind: .pen(points: [start, current]), color: color, lineWidth: lineWidth)
         case .counter:
@@ -1062,7 +1104,7 @@ struct AnnotationEditorView: View {
 
         if !rotated {
             switch annotation.kind {
-            case .rectangle, .ellipse, .highlight, .pixelate, .pen, .text:
+            case .rectangle, .ellipse, .highlight, .pixelate, .pen, .text, .blur, .magnifier:
                 handles.append(contentsOf: ShapeGeometry.resizeHandles(for: annotation))
             default:
                 break
@@ -1075,6 +1117,9 @@ struct AnnotationEditorView: View {
             handles.append((.arrowEnd, to))
             let mid = control ?? CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2)
             handles.append((.arrowControl, mid))
+        case .line(let from, let to):
+            handles.append((.lineStart, from))
+            handles.append((.lineEnd, to))
         case .counter(let center, _, let leader):
             let leaderPoint = leader ?? CGPoint(x: center.x + 48, y: center.y - 48)
             handles.append((.counterLeader, leaderPoint))
@@ -1266,9 +1311,12 @@ struct AnnotationEditorView: View {
 
     private func isValid(_ annotation: Annotation) -> Bool {
         switch annotation.kind {
-        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _):
+        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _),
+            .blur(let rect, _), .magnifier(let rect, _):
             return rect.width >= 4 && rect.height >= 4
         case .arrow(let from, let to, _):
+            return hypot(to.x - from.x, to.y - from.y) >= 4
+        case .line(let from, let to):
             return hypot(to.x - from.x, to.y - from.y) >= 4
         case .pen(let points):
             return points.count >= 2

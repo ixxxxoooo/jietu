@@ -169,8 +169,52 @@ struct AnnotationGeometryTests {
         #expect(styledText.lineWidth == 1)
     }
 
-    // MARK: - 截后再裁剪
+    @Test("直线：包围盒、命中与端点拖动")
+    func lineGeometry() {
+        let line = Annotation(
+            kind: .line(from: CGPoint(x: 0, y: 0), to: CGPoint(x: 100, y: 100)),
+            color: .red,
+            lineWidth: 3
+        )
+        #expect(line.localBounds == CGRect(x: 0, y: 0, width: 100, height: 100))
+        #expect(line.contains(CGPoint(x: 50, y: 50)))
+        #expect(!line.contains(CGPoint(x: 50, y: 95)))
 
+        let moved = line.withEndpoint(.lineEnd, to: CGPoint(x: 0, y: 100))
+        guard case .line(_, let to) = moved.kind else {
+            Issue.record("kind 不再是 line")
+            return
+        }
+        #expect(to == CGPoint(x: 0, y: 100))
+    }
+
+    @Test("模糊与放大镜：跟随矩形缩放，参数各自独立")
+    func blurAndMagnifier() {
+        let rect = CGRect(x: 10, y: 10, width: 40, height: 40)
+        let blur = Annotation(kind: .blur(rect, radius: 8), color: .red, lineWidth: 3)
+        #expect(blur.localBounds == rect)
+
+        let resized = blur.resized(handle: .bottomRight, to: CGPoint(x: 90, y: 90), lockAspect: false)
+        #expect(resized.localBounds == CGRect(x: 10, y: 10, width: 80, height: 80))
+        #expect(blur.withBlurRadius(20).kind == .blur(rect, radius: 20))
+        #expect(resized.withBlurRadius(20).kind == .blur(CGRect(x: 10, y: 10, width: 80, height: 80), radius: 20))
+
+        // 放大镜不因缩放改变倍率。
+        let magnifier = Annotation(kind: .magnifier(rect, zoom: 3), color: .red)
+        let zoomed = magnifier.resized(handle: .bottomRight, to: CGPoint(x: 90, y: 90), lockAspect: false)
+        #expect(zoomed.localBounds == CGRect(x: 10, y: 10, width: 80, height: 80))
+        #expect(magnifier.withMagnifierZoom(5).kind == .magnifier(rect, zoom: 5))
+
+        // 样式搬运带上各自的参数。
+        let style = AnnotationStyle(from: blur)
+        #expect(style.blurRadius == 8)
+        #expect(style.magnifierZoom == nil)
+        let styled = style.applied(to: magnifier)
+        #expect(styled.kind == .magnifier(rect, zoom: 3))
+        #expect(styled.color == .red)
+    }
+
+    // MARK: - 截后再裁剪
     @Test("裁剪框被夹进图像范围，过小则判为无效")
     func clampsCropRect() {
         let size = CGSize(width: 100, height: 80)

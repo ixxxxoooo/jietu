@@ -11,6 +11,9 @@ final class InlineToolbarModel {
     var color: RGBAColor = .red
     var lineWidth: CGFloat = 7
     var eraserSize: CGFloat = 28
+    var mosaicBlock: CGFloat = 12
+    var blurRadius: CGFloat = 12
+    var magnifierZoom: CGFloat = 2
     var canUndo = false
     var canRedo = false
     /// 展开状态由模型持有，便于宿主视图观察并自适应高度。
@@ -34,8 +37,8 @@ struct InlineMainToolbar: View {
     @Bindable var model: InlineToolbarModel
 
     private static let tools: [AnnotationTool] = [
-        .select, .rectangle, .ellipse, .arrow, .pen, .highlight, .pixelate, .text, .counter,
-        .eraser,
+        .select, .rectangle, .ellipse, .arrow, .line, .pen, .highlight, .pixelate, .blur,
+        .magnifier, .text, .counter, .eraser,
     ]
 
     var body: some View {
