@@ -73,12 +73,13 @@ enum CaptureOutput {
 
     // MARK: - Disk
 
-    /// 保存为图片，文件名形如 `Jietu 2026-09-15 at 20.01.23.png`（同名自动加序号）。
+    /// 保存为图片，文件名由模板展开（默认 `Jietu 2026-09-15 at 20.01.23.png`，同名自动加序号）。
     static func save(
         _ image: CGImage,
         toDirectory directory: URL,
         format: SaveFormat = .png,
         quality: Double = 0.9,
+        nameTemplate: String = FilenameTemplate.defaultTemplate,
         date: Date = Date()
     ) throws -> URL {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -94,16 +95,18 @@ enum CaptureOutput {
             throw CaptureOutputError.encodingFailed
         }
 
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        let base = "Jietu \(formatter.string(from: date))"
+        let counter = FilenameTemplate.nextCounter(
+            template: nameTemplate,
+            in: directory,
+            fileExtension: format.fileExtension
+        )
+        let base = FilenameTemplate.makeName(template: nameTemplate, date: date, counter: counter)
 
         var url = directory.appendingPathComponent("\(base).\(format.fileExtension)")
-        var counter = 1
+        var suffix = 1
         while FileManager.default.fileExists(atPath: url.path) {
-            url = directory.appendingPathComponent("\(base)-\(counter).\(format.fileExtension)")
-            counter += 1
+            url = directory.appendingPathComponent("\(base)-\(suffix).\(format.fileExtension)")
+            suffix += 1
         }
         try data.write(to: url, options: .atomic)
         return url

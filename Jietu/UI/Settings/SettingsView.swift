@@ -118,7 +118,38 @@ struct SettingsView: View {
             }
             .disabled(settings.saveFormat != .jpeg)
             .opacity(settings.saveFormat == .jpeg ? 1 : 0.45)
+            Divider()
+            filenameTemplateRow
         }
+    }
+
+    private var filenameTemplateRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                Text("文件名模板")
+                TextField(FilenameTemplate.defaultTemplate, text: $settings.filenameTemplate)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 260)
+                    .disabled(!settings.saveToDisk)
+                Button("恢复默认") {
+                    settings.filenameTemplate = FilenameTemplate.defaultTemplate
+                }
+                .disabled(!settings.saveToDisk)
+            }
+            Text("\(FilenameTemplate.placeholderHint)\n示例：\(previewFilename)")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// 用当前模板与当前时刻给出一个文件名示例。
+    private var previewFilename: String {
+        let name = FilenameTemplate.makeName(
+            template: settings.effectiveFilenameTemplate,
+            date: Date(),
+            counter: FilenameTemplate.usesCounter(settings.effectiveFilenameTemplate) ? 1 : 0
+        )
+        return "\(name).\(settings.saveFormat.fileExtension)"
     }
 
     private var directoryRow: some View {

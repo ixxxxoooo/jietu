@@ -77,6 +77,7 @@ final class SettingsStore {
         static let recentCapturePaths = "history.recentCapturePaths"
         static let launchAtLogin = "behavior.launchAtLogin"
         static let saveFormat = "behavior.saveFormat"
+        static let filenameTemplate = "behavior.filenameTemplate"
         static let jpegQuality = "behavior.jpegQuality"
         static let quickAccessPosition = "behavior.quickAccessPosition"
         static let editorMode = "behavior.editorMode"
@@ -144,6 +145,18 @@ final class SettingsStore {
         didSet { defaults.set(saveFormat.rawValue, forKey: Key.saveFormat) }
     }
 
+    /// 落盘文件名模板，支持 `{date}` / `{time}` / `{datetime}` / `{counter}`。
+    ///
+    /// 这里存用户原样输入；空模板与非法字符由 `FilenameTemplate` 在展开时兜底。
+    var filenameTemplate: String {
+        didSet { defaults.set(filenameTemplate, forKey: Key.filenameTemplate) }
+    }
+
+    /// 展开后的模板（空值回落到默认模板）。
+    var effectiveFilenameTemplate: String {
+        FilenameTemplate.resolvedTemplate(filenameTemplate)
+    }
+
     /// JPEG 压缩质量（0...1）。仅 `saveFormat == .jpeg` 时生效。
     var jpegQuality: Double {
         didSet { defaults.set(jpegQuality, forKey: Key.jpegQuality) }
@@ -197,6 +210,8 @@ final class SettingsStore {
         self.recentCapturePaths = defaults.stringArray(forKey: Key.recentCapturePaths) ?? []
         self.saveFormat =
             (defaults.string(forKey: Key.saveFormat).flatMap(SaveFormat.init(rawValue:))) ?? .png
+        self.filenameTemplate =
+            defaults.string(forKey: Key.filenameTemplate) ?? FilenameTemplate.defaultTemplate
         self.jpegQuality = defaults.object(forKey: Key.jpegQuality) as? Double ?? 0.9
         self.quickAccessPosition =
             (defaults.string(forKey: Key.quickAccessPosition)

@@ -398,7 +398,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 image,
                 toDirectory: settings.saveDirectory,
                 format: settings.saveFormat,
-                quality: settings.jpegQuality
+                quality: settings.jpegQuality,
+                nameTemplate: settings.effectiveFilenameTemplate
             )
             didSave(to: url)
         } catch {
@@ -412,11 +413,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.directoryURL = settings.saveDirectory
         panel.canCreateDirectories = true
         panel.allowedContentTypes = settings.saveFormat == .png ? [.png] : [.jpeg]
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        panel.nameFieldStringValue =
-            "Jietu \(formatter.string(from: Date())).\(settings.saveFormat.fileExtension)"
+        let base = FilenameTemplate.makeName(
+            template: settings.effectiveFilenameTemplate,
+            date: Date()
+        )
+        panel.nameFieldStringValue = "\(base).\(settings.saveFormat.fileExtension)"
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {

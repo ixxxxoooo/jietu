@@ -77,6 +77,29 @@ struct CaptureOutputTests {
         #expect(FileManager.default.fileExists(atPath: second.path))
     }
 
+    @Test("带 {counter} 的模板按目录已有文件递增")
+    func saveWithCounterTemplate() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jietu-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let image = makeSnapshot().image
+        let template = "Jietu {counter}"
+        let first = try CaptureOutput.save(
+            image,
+            toDirectory: directory,
+            nameTemplate: template
+        )
+        let second = try CaptureOutput.save(
+            image,
+            toDirectory: directory,
+            nameTemplate: template
+        )
+
+        #expect(first.lastPathComponent == "Jietu 1.png")
+        #expect(second.lastPathComponent == "Jietu 2.png")
+    }
+
     @Test("JPEG 保存使用 .jpg 扩展名")
     func saveJPEGExtension() throws {
         let directory = FileManager.default.temporaryDirectory
