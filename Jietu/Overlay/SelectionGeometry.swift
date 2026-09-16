@@ -159,4 +159,17 @@ enum SelectionGeometry {
                 && abs(point.y - center.y) <= tolerance
         }
     }
+
+    /// 选区从 `previous` 变成 `updated` 时，**画面内容**在图像坐标里的平移量。
+    ///
+    /// 标注坐标是相对选区原点（左上）的，所以改了选区就必须把标注按这个量平移，
+    /// 它们才会继续钉在画面的同一处：
+    /// 左 / 上边缘往外扩 → 同一画面内容在图像里的坐标变大。
+    /// （AppKit 视图坐标 y 向上，选区的顶边是 `maxY`。）
+    static func imageDelta(from previous: CGRect, to updated: CGRect, scale: CGFloat) -> CGSize {
+        CGSize(
+            width: (previous.minX - updated.minX) * scale,
+            height: (updated.maxY - previous.maxY) * scale
+        )
+    }
 }

@@ -166,6 +166,19 @@ final class PinContentView: NSView {
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    /// ⌘W 关掉这张钉图（和普通窗口一致）。
+    ///
+    /// 用 `performKeyEquivalent` 而不是全局监视器：它只在**钉图是 key window** 时被派发，
+    /// 所以不会把设置窗口 / 编辑器窗口的 ⌘W 抢走。
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags == .command, event.charactersIgnoringModifiers?.lowercased() == "w" {
+            onRequestClose?()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         nsImage.draw(in: bounds)
     }

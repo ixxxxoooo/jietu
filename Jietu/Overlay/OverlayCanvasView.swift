@@ -83,6 +83,9 @@ final class OverlayCanvasView: NSView {
     private struct Snapshot {
         let annotations: [Annotation]
         let strokes: [EraserStroke]
+        /// 选区也进快照：标注态里能拖边缘改区域，撤销时必须连选区一起回滚，
+        /// 否则标注会按旧原点画在新选区上、整体错位。
+        let selection: CGRect?
     }
 
     private var undoStack: [Snapshot] = []
@@ -591,15 +594,27 @@ final class OverlayCanvasView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard isInputArmed else { return }
+        let point = convert(event.locationInWindow, from: nil)
         if phase == .annotating {
-            inlineMouseDown(
-                convert(event.locationInWindow, from: nil),
-                clickCount: event.clickCount
-            )
+            requestFocusIfNeeded()
+            cursorPoint = point
+            // 选区边缘优先接管：绿框还在，抓着边缘就是继续调区域，框内照旧用来标注。
+            if let selection,
+                let handle = SelectionGeometry.handle(
+                    at: point,
+                    in: selection,
+                    tolerance: Theme.selectionHandleHitTolerance
+                )
+            {
+                // 整段拖拽算一步撤销。
+                pushUndo()
+                interaction = .resizing(handle: handle, original: selection)
+                return
+            }
+            inlineMouseDown(point, clickCount: event.clickCount)
             return
         }
         requestFocusIfNeeded()
-        let point = convert(event.locationInWindow, from: nil)
         cursorPoint = point
 
         if let selection {
@@ -635,11 +650,25 @@ final class OverlayCanvasView: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         guard isInputArmed else { return }
+        let point = convert(event.locationInWindow, from: nil)
         if phase == .annotating {
-            inlineMouseDragged(convert(event.locationInWindow, from: nil))
+            // 正在拖选区边缘 → 继续改区域；否则交给就地标注。
+            if case .resizing(let handle, let original) = interaction {
+                cursorPoint = point
+                let updated = SelectionGeometry.resized(
+                    original,
+                    handle: handle,
+                    to: point,
+                    clampTo: canvasBounds,
+                    lockAspect: event.modifierFlags.contains(.shift)
+                )
+                // 用「上一次的选区」算增量：每次拖拽事件都只平移一次。
+                applyRegionResize(from: selection ?? original, to: updated)
+                return
+            }
+            inlineMouseDragged(point)
             return
         }
-        let point = convert(event.locationInWindow, from: nil)
         cursorPoint = point
         let lockAspect = event.modifierFlags.contains(.shift)
 
@@ -687,11 +716,16 @@ final class OverlayCanvasView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         guard isInputArmed else { return }
+        let point = convert(event.locationInWindow, from: nil)
         if phase == .annotating {
-            inlineMouseUp(convert(event.locationInWindow, from: nil))
+            // 拖选区边缘收手：回到「已定」状态，不把它当成一次标注。
+            if case .resizing = interaction {
+                interaction = .settled
+                return
+            }
+            inlineMouseUp(point)
             return
         }
-        let point = convert(event.locationInWindow, from: nil)
         cursorPoint = point
 
         switch interaction {
@@ -786,10 +820,8 @@ final class OverlayCanvasView: NSView {
         interaction = .settled
         onInlineEditingChanged?(true)
 
-        selectionBorderOuterLayer.isHidden = true
-        selectionBorderInnerLayer.isHidden = true
-        handlesLayer.path = nil
-        sizeLabelLayer.isHidden = true
+        // 选区绿框与控制点**继续留在画面上**：工具栏弹出后，拖着边缘还能改区域。
+        updateSelectionLayers()
         windowHighlightLayer.isHidden = true
         crosshairLayer.path = nil
 
@@ -826,6 +858,43 @@ final class OverlayCanvasView: NSView {
         phase = .selecting
         onInlineEditingChanged?(false)
         updateAllLayers()
+    }
+
+    /// 标注态里拖动选区边缘：改选区的同时，把标注 / 橡皮笔迹按**新原点**平移，
+    /// 让它们继续钉在画面的同一处（否则会跟着框一起跑）。
+    private func applyRegionResize(from previous: CGRect, to updated: CGRect) {
+        guard updated != previous else { return }
+
+        // 选区原点在屏幕坐标里的位移 → 图像坐标里的反向位移：
+        // 左 / 上边缘往外扩，同一画面内容在图像里的坐标就变大。
+        let delta = SelectionGeometry.imageDelta(
+            from: previous,
+            to: updated,
+            scale: snapshot.effectiveScale
+        )
+        if delta != .zero {
+            annotations = annotations.map { $0.translated(by: delta) }
+            eraserStrokes = eraserStrokes.map { stroke in
+                EraserStroke(
+                    points: stroke.points.map {
+                        CGPoint(x: $0.x + delta.width, y: $0.y + delta.height)
+                    },
+                    radius: stroke.radius
+                )
+            }
+            if let draft = annotationDraft {
+                annotationDraft = draft.translated(by: delta)
+            }
+        }
+
+        selection = updated
+        // 底图换了一块，预览底图 / 标注层 / 选区视觉 / 工具栏位置都要跟着更新。
+        preparePreviewBase()
+        updateDimPath()
+        updateSelectionLayers()
+        updateAnnotationLayer()
+        updateInlineSelectionLayers()
+        layoutToolbars()
     }
 
     private func cancelInline() {
@@ -986,25 +1055,41 @@ final class OverlayCanvasView: NSView {
     }
 
     private func pushUndo() {
-        undoStack.append(Snapshot(annotations: annotations, strokes: eraserStrokes))
+        undoStack.append(
+            Snapshot(annotations: annotations, strokes: eraserStrokes, selection: selection)
+        )
         redoStack.removeAll()
     }
 
     private func inlineUndo() {
         guard let previous = undoStack.popLast() else { return }
-        redoStack.append(Snapshot(annotations: annotations, strokes: eraserStrokes))
+        redoStack.append(
+            Snapshot(annotations: annotations, strokes: eraserStrokes, selection: selection)
+        )
         apply(previous)
     }
 
     private func inlineRedo() {
         guard let next = redoStack.popLast() else { return }
-        undoStack.append(Snapshot(annotations: annotations, strokes: eraserStrokes))
+        undoStack.append(
+            Snapshot(annotations: annotations, strokes: eraserStrokes, selection: selection)
+        )
         apply(next)
     }
 
     private func apply(_ snapshot: Snapshot) {
         annotations = snapshot.annotations
         eraserStrokes = snapshot.strokes
+
+        let selectionChanged = snapshot.selection != selection
+        selection = snapshot.selection
+        if selectionChanged {
+            preparePreviewBase()
+            updateDimPath()
+            updateSelectionLayers()
+            layoutToolbars()
+        }
+
         if let selectedID, !annotations.contains(where: { $0.id == selectedID }) {
             self.selectedID = nil
         }

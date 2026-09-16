@@ -91,7 +91,6 @@ struct SelectionGeometryTests {
         )
         #expect(handle == .bottomLeft)
     }
-
     @Test("远离所有 handle 时命中为空")
     func handleMiss() {
         let rect = CGRect(x: 100, y: 100, width: 100, height: 100)
@@ -101,5 +100,37 @@ struct SelectionGeometryTests {
             tolerance: 9
         )
         #expect(handle == nil)
+    }
+
+    @Test("改选区后，标注按 imageDelta 平移仍钉在同一画面位置")
+    func regionResizeImageDelta() {
+        let scale: CGFloat = 2
+        // 左 / 下边缘外扩（AppKit 坐标 y 向上，顶边是 maxY）。
+        let before = CGRect(x: 100, y: 100, width: 200, height: 150)
+        let after = CGRect(x: 80, y: 90, width: 240, height: 190)
+
+        let delta = SelectionGeometry.imageDelta(from: before, to: after, scale: scale)
+        #expect(delta.width == 40)   // (100 - 80) * 2：左边外扩，图像坐标变大
+        #expect(delta.height == 60)  // (280 - 250) * 2：顶边上移，图像坐标变大
+
+        // 固定一个画面点（视图坐标），它在两个选区里的图像坐标之差必须正好等于 delta。
+        let viewPoint = CGPoint(x: 150, y: 160)
+        func imagePoint(_ rect: CGRect) -> CGPoint {
+            CGPoint(
+                x: (viewPoint.x - rect.minX) * scale,
+                y: (rect.maxY - viewPoint.y) * scale
+            )
+        }
+        let beforeImage = imagePoint(before)
+        let afterImage = imagePoint(after)
+        #expect(abs((beforeImage.x + delta.width) - afterImage.x) < 0.001)
+        #expect(abs((beforeImage.y + delta.height) - afterImage.y) < 0.001)
+    }
+
+    @Test("选区没变时平移量为零")
+    func regionResizeImageDeltaZero() {
+        let rect = CGRect(x: 10, y: 20, width: 100, height: 80)
+        let delta = SelectionGeometry.imageDelta(from: rect, to: rect, scale: 2)
+        #expect(delta == .zero)
     }
 }
