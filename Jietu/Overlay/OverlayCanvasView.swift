@@ -68,6 +68,20 @@ final class OverlayCanvasView: NSView {
     private var hoveredWindow: WindowInfo?
     private var cursorPoint: CGPoint?
 
+    // MARK: - Loupe（跟随光标的像素放大镜）
+
+    /// 方形像素网格 + 读数面板：鼠标走到哪跟到哪，用来对着像素抠选区。
+    private enum Loupe {
+        /// 边长（point）。
+        static let side: CGFloat = 136
+        /// 网格格数（奇数：光标那一格正好在正中）。
+        static let cells = 13
+        /// 与光标之间的间距。
+        static let gap: CGFloat = 16
+    }
+
+    private var sampledColor: PixelSampler.Sample?
+    private var lastSampledPixel: CGPoint?
 
     /// 上次用过的选区，按显示器记忆，Tab 恢复。
     private static var rememberedSelection: [CGDirectDisplayID: CGRect] = [:]
@@ -164,6 +178,21 @@ final class OverlayCanvasView: NSView {
     private let sizeLabelLayer = CATextLayer()
     private let windowLabelLayer = CATextLayer()
     private let hintLayer = CATextLayer()
+
+    // 放大镜：图 + 网格 + 十字带 + 中心格 + 边框，读数面板单独几层。
+    private let loupeShadowLayer = CAShapeLayer()
+    private let loupeBorderLayer = CAShapeLayer()
+    private let loupeImageLayer = CALayer()
+    private let loupeGridDarkLayer = CAShapeLayer()
+    private let loupeGridLightLayer = CAShapeLayer()
+    private let loupeGuideLayer = CAShapeLayer()
+    private let loupeCellShadowLayer = CAShapeLayer()
+    private let loupeCellLayer = CAShapeLayer()
+    private let loupePanelLayer = CALayer()
+    private let loupeCoordinateLayer = CATextLayer()
+    private let loupeRegionLayer = CATextLayer()
+    private let loupeColorLayer = CATextLayer()
+    private let loupeSwatchLayer = CALayer()
 
     private var trackingArea: NSTrackingArea?
 
@@ -370,7 +399,77 @@ final class OverlayCanvasView: NSView {
         }
         windowLabelLayer.isHidden = true
 
+        configureLoupe(scale: scale, root: root)
         updateAllLayers()
+    }
+
+    /// 放大镜各层：图（nearest，硬边像素）+ 两层网格（深浅内容上都看得见）
+    /// + 十字带 + 中心格描边 + 外框，读数面板单独几层。
+    private func configureLoupe(scale: CGFloat, root: CALayer) {
+        loupeShadowLayer.fillColor = nil
+        loupeShadowLayer.strokeColor = NSColor.black.withAlphaComponent(0.35).cgColor
+        loupeShadowLayer.lineWidth = 5
+        loupeBorderLayer.fillColor = nil
+        loupeBorderLayer.strokeColor = NSColor.white.withAlphaComponent(0.9).cgColor
+        loupeBorderLayer.lineWidth = 1.5
+
+        loupeImageLayer.contents = snapshot.image
+        loupeImageLayer.contentsGravity = .resize
+        loupeImageLayer.magnificationFilter = .nearest
+        loupeImageLayer.minificationFilter = .nearest
+        loupeImageLayer.cornerRadius = 10
+        loupeImageLayer.masksToBounds = true
+        loupeImageLayer.contentsScale = scale
+
+        loupeGridDarkLayer.fillColor = nil
+        loupeGridDarkLayer.strokeColor = NSColor.black.withAlphaComponent(0.28).cgColor
+        loupeGridDarkLayer.lineWidth = 0.5
+        loupeGridLightLayer.fillColor = nil
+        loupeGridLightLayer.strokeColor = NSColor.white.withAlphaComponent(0.16).cgColor
+        loupeGridLightLayer.lineWidth = 0.5
+
+        // 十字带：光标那一行 / 一列整条淡淡染一下（品牌蓝），中心格再描白边。
+        loupeGuideLayer.fillColor = NSColor(Theme.selectionGreen)
+            .withAlphaComponent(0.16).cgColor
+        loupeGuideLayer.strokeColor = nil
+        loupeCellShadowLayer.fillColor = nil
+        loupeCellShadowLayer.strokeColor = NSColor.black.withAlphaComponent(0.5).cgColor
+        loupeCellShadowLayer.lineWidth = 3
+        loupeCellLayer.fillColor = nil
+        loupeCellLayer.strokeColor = NSColor.white.withAlphaComponent(0.95).cgColor
+        loupeCellLayer.lineWidth = 1.5
+
+        for layer in [
+            loupeShadowLayer, loupeBorderLayer, loupeImageLayer, loupeGridDarkLayer,
+            loupeGridLightLayer, loupeGuideLayer, loupeCellShadowLayer, loupeCellLayer,
+        ] {
+            layer.isHidden = true
+            layer.actions = ["hidden": NSNull(), "contentsRect": NSNull(), "path": NSNull()]
+            root.addSublayer(layer)
+        }
+
+        loupePanelLayer.backgroundColor = NSColor.black.withAlphaComponent(0.72).cgColor
+        loupePanelLayer.cornerRadius = 8
+        loupePanelLayer.borderWidth = 1
+        loupePanelLayer.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
+        loupePanelLayer.isHidden = true
+        root.addSublayer(loupePanelLayer)
+
+        for textLayer in [loupeCoordinateLayer, loupeRegionLayer, loupeColorLayer] {
+            textLayer.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+            textLayer.fontSize = 11
+            textLayer.foregroundColor = NSColor.white.withAlphaComponent(0.92).cgColor
+            textLayer.alignmentMode = .left
+            textLayer.truncationMode = .none
+            textLayer.contentsScale = scale
+            textLayer.isHidden = true
+            root.addSublayer(textLayer)
+        }
+        loupeSwatchLayer.cornerRadius = 3
+        loupeSwatchLayer.borderWidth = 1
+        loupeSwatchLayer.borderColor = NSColor.white.withAlphaComponent(0.55).cgColor
+        loupeSwatchLayer.isHidden = true
+        root.addSublayer(loupeSwatchLayer)
     }
 
     private func configureBorderLayer(_ layer: CAShapeLayer, color: NSColor) {
@@ -406,7 +505,10 @@ final class OverlayCanvasView: NSView {
         imageLayer.contentsScale = scale
         // 标注层尺寸由 updateAnnotationLayer() 按选区设置，这里不能重置成整屏。
         annotationLayer.contentsScale = scale
-        for textLayer in [sizeLabelLayer, windowLabelLayer, hintLayer] {
+        for textLayer in [
+            sizeLabelLayer, windowLabelLayer, hintLayer,
+            loupeCoordinateLayer, loupeRegionLayer, loupeColorLayer,
+        ] {
             textLayer.contentsScale = scale
         }
         updateAllLayers()
@@ -452,6 +554,7 @@ final class OverlayCanvasView: NSView {
         hintLayer.isHidden = on
         crosshairLayer.isHidden = on
         crosshairLayer.path = nil
+        updateLoupe()
         CATransaction.commit()
     }
 
@@ -461,6 +564,7 @@ final class OverlayCanvasView: NSView {
         updateDimPath()
         updateSelectionLayers()
         updateCrosshair()
+        updateLoupe()
         updateHint()
     }
 
@@ -568,6 +672,188 @@ final class OverlayCanvasView: NSView {
         path.move(to: CGPoint(x: cursorPoint.x, y: bounds.minY))
         path.addLine(to: CGPoint(x: cursorPoint.x, y: bounds.maxY))
         crosshairLayer.path = path
+    }
+
+    // MARK: - Loupe
+
+    private var loupeLayers: [CALayer] {
+        [
+            loupeShadowLayer, loupeBorderLayer, loupeImageLayer, loupeGridDarkLayer,
+            loupeGridLightLayer, loupeGuideLayer, loupeCellShadowLayer, loupeCellLayer,
+            loupePanelLayer, loupeCoordinateLayer, loupeRegionLayer, loupeColorLayer,
+            loupeSwatchLayer,
+        ]
+    }
+
+    /// 放大镜：跟着光标，只在「还没定选区」的框选阶段出现。
+    private func updateLoupe() {
+        let shouldShow = cursorPoint != nil && !isSettled && !isScrollCaptureChrome
+            && phase == .selecting
+        for layer in loupeLayers {
+            layer.isHidden = !shouldShow
+        }
+        guard shouldShow, let cursorPoint else { return }
+
+        let image = snapshot.image
+        let side = Loupe.side
+        let cells = CGFloat(Loupe.cells)
+        let cellSide = side / cells
+        // 光标所在的图像像素（原点左上）。
+        let center = snapshot.pixelPoint(fromLocalPoint: cursorPoint)
+        let cursorPixel = CGPoint(x: center.x.rounded(.down), y: center.y.rounded(.down))
+
+        // 以光标像素为正中取一格窗口；贴边时把窗口夹回图像内（光标格会随之偏离中心）。
+        let span = CGFloat(Loupe.cells - 1) / 2
+        let originX = min(
+            max(cursorPixel.x - span, 0), max(0, CGFloat(image.width) - cells)
+        )
+        let originY = min(
+            max(cursorPixel.y - span, 0), max(0, CGFloat(image.height) - cells)
+        )
+        loupeImageLayer.contentsRect = CGRect(
+            x: originX / CGFloat(image.width),
+            y: originY / CGFloat(image.height),
+            width: cells / CGFloat(image.width),
+            height: cells / CGFloat(image.height)
+        )
+
+        let cellX = min(max(cursorPixel.x - originX, 0), cells - 1)
+        let cellY = min(max(cursorPixel.y - originY, 0), cells - 1)
+        let cellRect = CGRect(
+            x: cellX * cellSide,
+            y: side - (cellY + 1) * cellSide,
+            width: cellSide,
+            height: cellSide
+        )
+        loupeGridDarkLayer.path = Self.loupeGridPath
+        loupeGridLightLayer.path = Self.loupeGridPath
+        let guide = CGMutablePath()
+        guide.addRect(CGRect(x: 0, y: cellRect.minY, width: side, height: cellSide))
+        guide.addRect(CGRect(x: cellRect.minX, y: 0, width: cellSide, height: side))
+        loupeGuideLayer.path = guide
+        loupeCellShadowLayer.path = CGPath(rect: cellRect, transform: nil)
+        loupeCellLayer.path = CGPath(rect: cellRect, transform: nil)
+
+        // 跟在光标右上角，贴边时翻到另一侧并夹在屏幕内。
+        var origin = CGPoint(x: cursorPoint.x + Loupe.gap, y: cursorPoint.y + Loupe.gap)
+        if origin.x + side > bounds.maxX - 8 { origin.x = cursorPoint.x - Loupe.gap - side }
+        if origin.y + side > bounds.maxY - 8 { origin.y = cursorPoint.y - Loupe.gap - side }
+        origin.x = min(max(origin.x, bounds.minX + 8), bounds.maxX - side - 8)
+        origin.y = min(max(origin.y, bounds.minY + 8), bounds.maxY - side - 8)
+        let frame = CGRect(origin: origin, size: CGSize(width: side, height: side))
+        let rounded = CGPath(
+            roundedRect: CGRect(origin: .zero, size: frame.size),
+            cornerWidth: 10, cornerHeight: 10, transform: nil
+        )
+
+        for layer in [
+            loupeShadowLayer, loupeBorderLayer, loupeImageLayer, loupeGridDarkLayer,
+            loupeGridLightLayer, loupeGuideLayer, loupeCellShadowLayer, loupeCellLayer,
+        ] {
+            layer.frame = frame
+        }
+        loupeShadowLayer.path = rounded
+        loupeBorderLayer.path = rounded
+
+        updateLoupeReadout(frame: frame, pixel: cursorPixel)
+    }
+
+    /// 网格线固定（边长与格数都是常量），算一次就够，别每帧重建 24 条线段。
+    private static let loupeGridPath: CGPath = {
+        let cellSide = Loupe.side / CGFloat(Loupe.cells)
+        let path = CGMutablePath()
+        for index in 1..<Loupe.cells {
+            let offset = CGFloat(index) * cellSide
+            path.move(to: CGPoint(x: offset, y: 0))
+            path.addLine(to: CGPoint(x: offset, y: Loupe.side))
+            path.move(to: CGPoint(x: 0, y: offset))
+            path.addLine(to: CGPoint(x: Loupe.side, y: offset))
+        }
+        return path
+    }()
+
+    /// 读数面板：坐标 / 区域 / 色值，贴在放大镜下方（放不下就挪到上方）。
+    private func updateLoupeReadout(frame: CGRect, pixel: CGPoint) {
+        // 只在跨过像素时才重新取样，天然节流。
+        if lastSampledPixel != pixel {
+            lastSampledPixel = pixel
+            sampledColor = PixelSampler.sample(snapshot.image, atPixel: pixel)
+        }
+
+        let coordinate = String(format: "坐标: (%.0f, %.0f)", pixel.x, pixel.y)
+        // 「区域」= 现在按下去会截到的那块：选框 / 悬停窗口，都没有就显示占位。
+        let regionPoints = selection ?? hoveredWindowLocalRect
+        let region = regionPoints.map {
+            String(
+                format: "区域: %.0f × %.0f",
+                ($0.width * snapshot.effectiveScale).rounded(),
+                ($0.height * snapshot.effectiveScale).rounded()
+            )
+        } ?? "区域: —"
+        let colorText = "色值: " + (sampledColor?.hexString ?? "—")
+
+        let rowHeight: CGFloat = 15
+        let inset: CGFloat = 8
+        let textWidth = max(
+            Self.loupeTextWidth(coordinate),
+            max(Self.loupeTextWidth(region), Self.loupeTextWidth(colorText))
+        )
+        let swatchSize: CGFloat = 11
+        let panelWidth = min(
+            bounds.width - 16,
+            max(Loupe.side, textWidth + inset * 2 + swatchSize + 10)
+        )
+        let panelHeight = rowHeight * 3 + inset * 2 - 4
+
+        var panelY = frame.minY - panelHeight + 2
+        if panelY < bounds.minY + 8 { panelY = frame.maxY - 2 }
+        panelY = min(max(panelY, bounds.minY + 8), bounds.maxY - panelHeight - 8)
+        let panelX = min(
+            max(frame.minX, bounds.minX + 8),
+            max(bounds.minX + 8, bounds.maxX - panelWidth - 8)
+        )
+        let panelFrame = CGRect(
+            x: panelX, y: panelY, width: panelWidth, height: panelHeight
+        )
+        loupePanelLayer.frame = panelFrame
+
+        let rows = [loupeCoordinateLayer, loupeRegionLayer, loupeColorLayer]
+        for (index, layer) in rows.enumerated() {
+            layer.string = [coordinate, region, colorText][index]
+            layer.frame = CGRect(
+                x: panelFrame.minX + inset,
+                y: panelFrame.minY + panelHeight - inset + 2 - CGFloat(index + 1) * rowHeight,
+                width: panelWidth - inset * 2,
+                height: rowHeight
+            )
+        }
+
+        if let sampledColor {
+            loupeSwatchLayer.isHidden = false
+            loupeSwatchLayer.backgroundColor = NSColor(
+                srgbRed: CGFloat(sampledColor.red) / 255,
+                green: CGFloat(sampledColor.green) / 255,
+                blue: CGFloat(sampledColor.blue) / 255,
+                alpha: 1
+            ).cgColor
+        } else {
+            loupeSwatchLayer.isHidden = true
+        }
+        loupeSwatchLayer.frame = CGRect(
+            x: panelFrame.minX + inset + Self.loupeTextWidth(colorText) + 8,
+            y: panelFrame.minY + panelHeight - inset + 2 - 3 * rowHeight
+                + (rowHeight - swatchSize) / 2,
+            width: swatchSize,
+            height: swatchSize
+        )
+        for layer in rows + [loupePanelLayer] {
+            layer.isHidden = false
+        }
+    }
+
+    private static func loupeTextWidth(_ text: String) -> CGFloat {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        return (text as NSString).size(withAttributes: [.font: font]).width
     }
 
     private func updateWindowHighlight() {
@@ -713,6 +999,7 @@ final class OverlayCanvasView: NSView {
         cursorPoint = point
         updateHoveredWindow(at: point)
         updateCrosshair()
+        updateLoupe()
         updateCursor(at: point)
     }
 
@@ -721,6 +1008,7 @@ final class OverlayCanvasView: NSView {
         hoveredWindow = nil
         updateWindowHighlight()
         updateCrosshair()
+        updateLoupe()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -854,6 +1142,7 @@ final class OverlayCanvasView: NSView {
         updateDimPath()
         updateSelectionLayers()
         updateCrosshair()
+        updateLoupe()
         updateHint()
 
         if isRegionPickMode {

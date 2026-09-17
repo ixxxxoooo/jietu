@@ -92,6 +92,14 @@ enum CaptureSelfTest {
             )
             return true
 
+        case "--selftest-loupe":
+            // 选区放大镜：合成一次「按下 → 拖动 → 停住」，截图看网格 / 读数面板。
+            runLoupeTest(
+                spec: value ?? "700,600,600,300",
+                outputDirectory: outputDirectory(arguments, after: flagIndex)
+            )
+            return true
+
         case "--selftest-editor":
             // 标注编辑器：拿一张很小的图开窗，截图检查工具栏有没有被窗口裁掉。
             runEditorTest(
@@ -116,6 +124,98 @@ enum CaptureSelfTest {
     }
 
     /// 标注编辑器窗口：验证「小图 / 原地模式」下工具栏不会被裁。
+    /// 放大镜自检：弹出遮罩 → 合成拖拽并在中途停住 → 抓两张（拖动中 / 松手后）。
+    ///
+    /// 参数 `x,y,w,h` 是拖拽起点与位移（全局 cg 坐标、原点主屏左上）。
+    private static func runLoupeTest(spec: String, outputDirectory: URL) {
+        Task { @MainActor in
+            var report: [String] = []
+            do {
+                let engine = CaptureEngine()
+                let snapshots = try await engine.captureAllDisplays()
+                let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
+                let parts = spec.split(separator: ",").compactMap { Double($0) }
+                let start = CGPoint(x: parts.count == 4 ? parts[0] : 700, y: parts.count == 4 ? parts[1] : 600)
+                let delta = CGSize(
+                    width: parts.count == 4 ? parts[2] : 600,
+                    height: parts.count == 4 ? parts[3] : 300
+                )
+
+                let coordinator = OverlayCoordinator()
+                retainedCoordinator = coordinator
+                coordinator.purpose = .screenshot
+                coordinator.present(
+                    session: CaptureSession(snapshots: snapshots, windows: windows),
+                    inlineMode: false
+                )
+                report.append(
+                    "overlay presented; drag \(describe(CGRect(origin: start, size: delta)))"
+                )
+                try? await Task.sleep(for: .milliseconds(600))
+
+                try FileManager.default.createDirectory(
+                    at: outputDirectory, withIntermediateDirectories: true
+                )
+
+                // 按下 → 拖到位 → 停住不动（放大镜要跟着光标，并显示选区尺寸）。
+                postMouse(.mouseMoved, at: start)
+                try? await Task.sleep(for: .milliseconds(120))
+                postMouse(.leftMouseDown, at: start)
+                let end = CGPoint(x: start.x + delta.width, y: start.y + delta.height)
+                for step in 1...8 {
+                    let t = CGFloat(step) / 8
+                    postMouse(
+                        .leftMouseDragged,
+                        at: CGPoint(
+                            x: start.x + delta.width * t, y: start.y + delta.height * t
+                        )
+                    )
+                    try? await Task.sleep(for: .milliseconds(40))
+                }
+                try? await Task.sleep(for: .milliseconds(500))
+
+                let dragging = try await engine.captureAllDisplays(
+                    excludingOwnApplication: false
+                )
+                for (index, snapshot) in dragging.enumerated() {
+                    let url = outputDirectory
+                        .appendingPathComponent("loupe-dragging-\(index).png")
+                    try writePNG(snapshot.image, to: url)
+                    report.append("拖动中 display \(snapshot.displayID) -> \(url.lastPathComponent)")
+                }
+
+                postMouse(.leftMouseUp, at: end)
+                try? await Task.sleep(for: .milliseconds(500))
+                let released = try await engine.captureAllDisplays(
+                    excludingOwnApplication: false
+                )
+                for (index, snapshot) in released.enumerated() {
+                    let url = outputDirectory
+                        .appendingPathComponent("loupe-released-\(index).png")
+                    try writePNG(snapshot.image, to: url)
+                    report.append("松手后 display \(snapshot.displayID) -> \(url.lastPathComponent)")
+                }
+
+                coordinator.cancel()
+                report.append("RESULT: PASS")
+                finish(report, code: 0)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
+    }
+
+    private static func postMouse(_ type: CGEventType, at point: CGPoint) {
+        CGEvent(
+            mouseEventSource: CGEventSource(stateID: .hidSystemState),
+            mouseType: type,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        )?.post(tap: .cghidEventTap)
+    }
+
     private static func runEditorTest(outputDirectory: URL, inline: Bool) {
         Task { @MainActor in
             var report: [String] = []
