@@ -7,6 +7,7 @@ import SwiftUI
 /// - 卡片尺寸按截图**原始宽高比**等比算出来，只受最大尺寸限制，永不拉伸；
 /// - 默认状态只有截图本身，不显示任何操作按钮；
 /// - 悬停时截图轻微模糊，**露出底下的毛玻璃**（而不是压色 / 缩放），操作层浮在截图之上；
+///   悬停由图标层（AppKit tracking）判定并上报，卡片模糊 / 图标显隐 / 暂停自动关闭同源；
 /// - 表面是浮动面板玻璃（后方色彩模糊）、不描边，与拖拽授权面板同款配方；
 ///   大圆角用 `.continuous`（squircle）；阴影交给系统窗口阴影（多层弥散、随外观自适应）。
 ///
@@ -24,6 +25,7 @@ struct QuickAccessView: View {
     /// 拖拽导出用：向外提供 PNG 文件。
     var dragProvider: () -> NSItemProvider
 
+    /// 光标是否落在卡片上；由图标层上报（同一份判断驱动模糊与图标显隐）。
     @State private var isHovering = false
 
     private static let cornerRadius = Theme.Radius.menuPanel

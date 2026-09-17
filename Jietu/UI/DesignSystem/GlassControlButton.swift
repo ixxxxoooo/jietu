@@ -85,6 +85,11 @@ final class GlassControlButton: NSControl {
         )
     }
 
+    /// 这个按钮自己该占多大（圆盘 = 直径见方；胶囊按文字量算）。
+    var preferredSize: NSSize {
+        Self.preferredSize(diameter: diameter, labelText: labelText)
+    }
+
     init(symbol: String, labelText: String? = nil, diameter: CGFloat = 28, tooltip: String) {
         self.symbolName = symbol
         self.labelText = labelText
@@ -124,6 +129,7 @@ final class GlassControlButton: NSControl {
         updateIcon()
 
         // 4. 胶囊的文字（圆盘不用）
+        titleLabel.stringValue = labelText ?? ""
         titleLabel.font = Self.labelFont
         titleLabel.textColor = Self.inkColor
         titleLabel.alignment = .left
@@ -160,9 +166,19 @@ final class GlassControlButton: NSControl {
     override var acceptsFirstResponder: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    /// `point` 是**父视图坐标系**里的点（AppKit `hitTest` 的约定，不是自己的 bounds），
+    /// 必须先转成自己的坐标再判。直接 `bounds.contains(point)` 会让所有不靠原点的按钮
+    /// 永远命不中——钉图那两个按钮恰好是宿主按 frame 兜住的，浮窗没有这层兜底，
+    /// 五个图标就会全部点空。
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard !isHidden, bounds.contains(point) else { return nil }
+        guard !isHidden, bounds.contains(localPoint(point)) else { return nil }
         return self
+    }
+
+    /// 父视图坐标 → 自己的 bounds 坐标（没有父视图时 AppKit 给的就是自己的坐标）。
+    private func localPoint(_ point: NSPoint) -> NSPoint {
+        guard let superview else { return point }
+        return convert(point, from: superview)
     }
 
     override func layout() {
@@ -313,6 +329,9 @@ final class GlassControlButton: NSControl {
 
     /// 测试用：是否处于按下态（按下反馈应当**当场**就位，不等抬起）。
     var isPressedNow: Bool { isPressed }
+
+    /// 测试用：胶囊上真正画出来的文字（漏设 `stringValue` 时这里会是空的）。
+    var renderedLabel: String { titleLabel.stringValue }
 
     /// 测试用：悬停墨层的不透明度（0 = 没悬停，1 = 悬停到位）。
     var hoverTintAlpha: CGFloat { hoverOverlay.alphaValue }

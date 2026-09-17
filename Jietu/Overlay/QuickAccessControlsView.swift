@@ -81,17 +81,16 @@ final class QuickAccessControlsView: NSView {
             nominal = CGPoint(x: cardSize.width / 2, y: cardSize.height / 2)
         }
 
-        let halfWidth = size.width / 2
-        let halfHeight = size.height / 2
-        let minX = min(halfWidth, cardSize.width / 2)
-        let minY = min(halfHeight, cardSize.height / 2)
-        let center = CGPoint(
-            x: min(max(nominal.x, minX), max(cardSize.width - minX, minX)),
-            y: min(max(nominal.y, minY), max(cardSize.height - minY, minY))
-        )
+        /// 把矩形夹进卡片：卡片够大就贴边收进去，卡片比控件还小就居中（对称溢出，
+        /// 至少还看得见、点得到），总之不能把按钮整块推到卡片外面去。
+        func clamp(_ value: CGFloat, in extent: CGFloat, size size: CGFloat) -> CGFloat {
+            guard extent > size else { return ((extent - size) / 2).rounded() }
+            return min(max(value, 0), extent - size).rounded()
+        }
+
         return NSRect(
-            x: (center.x - halfWidth).rounded(),
-            y: (center.y - halfHeight).rounded(),
+            x: clamp(nominal.x - size.width / 2, in: cardSize.width, size: size.width),
+            y: clamp(nominal.y - size.height / 2, in: cardSize.height, size: size.height),
             width: size.width,
             height: size.height
         )
@@ -134,9 +133,15 @@ final class QuickAccessControlsView: NSView {
         refreshHoverFromMouseLocation()
     }
 
-    /// 只有按钮自己吃事件；其余位置让给下层。
+    /// 只有按钮自己吃事件；其余位置让给下层 SwiftUI（点击进标注、拖拽导出）。
+    ///
+    /// 静息态（没悬停）也整层放行：图标还没浮出来时，整张卡片就是截图本身，
+    /// 这一下该落到「点击进标注 / 拖拽导出」上，而不是被五个看不见的按钮拦下来。
+    /// 「甩过去就点」那种快点由 tracking 保证——`mouseEntered` 在 `mouseDown` 的命中测试
+    /// 之前就已派发（自检里有一条专门量它：不等悬停直接点关闭，必须点掉而不是点成标注）。
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard isHovering, bounds.contains(point) else { return nil }
+        let local = superview.map { convert(point, from: $0) } ?? point
+        guard isHovering, bounds.contains(local) else { return nil }
         return super.hitTest(point) as? GlassControlButton
     }
 
