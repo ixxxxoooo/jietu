@@ -42,6 +42,30 @@ struct MenuBarTests {
         #expect(callbackCalled == true)
     }
 
+    @Test("菜单里有区域 / 窗口 / 全屏三个录制入口，各自走各自的回调")
+    @MainActor
+    func recordingMenuItemsAreDistinct() {
+        let menuBar = MenuBarController()
+        var fired: [String] = []
+        menuBar.onRecordRegion = { fired.append("region") }
+        menuBar.onRecordWindow = { fired.append("window") }
+        menuBar.onRecordFullScreen = { fired.append("fullScreen") }
+
+        let menu = menuBar.menuForTesting
+        let want = ["区域录制", "窗口录制", "全屏录制"]
+        for title in want {
+            guard let item = menu.items.first(where: { $0.title == title }) else {
+                Issue.record("菜单里没有「\(title)」")
+                continue
+            }
+            #expect(item.target != nil)
+            if let target = item.target, let action = item.action {
+                _ = target.perform(action, with: item)
+            }
+        }
+        #expect(fired == ["region", "window", "fullScreen"])
+    }
+
     @Test("点击拖拽授权「屏幕录制」触发 onAuthorizeScreenRecording 回调")
     @MainActor
     func authorizeScreenRecordingActionTriggered() {
