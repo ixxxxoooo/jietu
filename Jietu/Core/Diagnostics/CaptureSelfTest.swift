@@ -100,6 +100,16 @@ enum CaptureSelfTest {
             )
             return true
 
+        case "--selftest-pin":
+            // 钉图：把一张**纯白**图钉在屏幕正中，看两个浮动按钮在白底上还认不认得出来。
+            runPinTest(
+                outputDirectory: URL(
+                    fileURLWithPath: value ?? NSTemporaryDirectory(),
+                    isDirectory: true
+                )
+            )
+            return true
+
         case "--selftest-editor":
             // 标注编辑器：拿一张很小的图开窗，截图检查工具栏有没有被窗口裁掉。
             runEditorTest(
@@ -127,6 +137,110 @@ enum CaptureSelfTest {
     /// 放大镜自检：弹出遮罩 → 合成拖拽并在中途停住 → 抓两张（拖动中 / 松手后）。
     ///
     /// 参数 `x,y,w,h` 是拖拽起点与位移（全局 cg 坐标、原点主屏左上）。
+    /// 钉图按钮对比度自检：纯白底图上，两个浮动按钮应当仍然是「深色圆盘 + 白图标」。
+    private static func runPinTest(outputDirectory: URL) {
+        Task { @MainActor in
+            var report: [String] = []
+            do {
+                let screen = NSScreen.main ?? NSScreen.screens[0]
+                let visible = screen.visibleFrame
+                let scale = max(1, screen.backingScaleFactor)
+                let image = try makeWhiteTestImage(width: 520, height: 340)
+                PinWindowController.pin(image: image, on: screen)
+                try? await Task.sleep(for: .milliseconds(700))
+
+                // 钉图窗口居中、按原始大小显示（和 PinWindowController 的默认摆放一致）。
+                let size = CGSize(
+                    width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale
+                )
+                let frame = NSRect(
+                    x: visible.midX - size.width / 2,
+                    y: visible.midY - size.height / 2,
+                    width: size.width,
+                    height: size.height
+                ).integral
+                report.append(
+                    "pin frame=\(describe(frame)) (白底图 \(image.width)x\(image.height)px)"
+                )
+
+                // 鼠标挪进钉图窗口，浮动按钮才会出现（用户可能同时在动鼠标，多试两次）。
+                let inside = CGPoint(
+                    x: frame.midX, y: DisplayGeometry.referenceHeight - frame.midY
+                )
+                let closeCenter = CGPoint(x: frame.maxX - 22, y: frame.maxY - 22)
+                var snapshot: DisplaySnapshot?
+                for attempt in 1...3 {
+                    // 先挪到窗口外面再进来：光标本来就在原地的话不产生移动，触发不了 mouseEntered。
+                    postMouse(.mouseMoved, at: CGPoint(x: frame.minX - 60, y: inside.y))
+                    try? await Task.sleep(for: .milliseconds(150))
+                    postMouse(.mouseMoved, at: inside)
+                    try? await Task.sleep(for: .milliseconds(500))
+                    let shots = try await CaptureEngine().captureAllDisplays(
+                        excludingOwnApplication: false
+                    )
+                    let shot = shots.first { $0.displayID == NSScreen.main?.jietu_displayID }
+                        ?? shots.first
+                    snapshot = shot
+                    let probe = shot.map { luminance(in: $0, at: closeCenter, size: 6) } ?? 1
+                    if probe < 0.9 {
+                        break
+                    }
+                    report.append(
+                        String(format: "第 %d 次注入后按钮还是没出来（探到 %.3f），重试", attempt, probe)
+                    )
+                }
+
+                try FileManager.default.createDirectory(
+                    at: outputDirectory, withIntermediateDirectories: true
+                )
+                guard let snapshot else { throw CaptureError.noDisplays }
+                let url = outputDirectory.appendingPathComponent("pin-white.png")
+                try writePNG(snapshot.image, to: url)
+                report.append("截图 -> \(url.path)")
+
+                // 两个按钮的中心（右上 / 右下，各留 8pt 边距，直径 28）；
+                // 各取两块：圆盘边缘（不含图标）与圆心（图标）——前者代表按钮自身的亮度。
+                let buttonCenters = [
+                    ("右上关闭", closeCenter),
+                    ("右下实况文本", CGPoint(x: frame.maxX - 22, y: frame.minY + 22)),
+                ]
+                for (name, center) in buttonCenters {
+                    let disc = luminance(in: snapshot, at: center, size: 6)
+                    let edge = luminance(
+                        in: snapshot, at: CGPoint(x: center.x, y: center.y - 9), size: 6
+                    )
+                    report.append(
+                        String(format: "%@ 圆心=%.3f 圆盘=%.3f（白底=1.000）", name, disc, edge)
+                    )
+                }
+                report.append("RESULT: PASS")
+                finish(report, code: 0)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
+    }
+
+    /// 指定屏幕点（AppKit 全局坐标）附近一块的像素平均亮度。
+    private static func luminance(
+        in snapshot: DisplaySnapshot, at center: CGPoint, size: CGFloat
+    ) -> Double {
+        let scale = snapshot.effectiveScale
+        let local = CGPoint(
+            x: center.x - snapshot.screenFrameInPoints.minX,
+            y: center.y - snapshot.screenFrameInPoints.minY
+        )
+        let rect = CGRect(
+            x: (local.x - size / 2) * scale,
+            y: (snapshot.screenFrameInPoints.height - local.y - size / 2) * scale,
+            width: size * scale,
+            height: size * scale
+        )
+        return meanLuminance(snapshot.image, pixelRect: rect)
+    }
+
     private static func runLoupeTest(spec: String, outputDirectory: URL) {
         Task { @MainActor in
             var report: [String] = []
@@ -290,6 +404,25 @@ enum CaptureSelfTest {
                 finish(report, code: 1)
             }
         }
+    }
+
+    /// 自检用的「最坏底图」：纯白 + 一圈浅灰描边，专治按钮糊在白底里。
+    private static func makeWhiteTestImage(width: Int, height: Int) throws -> CGImage {
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { throw CaptureError.emptyImage(0) }
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.setStrokeColor(CGColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1))
+        context.setLineWidth(2)
+        context.stroke(CGRect(x: 1, y: 1, width: width - 2, height: height - 2))
+        guard let image = context.makeImage() else { throw CaptureError.emptyImage(0) }
+        return image
     }
 
     /// 自检用的小图：彩色块 + 斜线，够看出缩放 / 裁切。

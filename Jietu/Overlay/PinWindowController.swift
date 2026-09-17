@@ -157,6 +157,7 @@ final class PinGlassCircleButton: NSControl {
     var onClick: (() -> Void)?
 
     private let effectView = NSVisualEffectView()
+    private let scrimView = NSBox()
     private let iconView = NSImageView()
     private let hoverOverlay = NSBox()
     private var isHovered = false
@@ -177,13 +178,26 @@ final class PinGlassCircleButton: NSControl {
         effectView.blendingMode = .withinWindow
         effectView.material = .hudWindow
         effectView.state = .active
+        // 按钮浮在**任意**截图上（纯白页面、纯黑终端、彩色图片都会遇到）：
+        // 固定走深色玻璃 + 白色图标。若跟着系统外观走，浅色外观下 .hudWindow 也是浅的，
+        // 白图标贴在白色截图上就「消失」了。
+        effectView.appearance = NSAppearance(named: .darkAqua)
         effectView.wantsLayer = true
         effectView.layer?.cornerRadius = diameter / 2
         effectView.layer?.masksToBounds = true
         // 极细高光内描边，呈现真实玻璃边缘折射感
         effectView.layer?.borderWidth = 0.5
-        effectView.layer?.borderColor = NSColor(white: 1.0, alpha: 0.22).cgColor
+        effectView.layer?.borderColor = NSColor(white: 1.0, alpha: 0.28).cgColor
         addSubview(effectView)
+
+        // 1.5 压底墨色：玻璃会采样到底图，采样到白色内容时还是偏亮 —— 再压一层深色，
+        // 保证白图标在任何底图上的对比度都够（设计系统里浮动表面也是「磨砂 + scrim」）。
+        scrimView.boxType = .custom
+        scrimView.borderType = .noBorder
+        scrimView.fillColor = NSColor(white: 0, alpha: 0.45)
+        scrimView.cornerRadius = diameter / 2
+        scrimView.isTransparent = false
+        addSubview(scrimView)
 
         // 2. 悬停微光高亮层
         hoverOverlay.boxType = .custom
@@ -204,9 +218,9 @@ final class PinGlassCircleButton: NSControl {
         iconView.wantsLayer = true
         addSubview(iconView)
 
-        // 4. 原生柔和投影，增强玻璃浮空通透感
+        // 4. 原生柔和投影，增强玻璃浮空通透感（白底图上也要能把按钮「托」出来）
         shadow = NSShadow()
-        shadow?.shadowColor = NSColor.black.withAlphaComponent(0.25)
+        shadow?.shadowColor = NSColor.black.withAlphaComponent(0.35)
         shadow?.shadowOffset = NSSize(width: 0, height: -1)
         shadow?.shadowBlurRadius = 3
     }
@@ -228,6 +242,8 @@ final class PinGlassCircleButton: NSControl {
         super.layout()
         effectView.frame = bounds
         effectView.layer?.cornerRadius = bounds.width / 2
+        scrimView.frame = bounds
+        scrimView.cornerRadius = bounds.width / 2
         hoverOverlay.frame = bounds
         hoverOverlay.cornerRadius = bounds.width / 2
 
@@ -301,8 +317,16 @@ final class PinGlassCircleButton: NSControl {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.08
             effectView.animator().alphaValue = pressed ? 0.75 : 1.0
+            scrimView.animator().alphaValue = pressed ? 0.75 : 1.0
             iconView.animator().alphaValue = pressed ? 0.75 : 1.0
         }
+    }
+
+    /// 测试用：按钮底是否**固定**深色。
+    ///
+    /// 白底截图太常见了——底一旦跟着系统外观变浅，白色图标就糊在白底里（用户反馈过）。
+    var backdropIsDark: Bool {
+        effectView.appearance?.name == .darkAqua && scrimView.fillColor.alphaComponent > 0.2
     }
 }
 

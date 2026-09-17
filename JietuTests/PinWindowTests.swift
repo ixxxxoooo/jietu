@@ -21,6 +21,18 @@ struct PinWindowTests {
         return ctx.makeImage()!
     }
 
+    @Test("钉图按钮固定走深色玻璃：白底截图上图标也不会糊掉")
+    func pinButtonKeepsDarkBackdrop() {
+        let close = PinGlassCircleButton(
+            diameter: 28, systemSymbolName: "xmark", tooltip: "关闭"
+        )
+        let liveText = PinGlassCircleButton(
+            diameter: 28, systemSymbolName: "text.viewfinder", tooltip: "实况文本"
+        )
+        #expect(close.backdropIsDark)
+        #expect(liveText.backdropIsDark)
+    }
+
     @Test("PinPanel 具备成为 Key 窗口的能力且去除了 nonactivatingPanel")
     func pinPanelCanBecomeKey() {
         let panel = PinPanel(
