@@ -214,7 +214,7 @@ enum CaptureSelfTest {
                     )
                 }
 
-                // 点一下右下角的实况文本按钮：开启后角标（accent 圆底 + 白勾）必须出现。
+                // 点一下右下角的实况文本按钮：开启后图标应换成**居中的绿色对勾**。
                 // 探针用 AppKit 坐标，注入的鼠标事件得翻成 CG 的 Y 向下坐标。
                 let liveTextCenter = CGPoint(x: frame.maxX - 22, y: frame.minY + 22)
                 let liveTextClick = CGPoint(
@@ -238,19 +238,53 @@ enum CaptureSelfTest {
                 try writePNG(lit.image, to: litURL)
                 report.append("开启实况文本后截图 -> \(litURL.path)")
 
-                // 角标在按钮右上角（按钮 28pt，中心往上/往右各 8pt 就是勾的位置）。
-                // accent 圆底是蓝色，白底图上明显偏暗；没点亮时那里是白底 / 玻璃。
-                let badge = luminance(
-                    in: lit, at: CGPoint(x: liveTextCenter.x + 8, y: liveTextCenter.y + 8), size: 5
-                )
-                let badgeShown = badge < 0.9
+                // 按钮正中间那条勾：点亮前后都取同一块，比「绿偏移」（G−R）。
+                // 未点亮是黑图标（G−R≈0），点亮后是绿勾（G−R 明显为正）——光比亮度分不出来。
+                let offGreen = greenBias(in: snapshot, at: liveTextCenter, size: 6)
+                let litGreen = greenBias(in: lit, at: liveTextCenter, size: 6)
+                // 未点亮时那里是黑图标（G−R≈0），点亮后是绿勾（G−R 明显为正）。
+                // 阈值取小一点：勾是细线，探针框里大部分还是白玻璃。
+                let turnedGreen = litGreen > 0.05 && litGreen - offGreen > 0.05
                 report.append(
-                    String(format: "实况文本角标亮度=%.3f（白底=1.000）→ %@", badge,
-                           badgeShown ? "已出现" : "**没看到**")
+                    String(format: "按钮中心绿偏移：点亮前 %.3f → 点亮后 %.3f → %@",
+                           offGreen, litGreen, turnedGreen ? "已变成绿勾" : "**没变绿**")
                 )
 
-                report.append("RESULT: \(badgeShown ? "PASS" : "FAIL")")
-                finish(report, code: badgeShown ? 0 : 1)
+                // 关闭按钮的响应：从注入「按下」到窗口真的从屏幕上消失。
+                // 用户感知的就是这一段（按下动画 + 抬起后关窗）。
+                let closeClick = CGPoint(
+                    x: closeCenter.x, y: DisplayGeometry.referenceHeight - closeCenter.y
+                )
+                postMouse(.mouseMoved, at: closeClick)
+                try? await Task.sleep(for: .milliseconds(250))
+                let pressAt = CFAbsoluteTimeGetCurrent()
+                postMouse(.leftMouseDown, at: closeClick)
+                try? await Task.sleep(for: .milliseconds(60))  // 普通点击的按住时长
+                let releaseAt = CFAbsoluteTimeGetCurrent()
+                postMouse(.leftMouseUp, at: closeClick)
+
+                var goneAt: CFAbsoluteTime?
+                while CFAbsoluteTimeGetCurrent() - pressAt < 3 {
+                    let stillVisible = NSApp.windows.contains { $0 is PinPanel && $0.isVisible }
+                    if !stillVisible {
+                        goneAt = CFAbsoluteTimeGetCurrent()
+                        break
+                    }
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
+                if let goneAt {
+                    report.append(
+                        String(
+                            format: "关闭按钮：按下→消失 %.0f ms（其中按住 60 ms），抬起→消失 %.0f ms",
+                            (goneAt - pressAt) * 1000, (goneAt - releaseAt) * 1000
+                        )
+                    )
+                } else {
+                    report.append("关闭按钮：3 秒内窗口**没关掉**")
+                }
+
+                report.append("RESULT: \(turnedGreen ? "PASS" : "FAIL")")
+                finish(report, code: turnedGreen ? 0 : 1)
             } catch {
                 report.append("error: \(error.localizedDescription)")
                 report.append("RESULT: FAIL")
@@ -1555,12 +1589,47 @@ enum CaptureSelfTest {
     /// 指定像素区域的平均亮度。`cropping` 与调用方都用「原点左上」的像素坐标，
     /// 所以这里不需要再做 Y 翻转。
     private static func meanLuminance(_ image: CGImage, pixelRect: CGRect? = nil) -> Double {
+        let rgb = meanRGB(image, pixelRect: pixelRect)
+        return 0.2126 * rgb.red + 0.7152 * rgb.green + 0.0722 * rgb.blue
+    }
+
+    /// 指定屏幕点（AppKit 全局坐标）附近一块的「绿偏移」均值（G − R）。
+    ///
+    /// 用来判断某个点是不是**绿色**——绿色对勾在灰度图上只比黑图标亮一点，
+    /// 光看亮度分不出来，看 G−R 才有分辨率。
+    private static func greenBias(
+        in snapshot: DisplaySnapshot, at center: CGPoint, size: CGFloat
+    ) -> Double {
+        let rgb = meanRGB(snapshot.image, pixelRect: pixelRect(in: snapshot, at: center, size: size))
+        return rgb.green - rgb.red
+    }
+
+    /// 屏幕点（AppKit 全局坐标）→ 截图像素矩形。
+    private static func pixelRect(
+        in snapshot: DisplaySnapshot, at center: CGPoint, size: CGFloat
+    ) -> CGRect {
+        let scale = snapshot.effectiveScale
+        let local = CGPoint(
+            x: center.x - snapshot.screenFrameInPoints.minX,
+            y: center.y - snapshot.screenFrameInPoints.minY
+        )
+        return CGRect(
+            x: (local.x - size / 2) * scale,
+            y: (snapshot.screenFrameInPoints.height - local.y - size / 2) * scale,
+            width: size * scale,
+            height: size * scale
+        )
+    }
+
+    private static func meanRGB(
+        _ image: CGImage, pixelRect: CGRect? = nil
+    ) -> (red: Double, green: Double, blue: Double) {
         let imageBounds = CGRect(
             origin: .zero,
             size: CGSize(width: image.width, height: image.height)
         )
         let target = (pixelRect ?? imageBounds).intersection(imageBounds)
-        guard !target.isEmpty, let crop = image.cropping(to: target) else { return -1 }
+        guard !target.isEmpty, let crop = image.cropping(to: target) else { return (-1, -1, -1) }
 
         let width = 64
         let height = 64
@@ -1575,18 +1644,21 @@ enum CaptureSelfTest {
                 space: CGColorSpaceCreateDeviceRGB(),
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
             )
-        else { return -1 }
+        else { return (-1, -1, -1) }
 
         context.draw(crop, in: CGRect(x: 0, y: 0, width: width, height: height))
 
-        var total = 0.0
+        var red = 0.0
+        var green = 0.0
+        var blue = 0.0
         for index in stride(from: 0, to: pixels.count, by: 4) {
-            let red = Double(pixels[index]) / 255
-            let green = Double(pixels[index + 1]) / 255
-            let blue = Double(pixels[index + 2]) / 255
-            total += 0.2126 * red + 0.7152 * green + 0.0722 * blue
+            red += Double(pixels[index]) / 255
+            green += Double(pixels[index + 1]) / 255
+            blue += Double(pixels[index + 2]) / 255
         }
-        return total / Double(width * height)
+
+        let count = Double(width * height)
+        return (red / count, green / count, blue / count)
     }
 
     private static func finish(_ lines: [String], code: Int32) {

@@ -172,19 +172,21 @@ private final class HoverTintView: NSView {
 final class PinGlassCircleButton: NSControl {
     var onClick: (() -> Void)?
 
-    /// 「已生效」角标：开关型按钮（钉图的实况文本）点开后右上角挂一个对勾，
-    /// 再点一次收回——28pt 的玻璃圆盘光靠亮度分不出开没开。
+    /// 开关型按钮（钉图的实况文本）点开后的样子：图标换成**居中的绿色对勾**。
+    /// 不用角标——28pt 的圆盘上角标又小又偏，勾在正中间才对得上「已生效」。
     var isActive = false {
         didSet {
             guard isActive != oldValue else { return }
-            activeBadge.isHidden = !isActive
+            updateIcon()
         }
     }
 
+    private let symbolName: String
+    /// 当前实际画出来的符号（点亮后是 `checkmark`），测试用。
+    private var currentSymbolName = ""
     private let glassView = NSGlassEffectView()
     private let glassContainer = NSView()
     private let iconView = NSImageView()
-    private let activeBadge = NSImageView()
     private let hoverOverlay = HoverTintView()
     private var isHovered = false
     private var isPressed = false
@@ -195,6 +197,7 @@ final class PinGlassCircleButton: NSControl {
         systemSymbolName: String,
         tooltip: String
     ) {
+        symbolName = systemSymbolName
         super.init(frame: NSRect(x: 0, y: 0, width: diameter, height: diameter))
         wantsLayer = true
         toolTip = tooltip
@@ -223,36 +226,33 @@ final class PinGlassCircleButton: NSControl {
         hoverOverlay.wantsLayer = true
         glassContainer.addSubview(hoverOverlay)
 
-        // 3. 图标（SF Symbol，颜色走 alpha ramp 的 textPrimary）
-        let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
-        if let img = NSImage(systemSymbolName: systemSymbolName, accessibilityDescription: tooltip)?.withSymbolConfiguration(config) {
-            iconView.image = img
-        }
-        iconView.contentTintColor = NSColor(name: nil) { $0.isDark
-            ? .srgbInk(1, alpha: 1)
-            : .srgbInk(0, alpha: 1)
-        }
+        // 3. 图标（SF Symbol，未点亮走 alpha ramp 的 textPrimary；点亮换成绿勾）
         iconView.imageScaling = .scaleProportionallyDown
         iconView.wantsLayer = true
         glassContainer.addSubview(iconView)
+        updateIcon()
 
         // 4. 原生柔和投影，增强玻璃浮空通透感（白底图上也要能把按钮「托」出来）
         shadow = NSShadow()
         shadow?.shadowColor = NSColor.black.withAlphaComponent(0.35)
         shadow?.shadowOffset = NSSize(width: 0, height: -1)
         shadow?.shadowBlurRadius = 3
+    }
 
-        // 5. 「已生效」角标：accent 圆底 + 白勾（功能色，深色浅色都不用换）
-        activeBadge.image = NSImage(
-            systemSymbolName: "checkmark.circle.fill",
-            accessibilityDescription: "已开启"
-        )?
-        .withSymbolConfiguration(
-            NSImage.SymbolConfiguration(paletteColors: [.white, NSColor(Theme.Colors.accent)])
+    /// 未点亮：原形图标 + `textPrimary`；点亮：居中的绿色对勾（功能色 `success`）。
+    private func updateIcon() {
+        let symbol = isActive ? "checkmark" : symbolName
+        // 勾单独放大了才不显小（原图标四周有留白，勾是满格的）。
+        let config = NSImage.SymbolConfiguration(
+            pointSize: isActive ? 13 : 12,
+            weight: isActive ? .semibold : .semibold
         )
-        activeBadge.imageScaling = .scaleProportionallyDown
-        activeBadge.isHidden = true
-        glassContainer.addSubview(activeBadge)
+        currentSymbolName = symbol
+        iconView.image = NSImage(systemSymbolName: symbol, accessibilityDescription: toolTip)?
+            .withSymbolConfiguration(config)
+        iconView.contentTintColor = isActive
+            ? NSColor(Theme.Colors.success)
+            : NSColor(name: nil) { $0.isDark ? .srgbInk(1, alpha: 1) : .srgbInk(0, alpha: 1) }
     }
 
     @available(*, unavailable)
@@ -283,15 +283,6 @@ final class PinGlassCircleButton: NSControl {
             y: (glassContainer.bounds.height - iconSize) / 2,
             width: iconSize,
             height: iconSize
-        )
-
-        // 角标压在圆盘右上角；按钮外面还有 8pt 边距，不会被窗口裁掉。
-        let badgeSize: CGFloat = 13
-        activeBadge.frame = NSRect(
-            x: bounds.maxX - badgeSize,
-            y: bounds.maxY - badgeSize,
-            width: badgeSize,
-            height: badgeSize
         )
     }
 
@@ -388,8 +379,11 @@ final class PinGlassCircleButton: NSControl {
         glassView.appearance == nil && glassView.style == .regular
     }
 
-    /// 测试用：右上角的「已生效」对勾当前是否可见。
-    var showsActiveBadge: Bool { !activeBadge.isHidden }
+    /// 测试用：当前画出来的符号名（点亮后应为 `checkmark`）。
+    var renderedSymbolName: String { currentSymbolName }
+
+    /// 测试用：当前图标颜色。
+    var renderedIconTint: NSColor? { iconView.contentTintColor }
 }
 
 /// 钉图的绘制与交互载体。
@@ -430,17 +424,6 @@ final class PinContentView: NSView {
         if frame.contains(NSEvent.mouseLocation) {
             setFloatingButtonsVisible(true)
         }
-
-        let doubleClick = NSClickGestureRecognizer(
-            target: self,
-            action: #selector(handleDoubleClick)
-        )
-        doubleClick.numberOfClicksRequired = 2
-        addGestureRecognizer(doubleClick)
-    }
-
-    @objc private func handleDoubleClick() {
-        onRequestClose?()
     }
 
     @available(*, unavailable)
@@ -618,6 +601,13 @@ final class PinContentView: NSView {
         }
         if let liveTextButton, !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
             toggleLiveText()
+            return
+        }
+
+        // 双击关闭。用 clickCount 而不是 `NSClickGestureRecognizer`：后者为了判断是不是双击，
+        // 会把单击的鼠标事件压后一个双击间隔才交给视图（实测关窗要晚 ~520ms）。
+        if event.clickCount == 2 {
+            onRequestClose?()
             return
         }
 

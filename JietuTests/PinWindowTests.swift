@@ -33,18 +33,24 @@ struct PinWindowTests {
         #expect(liveText.followsSystemAppearance)
     }
 
-    @Test("实况文本按钮的「已生效」对勾：开启才有，再点一次收回")
-    func pinLiveTextButtonShowsCheckmarkOnlyWhenActive() {
+    @Test("实况文本按钮点亮后换成居中的绿色对勾，再点一次还原")
+    func pinLiveTextButtonSwapsToGreenCheckmarkWhenActive() {
         let button = PinGlassCircleButton(
             diameter: 28, systemSymbolName: "text.viewfinder", tooltip: "实况文本"
         )
-        #expect(!button.showsActiveBadge)
+        #expect(button.renderedSymbolName == "text.viewfinder")
+        // 未点亮：黑 / 白墨，三通道相等（灰度）。
+        let off = button.renderedIconTint?.usingColorSpace(.sRGB)
+        #expect(abs((off?.greenComponent ?? 1) - (off?.redComponent ?? 0)) < 0.05)
 
         button.isActive = true
-        #expect(button.showsActiveBadge)
+        #expect(button.renderedSymbolName == "checkmark")
+        // 点亮：明显偏绿。具体数值交给系统绿，这里只认「绿远大于红」。
+        let lit = button.renderedIconTint?.usingColorSpace(.sRGB)
+        #expect((lit?.greenComponent ?? 0) - (lit?.redComponent ?? 0) > 0.3)
 
         button.isActive = false
-        #expect(!button.showsActiveBadge)
+        #expect(button.renderedSymbolName == "text.viewfinder")
     }
 
     @Test("PinPanel 具备成为 Key 窗口的能力且去除了 nonactivatingPanel")
