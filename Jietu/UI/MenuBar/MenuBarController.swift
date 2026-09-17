@@ -11,8 +11,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let permissionItem = NSMenuItem()
     private let accessibilityPermissionItem = NSMenuItem()
     private let recentMenu = NSMenu()
-    /// 确认闪烁用的任务，重复截图时先取消上一次。
-    private var flashTask: Task<Void, Never>?
 
     var onCaptureArea: (() -> Void)?
     var onCaptureWindow: (() -> Void)?
@@ -71,27 +69,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         button.image = Self.icon("camera.viewfinder", description: "Jietu")
         button.image?.isTemplate = true
         button.toolTip = "Jietu 截图"
-    }
-
-    /// 截图成功后闪一下图标：保存是静默的，这是最轻量的确认反馈。
-    func flashCaptureFeedback() {
-        guard let button = statusItem.button else { return }
-        flashTask?.cancel()
-        button.image = Self.icon("checkmark.circle.fill", description: "已截图")
-
-        flashTask = Task { @MainActor [weak self] in
-            // 亮灭共 5 次，约 0.9 秒。
-            for tick in 1...5 {
-                try? await Task.sleep(for: .milliseconds(180))
-                guard !Task.isCancelled, let self else { return }
-                if tick == 5 {
-                    self.configureStatusButton()
-                } else {
-                    let symbol = tick % 2 == 0 ? "checkmark.circle.fill" : "camera.viewfinder"
-                    self.statusItem.button?.image = Self.icon(symbol, description: "Jietu")
-                }
-            }
-        }
     }
 
     private static func icon(_ symbol: String, description: String) -> NSImage? {

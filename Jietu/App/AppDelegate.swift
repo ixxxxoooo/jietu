@@ -723,7 +723,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func deliver(_ image: CGImage, onDisplay displayID: CGDirectDisplayID) {
         logger.notice("delivering \(image.width)x\(image.height) capture")
         recordHistory(image)
-        menuBar?.flashCaptureFeedback()
 
         if settings.playShutterSound {
             CaptureOutput.playShutterSound()
@@ -823,7 +822,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         settings.recordCapture(url)
         logger.notice("saved capture to \(url.path, privacy: .public)")
-        menuBar?.flashCaptureFeedback()
         if settings.showSaveNotification {
             notifier.notifySaved(fileURL: url)
         }
