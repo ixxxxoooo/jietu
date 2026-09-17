@@ -221,18 +221,52 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         )
 
         let hostingView = MenuHostingView(rootView: contentView)
-        let height: CGFloat
-        if items.isEmpty {
-            height = 130
-        } else {
-            let count = min(items.count, 5)
-            height = min(CGFloat(count) * 165 + 44, 480)
-        }
+        let height = Self.calculateRecentMenuHeight(for: items)
         hostingView.frame = NSRect(x: 0, y: 0, width: 320, height: height)
 
         let hostItem = NSMenuItem()
         hostItem.view = hostingView
         recentMenu.addItem(hostItem)
+    }
+
+    /// 根据截图数量与尺寸动态计算最近截图子菜单的合适高度，保证至少容纳 4~5 张图，且不超过屏幕可用高度。
+    static func calculateRecentMenuHeight(for items: [HistoryItem]) -> CGFloat {
+        if items.isEmpty {
+            return 130
+        }
+
+        // 标头 (37) + 分隔线 (1) + 上下边距 (16) = 54
+        let chromeHeight: CGFloat = 54
+        let itemSpacing: CGFloat = 8
+
+        var totalCardsHeight: CGFloat = 0
+        for item in items {
+            let thumbHeight: CGFloat
+            if let image = item.image, image.size.width > 0, image.size.height > 0 {
+                let aspect = image.size.width / image.size.height
+                let rawHeight = 286 / aspect
+                thumbHeight = min(max(rawHeight, 60), 110)
+            } else if let cg = item.cgImage, cg.width > 0, cg.height > 0 {
+                let aspect = CGFloat(cg.width) / CGFloat(cg.height)
+                let rawHeight = 286 / aspect
+                thumbHeight = min(max(rawHeight, 60), 110)
+            } else {
+                thumbHeight = 80
+            }
+            // 卡片上下边距(14) + 标头行(16) + 间隙(5) + 缩略图 + 间隙(5) + 操作栏(22)
+            let cardHeight = 14 + 16 + 5 + thumbHeight + 5 + 22
+            totalCardsHeight += cardHeight
+        }
+
+        let totalSpacing = CGFloat(max(0, items.count - 1)) * itemSpacing
+        let naturalContentHeight = chromeHeight + totalCardsHeight + totalSpacing
+
+        // 获取当前屏幕可用高度，并预留上下安全边距（顶端菜单栏约 30pt、底栏/Dock 约 50pt）
+        let screenHeight = NSScreen.main?.visibleFrame.height ?? 900
+        let maxAllowedHeight = max(420, screenHeight - 90)
+
+        // 动态自适应：记录少时精准贴合内容高度，记录多时上限为屏幕最大安全高度并允许滚动
+        return min(naturalContentHeight, maxAllowedHeight)
     }
 
     // MARK: - Actions

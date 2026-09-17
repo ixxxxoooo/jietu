@@ -119,7 +119,7 @@ struct HistoryCardView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(maxWidth: .infinity)
-                        .frame(maxHeight: 140)
+                        .frame(maxHeight: 110)
                         .clipShape(shape)
                 } else {
                     Text("无法读取")
@@ -208,7 +208,7 @@ struct HistoryCardView: View {
             .animation(.easeInOut(duration: 0.15), value: isHovered)
             .animation(.easeInOut(duration: 0.15), value: copied)
         }
-        .padding(8)
+        .padding(7)
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                 .fill(isHovered ? Color.white.opacity(0.08) : Theme.Colors.cardFill)
@@ -316,7 +316,7 @@ struct RecentHistoryMenuView: View {
             .padding(.vertical, 24)
         } else {
             ScrollView {
-                LazyVStack(spacing: 10) {
+                LazyVStack(spacing: 8) {
                     ForEach(items) { item in
                         HistoryCardView(
                             item: item,
@@ -326,7 +326,7 @@ struct RecentHistoryMenuView: View {
                         )
                     }
                 }
-                .padding(10)
+                .padding(8)
             }
         }
     }

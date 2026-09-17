@@ -106,5 +106,43 @@ struct MenuBarTests {
         #expect(recentMenu.items.count == 1)
         #expect(recentMenu.items.first?.view is MenuHostingView<RecentHistoryMenuView>)
     }
+
+    @Test("最近截图子菜单高度根据截图条数动态扩展且受屏幕限制")
+    @MainActor
+    func recentMenuHeightDynamicallyScales() {
+        // 0 张图：紧凑空状态
+        let h0 = MenuBarController.calculateRecentMenuHeight(for: [])
+        #expect(h0 == 130)
+
+        func makeItem(_ id: String) -> HistoryItem {
+            HistoryItem(
+                id: id,
+                date: Date(),
+                image: NSImage(size: NSSize(width: 1920, height: 1080)),
+                url: nil,
+                cgImage: nil
+            )
+        }
+
+        // 1 张图：约 200~230pt
+        let h1 = MenuBarController.calculateRecentMenuHeight(for: [makeItem("1")])
+        #expect(h1 > 200 && h1 < 250)
+
+        // 2 张图：比 1 张图显著增高
+        let h2 = MenuBarController.calculateRecentMenuHeight(for: [makeItem("1"), makeItem("2")])
+        #expect(h2 > h1)
+
+        // 4 张图：能够放得下 4 张图（高度随条目递增）
+        let items4 = (1...4).map { makeItem("\($0)") }
+        let h4 = MenuBarController.calculateRecentMenuHeight(for: items4)
+        #expect(h4 > h2)
+
+        // 大量图（20张）：受屏幕最大可用高度限制，不超出屏幕
+        let items20 = (1...20).map { makeItem("\($0)") }
+        let h20 = MenuBarController.calculateRecentMenuHeight(for: items20)
+        let screenMax = max(420, (NSScreen.main?.visibleFrame.height ?? 900) - 90)
+        #expect(h20 <= screenMax)
+    }
 }
+
 
