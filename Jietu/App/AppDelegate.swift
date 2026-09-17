@@ -174,6 +174,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     )
                     try? await Task.sleep(for: .milliseconds(90))
                 }
+                // 抓一张运行中的截图：好亲眼看看控制条 / 红框长什么样。
+                if let shots = try? await capture.captureAllDisplays(excludingOwnApplication: false),
+                    let shot = shots.first(where: { $0.displayID == NSScreen.main?.jietu_displayID })
+                        ?? shots.first
+                {
+                    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+                        .appendingPathComponent("jietu-recording-hud.png")
+                    try? CaptureSelfTest.writePNG(shot.image, to: url)
+                    report.append("运行中截图 -> \(url.path)")
+                }
                 let stopAt = CFAbsoluteTimeGetCurrent()
                 if let engine = recordingEngine {
                     await engine.stop()

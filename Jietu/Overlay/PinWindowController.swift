@@ -431,6 +431,11 @@ final class PinContentView: NSView {
         }
 
         let point = convert(event.locationInWindow, from: nil)
+        if let translateButton {
+            NSLog(
+                "[Jietu] pin mouseDown at \(point) translateHidden=\(translateButton.isHidden) translateFrame=\(translateButton.frame)"
+            )
+        }
         if let editButton, !editButton.isHidden, editButton.frame.contains(point) {
             onRequestEdit?()
             return
@@ -817,6 +822,7 @@ final class PinContentView: NSView {
     ///
     /// 跟 macOS 预览窗口的「翻译」按钮一个路子——它也是先 Live Text 认字再翻译。
     @objc func handleTranslate() {
+        NSLog("[Jietu] handleTranslate entered (isTranslating=\(isTranslating))")
         guard !isTranslating else { return }
         if let recognizedText {
             presentSystemTranslation(recognizedText)
