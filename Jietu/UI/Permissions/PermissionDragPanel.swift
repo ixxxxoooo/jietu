@@ -118,11 +118,14 @@ final class PermissionDragController {
     ///
     /// - Parameter pane: 屏幕录制 / 辅助功能；默认屏幕录制（保持既有调用点不变）。
     func present(pane: PermissionPane = .screenRecording) {
+        if isPresenting && currentPane != pane {
+            close()
+        }
         currentPane = pane
-        // 屏幕录制先申请一次：没问过会弹窗、同时把本 App 注册进列表；
-        // 辅助功能不用在这里申请（`AXIsProcessTrustedWithOptions` 已经问过了）。
         if pane == .screenRecording {
             _ = ScreenCapturePermission.request()
+        } else if pane == .accessibility {
+            _ = AccessibilityPermission.request()
         }
         pane.openSystemSettings()
         // URL 在「系统设置已经停在这一栏」时是 no-op，再显式激活一次把它拉到前台。

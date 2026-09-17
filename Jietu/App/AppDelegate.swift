@@ -62,9 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if !ScreenCapturePermission.isGranted {
             logger.notice("screen recording permission missing, showing onboarding")
-            // 关键：必须主动调用一次申请 API，macOS 才会把本 App 注册进
-            // 「系统设置 › 隐私与安全性 › 屏幕录制」列表；否则用户根本找不到可勾选项。
-            _ = ScreenCapturePermission.request()
+            // 启动时不主动向系统弹窗申请授权，交由用户在引导页中点击「授权屏幕录制」时手动触发
             showOnboarding()
         }
     }
@@ -88,7 +86,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onClearRecents = { [weak self] in self?.settings.clearRecentCaptures() }
         menuBar.onOpenFolder = { [weak self] in self?.openSaveFolder() }
         menuBar.onOpenHistory = { [weak self] in self?.showHistory() }
-        menuBar.onAuthorizeScreenRecording = { PermissionDragController.shared.present() }
+        menuBar.onAuthorizeScreenRecording = { PermissionDragController.shared.present(pane: .screenRecording) }
+        menuBar.onAuthorizeAccessibility = { PermissionDragController.shared.present(pane: .accessibility) }
         menuBar.onOpenOnboarding = { [weak self] in self?.showOnboarding() }
         menuBar.onOpenSettings = { [weak self] in self?.showSettings() }
         menuBar.onRelaunch = { ScreenCapturePermission.relaunchApp() }

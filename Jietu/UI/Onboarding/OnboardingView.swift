@@ -198,8 +198,30 @@ struct OnboardingView: View {
                 }
                 OnboardingDivider()
                 OnboardingRow(
+                    title: "辅助功能（可选）",
+                    subtitle: model.isAccessibilityGranted
+                        ? "滚动长图自动滚动已就绪。"
+                        : "用于滚动长图自动滚动；不授权也可手动滚动。",
+                    systemImage: "hand.tap",
+                    tint: model.isAccessibilityGranted ? Theme.Colors.success : Theme.Colors.accent
+                ) {
+                    if model.isAccessibilityGranted {
+                        OnboardingStatusBadge(
+                            title: "已授权",
+                            systemImage: "checkmark.circle.fill",
+                            tint: Theme.Colors.success
+                        )
+                    } else {
+                        Button("去授权") {
+                            model.requestAccessibilityAccess()
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                OnboardingDivider()
+                OnboardingRow(
                     title: "授权对象",
-                    subtitle: "在「系统设置 › 隐私与安全性 › 屏幕录制」里勾选它；列表里没有就点「+」手动添加。",
+                    subtitle: "在系统设置对应列表中勾选它；列表里没有就点「+」手动添加或拖入卡片。",
                     systemImage: "app.badge.checkmark",
                     tint: Theme.Colors.accent
                 ) {
@@ -228,7 +250,7 @@ struct OnboardingView: View {
                 caption(
                     model.suggestsRelaunch
                         ? "已经勾选却还是未授权？点「重启 Jietu」立刻生效。"
-                        : "主按钮会打开系统设置并浮出面板，把里面的卡片拖进列表即可。"
+                        : "点击授权按钮会打开系统设置并浮出面板，把卡片拖进列表即可。"
                 )
                 Spacer(minLength: 0)
                 Button("重新检测") { model.refresh() }
@@ -385,6 +407,7 @@ struct OnboardingView: View {
 @Observable
 final class OnboardingModel {
     var isGranted: Bool
+    var isAccessibilityGranted: Bool
     var isPolling = false
     /// 这次会话里是否已经引导过授权（点了「授权屏幕录制」或打开过系统设置）。
     ///
@@ -424,6 +447,7 @@ final class OnboardingModel {
     init(settings: SettingsStore = SettingsStore()) {
         self.settings = settings
         self.isGranted = ScreenCapturePermission.isGranted
+        self.isAccessibilityGranted = AccessibilityPermission.isGranted
     }
 
     func hotkey(for action: HotkeyAction) -> Hotkey? { settings.hotkey(for: action) }
@@ -438,12 +462,22 @@ final class OnboardingModel {
         if granted != isGranted {
             isGranted = granted
         }
+        let axGranted = AccessibilityPermission.isGranted
+        if axGranted != isAccessibilityGranted {
+            isAccessibilityGranted = axGranted
+        }
     }
 
     /// 点「授权屏幕录制」：打开系统设置并浮出拖拽面板（那一栏会接受把 .app 拖进去）。
     func requestAccess() {
         hasTriedGranting = true
-        PermissionDragController.shared.present()
+        PermissionDragController.shared.present(pane: .screenRecording)
+        refresh()
+    }
+
+    /// 点「去授权」（辅助功能）：打开系统设置辅助功能面板并浮出拖拽面板。
+    func requestAccessibilityAccess() {
+        PermissionDragController.shared.present(pane: .accessibility)
         refresh()
     }
 

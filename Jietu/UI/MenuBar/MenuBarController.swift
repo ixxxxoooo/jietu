@@ -9,6 +9,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let menu = NSMenu()
 
     private let permissionItem = NSMenuItem()
+    private let accessibilityPermissionItem = NSMenuItem()
     private let recentMenu = NSMenu()
     /// 确认闪烁用的任务，重复截图时先取消上一次。
     private var flashTask: Task<Void, Never>?
@@ -23,6 +24,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onOpenFolder: (() -> Void)?
     var onOpenHistory: (() -> Void)?
     var onAuthorizeScreenRecording: (() -> Void)?
+    var onAuthorizeAccessibility: (() -> Void)?
     var onOpenOnboarding: (() -> Void)?
     var onOpenSettings: (() -> Void)?
     var onRelaunch: (() -> Void)?
@@ -30,6 +32,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     /// 最近截图提供者，菜单每次弹出时拉取一次。
     var recentProvider: (() -> [URL])?
+
+    /// 供单元测试检查菜单项。
+    var menuForTesting: NSMenu { menu }
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -45,6 +50,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         permissionItem.title = granted ? "屏幕录制权限：已授权" : "屏幕录制权限：未授权"
         permissionItem.image = NSImage(
             systemSymbolName: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+            accessibilityDescription: nil
+        )
+
+        let axGranted = AccessibilityPermission.isGranted
+        accessibilityPermissionItem.title = axGranted ? "辅助功能权限：已授权" : "辅助功能权限：未授权"
+        accessibilityPermissionItem.image = NSImage(
+            systemSymbolName: axGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
             accessibilityDescription: nil
         )
     }
@@ -102,6 +114,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(permissionItem)
         menu.addItem(
             item("拖拽授权「屏幕录制」…", #selector(handleAuthorizeScreenRecording), symbol: "hand.draw")
+        )
+        accessibilityPermissionItem.isEnabled = false
+        menu.addItem(accessibilityPermissionItem)
+        menu.addItem(
+            item("拖拽授权「辅助功能」…", #selector(handleAuthorizeAccessibility), symbol: "hand.draw")
         )
         menu.addItem(item("权限引导…", #selector(handleOpenOnboarding), symbol: nil))
 
@@ -164,6 +181,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     // MARK: - NSMenuDelegate
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        refresh()
         rebuildRecentMenu()
     }
     private func rebuildRecentMenu() {
@@ -332,6 +350,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func handleAuthorizeScreenRecording() {
         onAuthorizeScreenRecording?()
+    }
+
+    @objc private func handleAuthorizeAccessibility() {
+        onAuthorizeAccessibility?()
     }
 
     @objc private func handleOpenOnboarding() {
