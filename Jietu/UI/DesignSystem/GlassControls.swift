@@ -72,6 +72,7 @@ struct GlassCircleButton: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(tint)
                 .frame(width: diameter, height: diameter)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .frosted(in: Circle())

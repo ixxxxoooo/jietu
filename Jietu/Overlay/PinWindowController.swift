@@ -143,6 +143,39 @@ final class PinPanel: NSPanel {
     }
 }
 
+/// 支持首击响应（First Mouse Click-Through）与直接点击关闭的宿主视图。
+/// 确保钉图在非激活/后台状态下，点击关闭按钮仅需一次即可立刻生效。
+final class PinCloseHostingView: NSHostingView<GlassCircleButton> {
+    var onClick: (() -> Void)?
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden, bounds.contains(point) else { return nil }
+        return self
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        // 捕获鼠标按下，避免冒泡到 PinContentView 触发窗口拖拽
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if bounds.contains(point) {
+            onClick?()
+        }
+    }
+}
+
+/// 支持首击响应的 NSButton。
+final class PinFirstMouseButton: NSButton {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+}
+
 /// 钉图的绘制与交互载体。
 ///
 /// 用自绘而非 `NSImageView`：需要自己处理移动、边缘缩放与缩放，避免和系统
@@ -160,10 +193,10 @@ final class PinContentView: NSView {
 
     var onRequestClose: (() -> Void)?
 
-    private var closeButtonHost: NSHostingView<GlassCircleButton>?
+    private var closeButtonHost: PinCloseHostingView?
     private var liveTextOverlay: ImageAnalysisOverlayView?
     private let liveTextDelegate = PinLiveTextDelegate()
-    private let liveTextButton = NSButton()
+    private let liveTextButton = PinFirstMouseButton()
     private var isLiveTextOn = false
 
     init(frame: NSRect, image: CGImage) {
@@ -208,12 +241,10 @@ final class PinContentView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard bounds.contains(point) else { return nil }
         if let closeButtonHost, !closeButtonHost.isHidden, closeButtonHost.frame.contains(point) {
-            let localPoint = convert(point, to: closeButtonHost)
-            return closeButtonHost.hitTest(localPoint) ?? closeButtonHost
+            return closeButtonHost
         }
         if !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
-            let localPoint = convert(point, to: liveTextButton)
-            return liveTextButton.hitTest(localPoint) ?? liveTextButton
+            return liveTextButton
         }
         // 边缘手柄检测区优先由 PinContentView 响应，避免被全屏覆盖的实况文本视图拦截
         if PinGeometry.handle(at: point, in: bounds) != nil {
@@ -342,6 +373,11 @@ final class PinContentView: NSView {
         }
 
         let point = convert(event.locationInWindow, from: nil)
+        if let closeButtonHost, !closeButtonHost.isHidden, closeButtonHost.frame.contains(point) {
+            onRequestClose?()
+            return
+        }
+
         if let handle = PinGeometry.handle(at: point, in: bounds) {
             activeHandle = handle
             isDraggingWindow = false
@@ -514,7 +550,11 @@ final class PinContentView: NSView {
                 self?.onRequestClose?()
             }
         )
-        let host = NSHostingView(rootView: button)
+        let host = PinCloseHostingView(rootView: button)
+        host.onClick = { [weak self] in
+            self?.onRequestClose?()
+        }
+        host.toolTip = "关闭 (⌘W)"
         host.wantsLayer = true
         host.layer?.backgroundColor = NSColor.clear.cgColor
         host.isHidden = true

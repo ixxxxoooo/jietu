@@ -171,4 +171,85 @@ struct PinWindowTests {
         #expect(hit != nil)
         #expect(hit !== view)
     }
+
+    @Test("关闭按钮支持首击响应 (acceptsFirstMouse = true)")
+    func closeButtonAcceptsFirstMouse() {
+        let image = createTestImage()
+        let view = PinContentView(frame: NSRect(x: 0, y: 0, width: 200, height: 150), image: image)
+        view.layout()
+
+        let enterEvent = NSEvent.enterExitEvent(
+            with: .mouseEntered,
+            location: NSPoint(x: 100, y: 75),
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 1,
+            trackingNumber: 1,
+            userData: nil
+        )!
+        view.mouseEntered(with: enterEvent)
+
+        let closeCenter = NSPoint(x: 178, y: 128)
+        let hit = view.hitTest(closeCenter)
+        #expect(hit?.acceptsFirstMouse(for: nil) == true)
+    }
+
+    @Test("单次点击关闭按钮立即触发关闭，无需二次点击")
+    func closeButtonSingleClickTriggersClose() {
+        let image = createTestImage()
+        let view = PinContentView(frame: NSRect(x: 0, y: 0, width: 200, height: 150), image: image)
+        view.layout()
+
+        var closeCalled = false
+        view.onRequestClose = { closeCalled = true }
+
+        let enterEvent = NSEvent.enterExitEvent(
+            with: .mouseEntered,
+            location: NSPoint(x: 100, y: 75),
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 1,
+            trackingNumber: 1,
+            userData: nil
+        )!
+        view.mouseEntered(with: enterEvent)
+
+        let closeCenter = NSPoint(x: 178, y: 128)
+        guard let closeButton = view.hitTest(closeCenter) else {
+            Issue.record("未命中关闭按钮")
+            return
+        }
+
+        let downEvent = NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: closeCenter,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 1,
+            clickCount: 1,
+            pressure: 1.0
+        )!
+        let upEvent = NSEvent.mouseEvent(
+            with: .leftMouseUp,
+            location: closeCenter,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 1,
+            clickCount: 1,
+            pressure: 0.0
+        )!
+
+        closeButton.mouseDown(with: downEvent)
+        closeButton.mouseUp(with: upEvent)
+
+        #expect(closeCalled == true)
+    }
 }
