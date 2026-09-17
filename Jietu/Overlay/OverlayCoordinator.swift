@@ -12,6 +12,11 @@ final class OverlayCoordinator {
             screenRect: CGRect,
             annotated: Bool
         )
+        /// 用户点选了某个窗口，要求独立高质量捕获（套用圆角与阴影）。
+        case windowCaptured(
+            window: WindowInfo,
+            snapshot: DisplaySnapshot
+        )
     }
 
     private let logger = Logger(subsystem: "com.ixxxxoooo.jietu", category: "overlay")
@@ -30,9 +35,10 @@ final class OverlayCoordinator {
     var annotationDefaults: AnnotationDefaults = .standard
     var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)?
 
-    /// 遮罩的用途：普通截图 / 只要一块选区（滚动长图起步用）。
+    /// 遮罩的用途：普通截图 / 专选窗口截图 / 只要一块选区（滚动长图起步用）。
     enum Purpose {
         case screenshot
+        case windowCapture
         case regionPick
     }
 
@@ -87,6 +93,14 @@ final class OverlayCoordinator {
             }
             // 滚动长图起步：选区不急着交付，鼠标停住就交给外面的控制条。
             controller.isRegionPickMode = (purpose == .regionPick)
+            // 专选窗口模式（直接高亮并选窗）
+            controller.isWindowOnlyMode = (purpose == .windowCapture)
+            controller.onWindowSelected = { [weak self] window in
+                self?.finish(
+                    .windowCaptured(window: window, snapshot: snapshot),
+                    reason: "window-selected"
+                )
+            }
             controller.onSelectionPaused = { [weak self] localRect in
                 self?.onSelectionPaused?(snapshot, localRect)
             }

@@ -127,9 +127,35 @@ struct CaptureSettingsPane: View {
                         settings.filenameTemplate = FilenameTemplate.defaultTemplate
                     }
                 }
-                .settingsEnabled(settings.saveToDisk)
             } header: {
                 SettingsSectionHeader(title: "命名")
+            }
+
+            Section {
+                Toggle(isOn: $settings.windowShadowEnabled) {
+                    Text("窗口截图阴影")
+                    Text("点选窗口截图时自动裁出圆角，并加上 macOS 风格的拟物投影。")
+                }
+                SettingsRow(
+                    title: "阴影大小",
+                    subtitle: "数值越大投影越柔和、扩散越远，窗口看起来悬浮得越高。"
+                ) {
+                    HStack(spacing: Theme.Spacing.md) {
+                        Slider(
+                            value: $settings.windowShadowSize,
+                            in: 16...64,
+                            step: 4
+                        )
+                        .frame(width: 140)
+                        Text("\(Int(settings.windowShadowSize)) pt")
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+                .settingsEnabled(settings.windowShadowEnabled)
+            } header: {
+                SettingsSectionHeader(title: "窗口截图")
             }
         }
         .formStyle(.grouped)

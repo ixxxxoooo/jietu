@@ -27,6 +27,18 @@ final class OverlayWindowController {
         set { canvas.isRegionPickMode = newValue }
     }
 
+    /// 窗口截图模式（直接选窗截图，也可按空格在框选与选窗之间切换）。
+    var isWindowOnlyMode: Bool {
+        get { canvas.isWindowOnlyMode }
+        set { canvas.isWindowOnlyMode = newValue }
+    }
+
+    /// 单击窗口选定事件。
+    var onWindowSelected: ((WindowInfo) -> Void)? {
+        get { canvas.onWindowSelected }
+        set { canvas.onWindowSelected = newValue }
+    }
+
     /// 鼠标在选区上停住（或松手）→ 选区 local 矩形。
     var onSelectionPaused: ((CGRect) -> Void)? {
         get { canvas.onSelectionPaused }

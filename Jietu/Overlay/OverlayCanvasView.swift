@@ -31,10 +31,20 @@ final class OverlayCanvasView: NSView {
     /// 滚动长图模式：选区**不急着自己交付**——鼠标停住（或松开）就回报，
     /// 由外面的控制条贴着选框下方浮出「手动 / 自动」。
     var isRegionPickMode = false
+    /// 窗口截图模式（直接选窗截图，也可按空格在框选与选窗之间切换）。
+    var isWindowOnlyMode = false {
+        didSet {
+            updateHint()
+            updateCursor(at: cursorPoint ?? .zero)
+            updateWindowHighlight()
+        }
+    }
     /// 鼠标在选区上停住（或一松手）→ 选区 local 矩形。
     var onSelectionPaused: ((CGRect) -> Void)?
     /// 选区被拖动 / 缩放 / 清空（nil）→ 让控制条跟着选框走。
     var onSelectionChanged: ((CGRect?) -> Void)?
+    /// 用户选定某个窗口（单击窗口触发）。
+    var onWindowSelected: ((WindowInfo) -> Void)?
 
     /// 拖动中判定「停住」的时长；停住就浮出工具栏，不必等用户松手。
     private static let regionPickPauseDelay: TimeInterval = 0.35
@@ -457,10 +467,12 @@ final class OverlayCanvasView: NSView {
     private func updateDimPath() {
         let path = CGMutablePath()
         path.addRect(bounds)
-        // even-odd 挖洞：有选区就挖选区，没选区但吸附到窗口就挖那个窗口，
-        // 让用户先看到「将要截下来的原始画面」。
-        if let hole = dimHoleRect {
-            path.addRect(hole)
+        // even-odd 挖洞：有选区就挖选区，没选区但吸附到窗口就按圆角矩形挖出该窗口，
+        // 让用户先看到清晰明亮的将截窗口内容。
+        if let selection {
+            path.addRect(selection)
+        } else if let windowRect = hoveredWindowLocalRect {
+            path.addPath(CGPath(roundedRect: windowRect, cornerWidth: 10, cornerHeight: 10, transform: nil))
         }
         dimLayer.path = path
     }
@@ -569,7 +581,7 @@ final class OverlayCanvasView: NSView {
         }
 
         windowHighlightLayer.isHidden = false
-        windowHighlightLayer.path = CGPath(rect: clipped, transform: nil)
+        windowHighlightLayer.path = CGPath(roundedRect: clipped, cornerWidth: 10, cornerHeight: 10, transform: nil)
 
         let text = "\(window.displayName)   \(Int(window.frameInCGPoints.width))×\(Int(window.frameInCGPoints.height))"
         let width = min(bounds.width - 20, max(120, CGFloat(text.count) * 7.2 + 16))
@@ -599,9 +611,11 @@ final class OverlayCanvasView: NSView {
             text += selection == nil
                 ? "  ·  拖拽框选（鼠标停住出「手动 / 自动」）  ·  Esc 取消"
                 : "  ·  鼠标停住出「手动 / 自动」，选区还能接着调  ·  Esc 取消"
+        } else if isWindowOnlyMode {
+            text += "  ·  点击窗口截图  ·  ␣ 切换自由框选  ·  Esc 取消"
         } else {
             text += selection == nil
-                ? "  ·  拖拽框选 / 点窗口选整窗  ·  Esc 取消"
+                ? "  ·  拖拽框选 / 点窗口截整窗  ·  ␣ 切换窗口模式  ·  Esc 取消"
                 : "  ·  ↵ 完成, ⇥ 上次选区, ⇧ 正方形  ·  Esc 取消"
         }
         let width = min(bounds.width - 40, max(420, CGFloat(text.count) * 7.4))
@@ -646,7 +660,30 @@ final class OverlayCanvasView: NSView {
     }
     #endif
 
+    private static let cameraCursor: NSCursor = {
+        let config = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+        if let img = NSImage(systemSymbolName: "camera.fill", accessibilityDescription: nil)?.withSymbolConfiguration(config) {
+            let size = NSSize(width: 24, height: 24)
+            let canvas = NSImage(size: size, flipped: false) { rect in
+                let shadow = NSShadow()
+                shadow.shadowColor = NSColor.black.withAlphaComponent(0.4)
+                shadow.shadowOffset = NSSize(width: 0, height: -1)
+                shadow.shadowBlurRadius = 2
+                shadow.set()
+                NSColor.white.set()
+                img.draw(in: NSRect(x: 2, y: 2, width: 20, height: 20))
+                return true
+            }
+            return NSCursor(image: canvas, hotSpot: NSPoint(x: 12, y: 12))
+        }
+        return .crosshair
+    }()
+
     private func updateCursor(at point: CGPoint) {
+        if isWindowOnlyMode {
+            Self.cameraCursor.set()
+            return
+        }
         if let selection, let handle = SelectionGeometry.handle(
             at: point,
             in: selection,
@@ -664,7 +701,7 @@ final class OverlayCanvasView: NSView {
     }
 
     override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .crosshair)
+        addCursorRect(bounds, cursor: isWindowOnlyMode ? Self.cameraCursor : .crosshair)
     }
 
     // MARK: - Events
@@ -710,6 +747,11 @@ final class OverlayCanvasView: NSView {
         }
         requestFocusIfNeeded()
         cursorPoint = point
+
+        if isWindowOnlyMode {
+            interaction = .pressing(anchor: point)
+            return
+        }
 
         if let selection {
             if let handle = SelectionGeometry.handle(
@@ -773,6 +815,8 @@ final class OverlayCanvasView: NSView {
 
         switch interaction {
         case .pressing(let anchor):
+            // 窗口专选模式下禁止拖出自由选区
+            guard !isWindowOnlyMode else { break }
             if hypot(point.x - anchor.x, point.y - anchor.y) >= Theme.dragActivationDistance {
                 interaction = .selecting(anchor: anchor)
                 selection = SelectionGeometry.selectionRect(
@@ -834,23 +878,22 @@ final class OverlayCanvasView: NSView {
 
         switch interaction {
         case .pressing:
-            // 单击：命中窗口就**贴边截取**（配合悬停的绿色粗线吸附）。
+            // 单击：命中窗口
             if let hoveredWindow {
-                selection = DisplayGeometry.localRect(
-                    fromCGRect: hoveredWindow.frameInCGPoints,
-                    screen: screen
-                ).intersection(canvasBounds)
-                // 先把选区视觉画出来再交付：滚动长图会把遮罩留着当取景框，
-                // 少了这一步绿框就不会出现。
-                updateAllLayers()
                 if isRegionPickMode {
-                    // 遮罩不关：状态得真的落到「已定」，否则下一次拖拽会从这个锚点重新开始。
+                    selection = DisplayGeometry.localRect(
+                        fromCGRect: hoveredWindow.frameInCGPoints,
+                        screen: screen
+                    ).intersection(canvasBounds)
+                    // 先把选区视觉画出来再交付：滚动长图会把遮罩留着当取景框，
+                    // 少了这一步绿框就不会出现。
+                    updateAllLayers()
                     interaction = .settled
                     Self.rememberedSelection[snapshot.displayID] = selection
                     notifySelectionChanged()
                     firePauseSignal()
                 } else {
-                    commit()
+                    onWindowSelected?(hoveredWindow)
                 }
                 return
             }
@@ -934,6 +977,10 @@ final class OverlayCanvasView: NSView {
             }
         case 48: // Tab
             restoreRememberedSelection()
+        case 49: // Space: 在自由框选与窗口截取模式之间切换
+            if selection == nil && !isRegionPickMode {
+                isWindowOnlyMode.toggle()
+            }
         case 123, 124, 125, 126: // 方向键
             nudge(keyCode: event.keyCode, large: event.modifierFlags.contains(.shift))
         default:

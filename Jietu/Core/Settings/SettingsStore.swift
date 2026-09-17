@@ -83,6 +83,8 @@ final class SettingsStore {
         static let quickAccessPosition = "behavior.quickAccessPosition"
         static let editorMode = "behavior.editorMode"
         static let annotationDefaults = "annotation.defaults"
+        static let windowShadowEnabled = "behavior.windowShadowEnabled"
+        static let windowShadowSize = "behavior.windowShadowSize"
     }
 
     /// 最近截图最多保留的条数。
@@ -183,6 +185,16 @@ final class SettingsStore {
         didSet { defaults.set(editorMode.rawValue, forKey: Key.editorMode) }
     }
 
+    /// 窗口截图是否自动裁出圆角并加上 macOS 风格拟物阴影。
+    var windowShadowEnabled: Bool {
+        didSet { defaults.set(windowShadowEnabled, forKey: Key.windowShadowEnabled) }
+    }
+
+    /// 窗口截图阴影大小（pt）。
+    var windowShadowSize: Double {
+        didSet { defaults.set(windowShadowSize, forKey: Key.windowShadowSize) }
+    }
+
     /// 标注的默认样式：工具 / 颜色 / 线宽 / 字号 / 马赛克块 / 模糊半径 / 放大倍率 / 橡皮大小。
     var annotationDefaults: AnnotationDefaults {
         didSet { persistAnnotationDefaults() }
@@ -240,6 +252,8 @@ final class SettingsStore {
                 .flatMap(QuickAccessPosition.init(rawValue:))) ?? .bottomLeft
         self.editorMode =
             (defaults.string(forKey: Key.editorMode).flatMap(EditorMode.init(rawValue:))) ?? .inline
+        self.windowShadowEnabled = defaults.object(forKey: Key.windowShadowEnabled) as? Bool ?? true
+        self.windowShadowSize = defaults.object(forKey: Key.windowShadowSize) as? Double ?? 32.0
         if let data = defaults.data(forKey: Key.annotationDefaults),
             let stored = try? JSONDecoder().decode(AnnotationDefaults.self, from: data)
         {

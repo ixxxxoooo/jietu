@@ -310,23 +310,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 窗口截图：抓鼠标当前悬停的那个窗口，不弹遮罩。
+    /// 窗口截图：呈现全屏交互遮罩，支持悬停吸附高亮、空格切换自由框选与一键窗口截取。
     private func handleWindowCapture() {
+        overlays.purpose = .windowCapture
         guard !overlays.isPresenting else { return }
         guard requireScreenCapturePermission() else { return }
 
-        let mouse = NSEvent.mouseLocation
-        let cgPoint = CGPoint(x: mouse.x, y: DisplayGeometry.referenceHeight - mouse.y)
-        let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
-        guard let window = WindowHitTester.frontmost(atCGPoint: cgPoint, in: windows) else {
-            presentCaptureFailure(CaptureError.noWindowUnderCursor)
-            return
-        }
-
         Task { @MainActor in
             do {
-                let image = try await capture.captureWindow(window)
-                deliver(image, onDisplay: displayID(containing: window))
+                let snapshots = try await capture.captureAllDisplays()
+                let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
+                logger.notice(
+                    "window capture initiated: \(snapshots.count) display(s), \(windows.count) window(s)"
+                )
+                overlays.present(
+                    session: CaptureSession(snapshots: snapshots, windows: windows),
+                    inlineMode: false
+                )
             } catch {
                 presentCaptureFailure(error)
             }
@@ -644,6 +644,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 deliver(image, onDisplay: displayID)
             } else {
                 handleCaptured(image, onDisplay: displayID, screenRect: screenRect)
+            }
+        case .windowCaptured(let window, let snapshot):
+            handleWindowCaptured(window: window, snapshot: snapshot)
+        }
+    }
+
+    /// 窗口截图完成：优先独立截取纯净窗口（无视遮挡），应用原生圆角与 macOS 拟物多层柔和阴影，最后交付。
+    private func handleWindowCaptured(window: WindowInfo, snapshot: DisplaySnapshot) {
+        Task { @MainActor in
+            do {
+                // 1. 优先使用 SCContentFilter 独立捕获纯净窗口内容（无视任何遮挡）
+                let rawImage = try await capture.captureWindow(window)
+                let finalImage = WindowEffects.applyWindowEffects(
+                    to: rawImage,
+                    shadowEnabled: settings.windowShadowEnabled,
+                    shadowSize: settings.windowShadowSize,
+                    scale: snapshot.effectiveScale
+                )
+                deliver(finalImage, onDisplay: snapshot.displayID)
+            } catch {
+                logger.warning(
+                    "independent window capture failed: \(error.localizedDescription), falling back to screen crop"
+                )
+                // 2. 若独立捕获不可用（如特殊系统浮层），回退到底图截取并套用圆角与阴影
+                let screen = NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID } ?? NSScreen.main!
+                let localRect = DisplayGeometry.localRect(
+                    fromCGRect: window.frameInCGPoints,
+                    screen: screen
+                ).intersection(CGRect(origin: .zero, size: screen.frame.size))
+                if let cropped = CaptureOutput.crop(snapshot, toLocalRect: localRect) {
+                    let finalImage = WindowEffects.applyWindowEffects(
+                        to: cropped,
+                        shadowEnabled: settings.windowShadowEnabled,
+                        shadowSize: settings.windowShadowSize,
+                        scale: snapshot.effectiveScale
+                    )
+                    deliver(finalImage, onDisplay: snapshot.displayID)
+                } else {
+                    presentCaptureFailure(error)
+                }
             }
         }
     }

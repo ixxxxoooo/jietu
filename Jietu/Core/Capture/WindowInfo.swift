@@ -31,8 +31,8 @@ enum WindowHitTester {
             let alpha = entry[kCGWindowAlpha as String] as? Double ?? 0
             let ownerPID = entry[kCGWindowOwnerPID as String] as? Int32 ?? -1
 
-            // 只要普通窗口层级，且不是自己（遮罩窗不能参与吸附）。
-            guard layer == 0, alpha > 0.01, ownerPID != excludedPID else { return nil }
+            // 只要普通窗口与面板层级（0...25），且不是自己（遮罩窗不能参与吸附）。
+            guard layer >= 0 && layer <= 25, alpha > 0.01, ownerPID != excludedPID else { return nil }
             // 直接取字段而不是 CGRect(dictionaryRepresentation:)，避开 CFDictionary 桥接告警。
             guard let bounds = entry[kCGWindowBounds as String] as? [String: NSNumber] else {
                 return nil

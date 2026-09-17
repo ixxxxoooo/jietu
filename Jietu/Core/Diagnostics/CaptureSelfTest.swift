@@ -839,6 +839,8 @@ enum CaptureSelfTest {
                         let url = outputDirectory.appendingPathComponent("cropped-\(displayID).png")
                         try? Self.writePNG(image, to: url)
                         print("  cropped -> \(url.path)")
+                    case .windowCaptured(let window, let snapshot):
+                        print("overlay outcome=windowCaptured \(window.displayName) on display=\(snapshot.displayID)")
                     }
                 }
                 coordinator.present(
