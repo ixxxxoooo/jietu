@@ -11,6 +11,7 @@ import VisionKit
 /// - 右键菜单：实况文本（OCR）、复制图像、关闭
 /// - 双击关闭；Esc 关闭；⌘W 快速关闭
 /// - 右上角磨砂玻璃关闭按钮（悬停显示；进入实况文本后常驻）
+/// - 右下角实况文本按钮：点开即选中态，右上角挂对勾；再点一次退出
 ///
 /// @author ixxxxoooo
 final class PinWindowController: NSObject {
@@ -171,9 +172,19 @@ private final class HoverTintView: NSView {
 final class PinGlassCircleButton: NSControl {
     var onClick: (() -> Void)?
 
+    /// 「已生效」角标：开关型按钮（钉图的实况文本）点开后右上角挂一个对勾，
+    /// 再点一次收回——28pt 的玻璃圆盘光靠亮度分不出开没开。
+    var isActive = false {
+        didSet {
+            guard isActive != oldValue else { return }
+            activeBadge.isHidden = !isActive
+        }
+    }
+
     private let glassView = NSGlassEffectView()
     private let glassContainer = NSView()
     private let iconView = NSImageView()
+    private let activeBadge = NSImageView()
     private let hoverOverlay = HoverTintView()
     private var isHovered = false
     private var isPressed = false
@@ -230,6 +241,18 @@ final class PinGlassCircleButton: NSControl {
         shadow?.shadowColor = NSColor.black.withAlphaComponent(0.35)
         shadow?.shadowOffset = NSSize(width: 0, height: -1)
         shadow?.shadowBlurRadius = 3
+
+        // 5. 「已生效」角标：accent 圆底 + 白勾（功能色，深色浅色都不用换）
+        activeBadge.image = NSImage(
+            systemSymbolName: "checkmark.circle.fill",
+            accessibilityDescription: "已开启"
+        )?
+        .withSymbolConfiguration(
+            NSImage.SymbolConfiguration(paletteColors: [.white, NSColor(Theme.Colors.accent)])
+        )
+        activeBadge.imageScaling = .scaleProportionallyDown
+        activeBadge.isHidden = true
+        glassContainer.addSubview(activeBadge)
     }
 
     @available(*, unavailable)
@@ -260,6 +283,15 @@ final class PinGlassCircleButton: NSControl {
             y: (glassContainer.bounds.height - iconSize) / 2,
             width: iconSize,
             height: iconSize
+        )
+
+        // 角标压在圆盘右上角；按钮外面还有 8pt 边距，不会被窗口裁掉。
+        let badgeSize: CGFloat = 13
+        activeBadge.frame = NSRect(
+            x: bounds.maxX - badgeSize,
+            y: bounds.maxY - badgeSize,
+            width: badgeSize,
+            height: badgeSize
         )
     }
 
@@ -355,6 +387,9 @@ final class PinGlassCircleButton: NSControl {
     var followsSystemAppearance: Bool {
         glassView.appearance == nil && glassView.style == .regular
     }
+
+    /// 测试用：右上角的「已生效」对勾当前是否可见。
+    var showsActiveBadge: Bool { !activeBadge.isHidden }
 }
 
 /// 钉图的绘制与交互载体。
@@ -826,6 +861,7 @@ final class PinContentView: NSView {
         // 右下角「实况文本」留着点回普通态。
         setFloatingButtonsVisible(true)
         liveTextButton?.toolTip = "退出实况文本"
+        liveTextButton?.isActive = true
 
         let overlay = ImageAnalysisOverlayView(liveTextDelegate)
         overlay.preferredInteractionTypes = .textSelection
@@ -857,6 +893,7 @@ final class PinContentView: NSView {
         liveTextOverlay?.removeFromSuperview()
         liveTextOverlay = nil
         isLiveTextOn = false
+        liveTextButton?.isActive = false
         liveTextButton?.isHidden = true
         closeButton?.isHidden = true
     }

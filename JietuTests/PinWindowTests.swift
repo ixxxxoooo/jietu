@@ -33,6 +33,20 @@ struct PinWindowTests {
         #expect(liveText.followsSystemAppearance)
     }
 
+    @Test("实况文本按钮的「已生效」对勾：开启才有，再点一次收回")
+    func pinLiveTextButtonShowsCheckmarkOnlyWhenActive() {
+        let button = PinGlassCircleButton(
+            diameter: 28, systemSymbolName: "text.viewfinder", tooltip: "实况文本"
+        )
+        #expect(!button.showsActiveBadge)
+
+        button.isActive = true
+        #expect(button.showsActiveBadge)
+
+        button.isActive = false
+        #expect(!button.showsActiveBadge)
+    }
+
     @Test("PinPanel 具备成为 Key 窗口的能力且去除了 nonactivatingPanel")
     func pinPanelCanBecomeKey() {
         let panel = PinPanel(

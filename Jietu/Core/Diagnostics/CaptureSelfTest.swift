@@ -213,8 +213,44 @@ enum CaptureSelfTest {
                         String(format: "%@ 圆心=%.3f 圆盘=%.3f（白底=1.000）", name, disc, edge)
                     )
                 }
-                report.append("RESULT: PASS")
-                finish(report, code: 0)
+
+                // 点一下右下角的实况文本按钮：开启后角标（accent 圆底 + 白勾）必须出现。
+                // 探针用 AppKit 坐标，注入的鼠标事件得翻成 CG 的 Y 向下坐标。
+                let liveTextCenter = CGPoint(x: frame.maxX - 22, y: frame.minY + 22)
+                let liveTextClick = CGPoint(
+                    x: liveTextCenter.x, y: DisplayGeometry.referenceHeight - liveTextCenter.y
+                )
+                postMouse(.mouseMoved, at: liveTextClick)
+                try? await Task.sleep(for: .milliseconds(250))
+                postMouse(.leftMouseDown, at: liveTextClick)
+                try? await Task.sleep(for: .milliseconds(80))
+                postMouse(.leftMouseUp, at: liveTextClick)
+                try? await Task.sleep(for: .milliseconds(900))
+
+                let litShots = try await CaptureEngine().captureAllDisplays(
+                    excludingOwnApplication: false
+                )
+                guard
+                    let lit = litShots.first(where: { $0.displayID == snapshot.displayID })
+                        ?? litShots.first
+                else { throw CaptureError.noDisplays }
+                let litURL = outputDirectory.appendingPathComponent("pin-livetext.png")
+                try writePNG(lit.image, to: litURL)
+                report.append("开启实况文本后截图 -> \(litURL.path)")
+
+                // 角标在按钮右上角（按钮 28pt，中心往上/往右各 8pt 就是勾的位置）。
+                // accent 圆底是蓝色，白底图上明显偏暗；没点亮时那里是白底 / 玻璃。
+                let badge = luminance(
+                    in: lit, at: CGPoint(x: liveTextCenter.x + 8, y: liveTextCenter.y + 8), size: 5
+                )
+                let badgeShown = badge < 0.9
+                report.append(
+                    String(format: "实况文本角标亮度=%.3f（白底=1.000）→ %@", badge,
+                           badgeShown ? "已出现" : "**没看到**")
+                )
+
+                report.append("RESULT: \(badgeShown ? "PASS" : "FAIL")")
+                finish(report, code: badgeShown ? 0 : 1)
             } catch {
                 report.append("error: \(error.localizedDescription)")
                 report.append("RESULT: FAIL")
