@@ -1,5 +1,5 @@
 import AppKit
-import SwiftUI
+import QuartzCore
 import VisionKit
 
 /// 「钉图」：把截图钉在屏幕上，作为一个可拖动、可缩放的浮动窗口。
@@ -143,36 +143,166 @@ final class PinPanel: NSPanel {
     }
 }
 
-/// 支持首击响应（First Mouse Click-Through）与直接点击关闭的宿主视图。
-/// 确保钉图在非激活/后台状态下，点击关闭按钮仅需一次即可立刻生效。
-final class PinCloseHostingView: NSHostingView<GlassCircleButton> {
+/// 原生 macOS 玻璃质感圆形图标按钮。
+///
+/// 遵循 macOS 设计规范（Liquid Glass / Vibrancy）：
+/// - 底层使用 `NSVisualEffectView(blendingMode: .withinWindow, material: .hudWindow)` 实时对底图进行原生硬件级毛玻璃模糊；
+/// - 边缘带有极细高光描边（Rim Light），呈现真实玻璃通透折射感；
+/// - 悬停时柔和微光渐变（Theme.Duration.hover），按下时平滑反馈；
+/// - 内部 SF Symbol 图标清晰居中；
+/// - 重写 `acceptsFirstMouse`，保证即使在后台/未激活窗口下也是单次点击即刻响应。
+///
+/// @author ixxxxoooo
+final class PinGlassCircleButton: NSControl {
     var onClick: (() -> Void)?
 
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
-        true
+    private let effectView = NSVisualEffectView()
+    private let iconView = NSImageView()
+    private let hoverOverlay = NSBox()
+    private var isHovered = false
+    private var isPressed = false
+    private var trackingArea: NSTrackingArea?
+
+    init(
+        diameter: CGFloat = 28,
+        systemSymbolName: String,
+        tooltip: String
+    ) {
+        super.init(frame: NSRect(x: 0, y: 0, width: diameter, height: diameter))
+        wantsLayer = true
+        toolTip = tooltip
+
+        // 1. 原生毛玻璃背景（Liquid Glass / Vibrancy）
+        // 关键：.withinWindow 会实时采样并模糊该控件正下方窗口内的图像像素（即截图内容）
+        effectView.blendingMode = .withinWindow
+        effectView.material = .hudWindow
+        effectView.state = .active
+        effectView.wantsLayer = true
+        effectView.layer?.cornerRadius = diameter / 2
+        effectView.layer?.masksToBounds = true
+        // 极细高光内描边，呈现真实玻璃边缘折射感
+        effectView.layer?.borderWidth = 0.5
+        effectView.layer?.borderColor = NSColor(white: 1.0, alpha: 0.22).cgColor
+        addSubview(effectView)
+
+        // 2. 悬停微光高亮层
+        hoverOverlay.boxType = .custom
+        hoverOverlay.borderType = .noBorder
+        hoverOverlay.fillColor = NSColor(white: 1.0, alpha: 0.15)
+        hoverOverlay.cornerRadius = diameter / 2
+        hoverOverlay.alphaValue = 0
+        hoverOverlay.isTransparent = false
+        addSubview(hoverOverlay)
+
+        // 3. 图标（SF Symbol）
+        let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+        if let img = NSImage(systemSymbolName: systemSymbolName, accessibilityDescription: tooltip)?.withSymbolConfiguration(config) {
+            iconView.image = img
+        }
+        iconView.contentTintColor = .white
+        iconView.imageScaling = .scaleProportionallyDown
+        iconView.wantsLayer = true
+        addSubview(iconView)
+
+        // 4. 原生柔和投影，增强玻璃浮空通透感
+        shadow = NSShadow()
+        shadow?.shadowColor = NSColor.black.withAlphaComponent(0.25)
+        shadow?.shadowOffset = NSSize(width: 0, height: -1)
+        shadow?.shadowBlurRadius = 3
     }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var acceptsFirstResponder: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard !isHidden, bounds.contains(point) else { return nil }
         return self
     }
 
+    override func layout() {
+        super.layout()
+        effectView.frame = bounds
+        effectView.layer?.cornerRadius = bounds.width / 2
+        hoverOverlay.frame = bounds
+        hoverOverlay.cornerRadius = bounds.width / 2
+
+        let iconSize: CGFloat = 14
+        iconView.frame = NSRect(
+            x: (bounds.width - iconSize) / 2,
+            y: (bounds.height - iconSize) / 2,
+            width: iconSize,
+            height: iconSize
+        )
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .arrow)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        animateHover(highlighted: true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        isPressed = false
+        animateHover(highlighted: false)
+        animatePress(pressed: false)
+    }
+
     override func mouseDown(with event: NSEvent) {
-        // 捕获鼠标按下，避免冒泡到 PinContentView 触发窗口拖拽
+        isPressed = true
+        animatePress(pressed: true)
     }
 
     override func mouseUp(with event: NSEvent) {
+        let wasPressed = isPressed
+        isPressed = false
+        animatePress(pressed: false)
+
         let point = convert(event.locationInWindow, from: nil)
-        if bounds.contains(point) {
+        let inBounds = bounds.contains(point) || (superview.map { bounds.contains(convert(event.locationInWindow, from: $0)) } ?? false)
+        if wasPressed && inBounds {
             onClick?()
         }
     }
-}
 
-/// 支持首击响应的 NSButton。
-final class PinFirstMouseButton: NSButton {
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
-        true
+    private func animateHover(highlighted: Bool) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            hoverOverlay.animator().alphaValue = highlighted ? 1.0 : 0.0
+        }
+    }
+
+    private func animatePress(pressed: Bool) {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.08
+            effectView.animator().alphaValue = pressed ? 0.75 : 1.0
+            iconView.animator().alphaValue = pressed ? 0.75 : 1.0
+        }
     }
 }
 
@@ -193,10 +323,10 @@ final class PinContentView: NSView {
 
     var onRequestClose: (() -> Void)?
 
-    private var closeButtonHost: PinCloseHostingView?
+    private var closeButton: PinGlassCircleButton?
     private var liveTextOverlay: ImageAnalysisOverlayView?
     private let liveTextDelegate = PinLiveTextDelegate()
-    private let liveTextButton = PinFirstMouseButton()
+    private var liveTextButton: PinGlassCircleButton?
     private var isLiveTextOn = false
 
     init(frame: NSRect, image: CGImage) {
@@ -213,8 +343,8 @@ final class PinContentView: NSView {
         // 若鼠标当前已落在窗口范围内，初始就展示浮动按钮
         let currentMouse = NSEvent.mouseLocation
         if frame.contains(currentMouse) {
-            closeButtonHost?.isHidden = false
-            liveTextButton.isHidden = false
+            closeButton?.isHidden = false
+            liveTextButton?.isHidden = false
         }
 
         let doubleClick = NSClickGestureRecognizer(
@@ -240,10 +370,10 @@ final class PinContentView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard bounds.contains(point) else { return nil }
-        if let closeButtonHost, !closeButtonHost.isHidden, closeButtonHost.frame.contains(point) {
-            return closeButtonHost
+        if let closeButton, !closeButton.isHidden, closeButton.frame.contains(point) {
+            return closeButton
         }
-        if !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
+        if let liveTextButton, !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
             return liveTextButton
         }
         // 边缘手柄检测区优先由 PinContentView 响应，避免被全屏覆盖的实况文本视图拦截
@@ -334,9 +464,9 @@ final class PinContentView: NSView {
     }
 
     private func updateCursor(at point: CGPoint) {
-        if let closeButtonHost, !closeButtonHost.isHidden, closeButtonHost.frame.contains(point) {
+        if let closeButton, !closeButton.isHidden, closeButton.frame.contains(point) {
             NSCursor.arrow.set()
-        } else if !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
+        } else if let liveTextButton, !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
             NSCursor.arrow.set()
         } else if let handle = activeHandle {
             SelectionCursor.cursor(for: handle).set()
@@ -355,8 +485,8 @@ final class PinContentView: NSView {
         super.mouseMoved(with: event)
         let point = convert(event.locationInWindow, from: nil)
         if bounds.contains(point) && !isLiveTextOn {
-            if closeButtonHost?.isHidden == true { closeButtonHost?.isHidden = false }
-            if liveTextButton.isHidden { liveTextButton.isHidden = false }
+            if closeButton?.isHidden == true { closeButton?.isHidden = false }
+            if liveTextButton?.isHidden == true { liveTextButton?.isHidden = false }
         }
         updateCursor(at: point)
     }
@@ -373,8 +503,12 @@ final class PinContentView: NSView {
         }
 
         let point = convert(event.locationInWindow, from: nil)
-        if let closeButtonHost, !closeButtonHost.isHidden, closeButtonHost.frame.contains(point) {
+        if let closeButton, !closeButton.isHidden, closeButton.frame.contains(point) {
             onRequestClose?()
+            return
+        }
+        if let liveTextButton, !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
+            toggleLiveText()
             return
         }
 
@@ -541,56 +675,44 @@ final class PinContentView: NSView {
     // MARK: - Close & Live Text Buttons
 
     private func configureCloseButton() {
-        let button = GlassCircleButton(
-            title: "关闭 (⌘W)",
-            systemImage: "xmark",
+        let button = PinGlassCircleButton(
             diameter: 28,
-            tint: Theme.Colors.textPrimary,
-            action: { [weak self] in
-                self?.onRequestClose?()
-            }
+            systemSymbolName: "xmark",
+            tooltip: "关闭 (⌘W)"
         )
-        let host = PinCloseHostingView(rootView: button)
-        host.onClick = { [weak self] in
+        button.onClick = { [weak self] in
             self?.onRequestClose?()
         }
-        host.toolTip = "关闭 (⌘W)"
-        host.wantsLayer = true
-        host.layer?.backgroundColor = NSColor.clear.cgColor
-        host.isHidden = true
-        addSubview(host)
-        self.closeButtonHost = host
+        button.isHidden = true
+        addSubview(button)
+        self.closeButton = button
     }
 
     private func configureLiveTextButton() {
-        liveTextButton.isBordered = false
-        liveTextButton.image = NSImage(
+        let button = PinGlassCircleButton(
+            diameter: 28,
             systemSymbolName: "text.viewfinder",
-            accessibilityDescription: "实况文本"
+            tooltip: "实况文本"
         )
-        liveTextButton.imagePosition = .imageOnly
-        liveTextButton.contentTintColor = .white
-        liveTextButton.target = self
-        liveTextButton.action = #selector(toggleLiveText)
-        liveTextButton.wantsLayer = true
-        liveTextButton.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.5).cgColor
-        liveTextButton.layer?.cornerRadius = 7
-        liveTextButton.layer?.masksToBounds = true
-        liveTextButton.isHidden = true
-        addSubview(liveTextButton)
+        button.onClick = { [weak self] in
+            self?.toggleLiveText()
+        }
+        button.isHidden = true
+        addSubview(button)
+        self.liveTextButton = button
     }
 
     override func layout() {
         super.layout()
         let size: CGFloat = 28
         let padding: CGFloat = 8
-        closeButtonHost?.frame = CGRect(
+        closeButton?.frame = CGRect(
             x: bounds.maxX - size - padding,
             y: bounds.maxY - size - padding,
             width: size,
             height: size
         )
-        liveTextButton.frame = CGRect(
+        liveTextButton?.frame = CGRect(
             x: bounds.maxX - size - padding,
             y: bounds.minY + padding,
             width: size,
@@ -600,16 +722,16 @@ final class PinContentView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         if !isLiveTextOn {
-            closeButtonHost?.isHidden = false
-            liveTextButton.isHidden = false
+            closeButton?.isHidden = false
+            liveTextButton?.isHidden = false
         }
     }
 
     override func mouseExited(with event: NSEvent) {
         let mouseInView = convert(event.locationInWindow, from: nil)
         if !bounds.contains(mouseInView) {
-            closeButtonHost?.isHidden = true
-            liveTextButton.isHidden = true
+            closeButton?.isHidden = true
+            liveTextButton?.isHidden = true
             NSCursor.arrow.set()
         }
     }
@@ -626,15 +748,19 @@ final class PinContentView: NSView {
     private func startLiveText() {
         guard liveTextOverlay == nil else { return }
         isLiveTextOn = true
-        liveTextButton.isHidden = true
-        closeButtonHost?.isHidden = true
+        liveTextButton?.isHidden = true
+        closeButton?.isHidden = true
 
         let overlay = ImageAnalysisOverlayView(liveTextDelegate)
         overlay.preferredInteractionTypes = .textSelection
         overlay.frame = bounds
         overlay.autoresizingMask = [.width, .height]
-        let topView = closeButtonHost ?? liveTextButton
-        addSubview(overlay, positioned: .below, relativeTo: topView)
+        let topView = closeButton ?? liveTextButton
+        if let topView {
+            addSubview(overlay, positioned: .below, relativeTo: topView)
+        } else {
+            addSubview(overlay)
+        }
         liveTextOverlay = overlay
 
         Task { @MainActor in
@@ -655,8 +781,8 @@ final class PinContentView: NSView {
         liveTextOverlay?.removeFromSuperview()
         liveTextOverlay = nil
         isLiveTextOn = false
-        liveTextButton.isHidden = true
-        closeButtonHost?.isHidden = true
+        liveTextButton?.isHidden = true
+        closeButton?.isHidden = true
     }
 
     @objc private func handleExitLiveText() {
