@@ -176,6 +176,30 @@ struct MenuBarTests {
         #expect(recentMenu.items.first?.view is MenuHostingView<RecentHistoryMenuView>)
     }
 
+    @Test("没有最近截图时，「最近截图」子菜单是一条原生灰字项（不再是一大块白卡片）")
+    @MainActor
+    func emptyRecentMenuFallsBackToNativeItem() {
+        let menuBar = MenuBarController()
+        menuBar.historyItemsProvider = { [] }
+        menuBar.menuNeedsUpdate(menuBar.recentMenuForTesting)
+
+        let recentMenu = menuBar.recentMenuForTesting
+        #expect(recentMenu.items.count == 1)
+        let only = recentMenu.items[0]
+        #expect(only.title == "暂无最近截图")
+        #expect(only.isEnabled == false)
+        #expect(only.view == nil, "空状态不该再塞那张 320pt 宽的卡片视图")
+
+        // 有截图时才换成卡片（原来那套）。
+        let item = HistoryItem(
+            id: "only", date: Date(), image: NSImage(size: NSSize(width: 100, height: 100)),
+            url: nil, cgImage: nil
+        )
+        menuBar.historyItemsProvider = { [item] }
+        menuBar.menuNeedsUpdate(recentMenu)
+        #expect(recentMenu.items.first?.view is MenuHostingView<RecentHistoryMenuView>)
+    }
+
     @Test("最近截图子菜单高度根据截图条数动态扩展且受屏幕限制")
     @MainActor
     func recentMenuHeightDynamicallyScales() {

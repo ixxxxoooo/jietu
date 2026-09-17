@@ -260,6 +260,16 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             items = []
         }
 
+        // 空历史：不要那张 320pt 宽的预览卡片——它在菜单里是一大块白底 + 自带标题栏 +
+        // 窗口式阴影，跟菜单本身完全不是一回事（用户报的「显示异常」就是它）。
+        // 一条原生的灰字菜单项就够了：和「暂无…」这种系统写法一致。
+        guard !items.isEmpty else {
+            let empty = NSMenuItem(title: "暂无最近截图", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            recentMenu.addItem(empty)
+            return
+        }
+
         let contentView = RecentHistoryMenuView(
             items: items,
             onSelect: { [weak self] item in
@@ -273,10 +283,15 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 }
             },
             onCopy: { item in
+                // 会话内那份直接拷位图；重启后回来的条目只有文件——**从文件读原图**，
+                // 绝不能拿列表里的缩略图当原图拷（拷出来会是糊的）。
                 if let cg = item.cgImage {
                     CaptureOutput.copyToPasteboard(cg)
+                } else if let url = item.url, let img = NSImage(contentsOf: url),
+                    let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                    CaptureOutput.copyToPasteboard(cg)
                 } else if let img = item.image,
-                          let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                    let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) {
                     CaptureOutput.copyToPasteboard(cg)
                 }
             },

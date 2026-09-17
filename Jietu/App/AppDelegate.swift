@@ -29,6 +29,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingElapsed: TimeInterval = 0
     /// 录的是哪块屏：收工后的浮窗要落回同一块屏（和截图一个规矩）。
     private var recordingDisplayID: CGDirectDisplayID?
+    /// 最近截图自检的报告行（`popUp` 里的定时器闭包没法捕局部变量）。
+    private var recentMenuReport: [String] = []
+    /// 正在被自检弹出的子菜单 / 这一张的名字（同上：不能让定时器闭包捕获 NSMenu）。
+    private var recentMenuUnderTest: NSMenu?
+    private var recentMenuShotName: String?
     /// 框选好了、**还没点「开始」**的那一档：红框 + 控制条先停着（`phase = .ready`）。
     private var pendingRecording: (displayID: CGDirectDisplayID, region: CGRect)?
 
@@ -80,6 +85,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runInlineScrollAppTest()
             return
         }
+        if CommandLine.arguments.contains(CaptureSelfTest.appLevelRecentMenuFlag) {
+            runRecentMenuAppTest()
+            return
+        }
         if CommandLine.arguments.contains(CaptureSelfTest.appLevelRecordingFlag) {
             runRecordingAppTest()
             return
@@ -103,6 +112,91 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 自检（要**真 App 接线**）：菜单「录屏…」→ 遮罩框一块区域 → 红框 + 控制条起来 → 点完成 → 落盘。
     ///
     /// 这条验的是接线（选区域之后 AppDelegate 有没有真的把它变成一次录制、收工有没有真落盘），
+    /// 「最近截图」子菜单：先验**重启后还有数据**，再把两种状态各弹出来拍一张。
+    ///
+    /// 走这条自检是因为菜单的渲染只有真弹出来才拍得到；而「重启后还有数据」这件事，
+    /// 这里用「另开一个 HistoryStore 读同一个目录」来模拟（同一进程里就能验）。
+    /// 全程主线程同步跑（菜单 `popUp` 会开自己的事件跟踪循环），截图用系统的 `screencapture`：
+    /// 定时器得挂到 `.common` 模式，否则事件跟踪期间不会触发。
+    private func runRecentMenuAppTest() {
+        recentMenuReport = []
+        guard let menuBar else {
+            CaptureSelfTest.finish(["菜单栏还没建起来"], code: 1)
+            return
+        }
+
+        // 1. 记一张（走真实落盘那条路），再用**另一个实例**读同一个目录：相当于重启。
+        let image = (try? CaptureSelfTest.makeTestImage(width: 800, height: 500)) ?? nil
+        var recordedID: String?
+        if let image {
+            recordedID = HistoryStore.shared.record(image)?.id
+        }
+        let reopened = HistoryStore(directory: HistoryStore.shared.directoryForTesting)
+        let survived = recordedID != nil && reopened.entries.contains { $0.id == recordedID }
+        recentMenuReport.append(
+            "刚记一张 → 重开历史库：条目=\(reopened.entries.count)，刚记那条还在=\(survived ? "是" : "**否**")"
+        )
+        recentMenuReport.append("最近截图菜单项数=\(historyItems().count)")
+
+        // 2. 空历史：该是一条原生灰字「暂无最近截图」。
+        menuBar.historyItemsProvider = { [] }
+        menuBar.menuNeedsUpdate(menuBar.recentMenuForTesting)
+        let emptyItems = menuBar.recentMenuForTesting.items
+        recentMenuReport.append(
+            "空历史：条目=\(emptyItems.count)，标题=\(emptyItems.first?.title ?? "—")"
+                + "，可点=\(emptyItems.first?.isEnabled == true)"
+                + "，是卡片视图=\(emptyItems.first?.view != nil)"
+        )
+        popAndShootRecentMenu(menuBar.recentMenuForTesting, name: "empty")
+
+        // 3. 有数据：卡片（把真的 provider 装回去——它读的就是 HistoryStore）。
+        menuBar.historyItemsProvider = { [weak self] in self?.historyItems() ?? [] }
+        menuBar.menuNeedsUpdate(menuBar.recentMenuForTesting)
+        recentMenuReport.append(
+            "有数据：条目=\(menuBar.recentMenuForTesting.items.count)"
+                + "，是卡片视图=\(menuBar.recentMenuForTesting.items.first?.view != nil)"
+        )
+        popAndShootRecentMenu(menuBar.recentMenuForTesting, name: "data")
+
+        recentMenuReport.append("RESULT: \(survived ? "PASS" : "FAIL")")
+        CaptureSelfTest.finish(recentMenuReport, code: survived ? 0 : 1)
+    }
+
+    /// 弹出「最近截图」子菜单一秒，拍一张系统截图再收掉。
+    ///
+    /// 菜单挂在实例上而不是让定时器闭包捕获：`NSMenu` 不是 `Sendable`，
+    /// 让 `@Sendable` 的定时器闭包捕它会直接报并发错误。
+    private func popAndShootRecentMenu(_ menu: NSMenu, name: String) {
+        recentMenuUnderTest = menu
+        recentMenuShotName = name
+        let timer = Timer(timeInterval: 1.0, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.finishRecentMenuShot() }
+        }
+        RunLoop.current.add(timer, forMode: .common)
+        menu.popUp(positioning: nil, at: CGPoint(x: 420, y: 420), in: nil)
+    }
+
+    private func finishRecentMenuShot() {
+        shootRecentMenu(recentMenuShotName ?? "menu")
+        recentMenuUnderTest?.cancelTracking()
+        recentMenuUnderTest = nil
+    }
+
+    private func shootRecentMenu(_ name: String) {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("jietu-recent-menu-\(name).png")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", url.path]
+        do {
+            try process.run()
+            process.waitUntilExit()
+            recentMenuReport.append("\(name) 截图 -> \(url.path)")
+        } catch {
+            recentMenuReport.append("\(name) 截图失败：\(error.localizedDescription)")
+        }
+    }
+
     /// 引擎本身的画质 / 时长 / 暂停由 `--selftest-record` 验。
     private func runRecordingAppTest() {
         Task { @MainActor in
@@ -110,7 +204,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var budgets: [(label: String, milliseconds: Double?, limit: Double)] = []
             let savedDirectory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("jietu-record-apptest-\(UUID().uuidString)", isDirectory: true)
-            defer { try? FileManager.default.removeItem(at: savedDirectory) }
+            // **改过的设置一律还回去**：`saveDirectory` 是落 UserDefaults 的，
+            // 自检把目录指到临时目录又不还原的话，用户的截图会一直往一个（跑完就被删掉的）
+            // 临时目录里存——「最近截图」永远是空的，正是这么来的。
+            let previousSaveDirectory = settings.saveDirectory
+            let previousShowSaveNotification = settings.showSaveNotification
+            defer {
+                settings.saveDirectory = previousSaveDirectory
+                settings.showSaveNotification = previousShowSaveNotification
+                try? FileManager.default.removeItem(at: savedDirectory)
+            }
             do {
                 // 落盘目录指到临时目录，别污染用户真实的截图文件夹。
                 settings.saveDirectory = savedDirectory
@@ -946,6 +1049,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // app 级自检常与正式实例同时在场（它要真接线，不能当成"多开"被杀掉）。
         for flag in [
             CaptureSelfTest.appLevelInlineScrollFlag, CaptureSelfTest.appLevelRecordingFlag,
+            CaptureSelfTest.appLevelRecentMenuFlag,
         ] where CommandLine.arguments.contains(flag) {
             return false
         }
@@ -1876,6 +1980,8 @@ struct CaptureRegionTarget {
                 cgImage: first.cgImage
             )
         }
+        // 历史那条也记上「用户的文件在哪」：打开 / 在访达中显示都该落到它上面。
+        HistoryStore.shared.attachSavedFile(url, to: HistoryStore.shared.latestID)
         settings.recordCapture(url)
         logger.notice("saved capture to \(url.path, privacy: .public)")
         if settings.showSaveNotification {
@@ -1900,6 +2006,7 @@ struct CaptureRegionTarget {
     private func clearAllHistory() {
         settings.clearRecentCaptures()
         sessionHistory.removeAll()
+        HistoryStore.shared.removeAll()
         HistoryThumbnailCache.shared.clear()
     }
 
@@ -1921,6 +2028,7 @@ struct CaptureRegionTarget {
         var seenURLs = Set<URL>()
         var result: [HistoryItem] = []
 
+        // 会话内那份带位图（复制走内存，快）。
         for item in sessionHistory {
             if let url = item.url {
                 seenURLs.insert(url)
@@ -1928,6 +2036,23 @@ struct CaptureRegionTarget {
             result.append(item)
         }
 
+        // 落盘历史：**重启后全靠它**（截图默认不入磁盘，会话那份一关就没了）。
+        for entry in HistoryStore.shared.entries {
+            let url = entry.displayURL
+            guard !seenURLs.contains(url) else { continue }
+            seenURLs.insert(url)
+            result.append(
+                HistoryItem(
+                    id: entry.id,
+                    date: entry.date,
+                    image: HistoryThumbnailCache.shared.image(for: url),
+                    url: url,
+                    cgImage: nil
+                )
+            )
+        }
+
+        // 更早的「保存到磁盘」留下的文件（这个功能之前就用它列）：还认得出来的也列上。
         for url in settings.recentCaptureURLs {
             guard !seenURLs.contains(url) else { continue }
             seenURLs.insert(url)
@@ -1949,7 +2074,11 @@ struct CaptureRegionTarget {
     }
 
     /// 记录一次截图到会话历史。
+    ///
+    /// **同时落一份到 `HistoryStore`**：截图默认只进剪贴板，「最近截图」要是只认磁盘上的文件，
+    /// 重启后必然空（用户报的就是这个）。会话内那份还留着位图，复制走内存更快。
     private func recordHistory(_ image: CGImage) {
+        HistoryStore.shared.record(image)
         let item = HistoryItem(
             id: UUID().uuidString,
             date: Date(),

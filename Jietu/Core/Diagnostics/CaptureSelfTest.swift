@@ -38,6 +38,8 @@ enum CaptureSelfTest {
 
     /// 需要完整接线的录屏自检：菜单/遮罩/红框/控制条/落盘，一条链走完。
     static let appLevelRecordingFlag = "--selftest-app-record"
+    /// 「最近截图」子菜单长什么样：空历史 / 有截图各弹一次拍一张。
+    static let appLevelRecentMenuFlag = "--selftest-app-recent-menu"
 
     @MainActor
     static func handleCommandLineIfNeeded() -> Bool {
