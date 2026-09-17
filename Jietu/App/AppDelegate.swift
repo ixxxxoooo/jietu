@@ -320,10 +320,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     clickCard(
                         at: CGPoint(x: playRect.midX, y: playRect.midY), label: "播放按钮"
                     )
-                    try? await Task.sleep(for: .milliseconds(1800))
+                    try? await Task.sleep(for: .milliseconds(3500))
+                    let quickLookUp = VideoQuickLookPresenter.shared.isVisible
+                    let qlFrame = VideoQuickLookPresenter.shared.panelFrame
+                    report.append(
+                        "快速查看面板：\(Int(qlFrame.width))×\(Int(qlFrame.height))"
+                            + "，预览项=\(VideoQuickLookPresenter.shared.currentItemName ?? "—")"
+                    )
                     let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "—"
-                    report.append("点「播放」后最前面的 App=\(front)")
-                    budgets.append(("点播放 → 预览到前台", front.contains("预览") || front == "Preview" ? 0 : nil, 0))
+                    report.append(
+                        "点「播放」后：快速查看面板=\(quickLookUp ? "已弹出" : "**没弹**")，最前面=\(front)"
+                    )
+                    budgets.append(("点播放 → 弹出系统快速查看", quickLookUp ? 0 : nil, 0))
+                    if let shots = try? await capture.captureAllDisplays(excludingOwnApplication: false),
+                        let shot = shots.first(where: { $0.displayID == NSScreen.main?.jietu_displayID })
+                            ?? shots.first
+                    {
+                        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+                            .appendingPathComponent("jietu-recording-quicklook.png")
+                        try? CaptureSelfTest.writePNG(shot.image, to: url)
+                        report.append("快速查看截图 -> \(url.path)")
+                    }
+                    VideoQuickLookPresenter.shared.dismiss()
 
                     // 再验接线：空白处（避开四角按钮与中央「保存」）与播放按钮都要触发同一个动作。
                     var played: [String] = []
@@ -726,6 +744,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onCaptureFullScreen = { [weak self] in self?.handleFullScreenCapture() }
         menuBar.onCaptureTimed = { [weak self] seconds in self?.handleTimedCapture(after: seconds) }
         menuBar.onCaptureScrolling = { [weak self] in self?.handleScrollingCapture() }
+        menuBar.hotkeyProvider = { [weak self] action in self?.settings.hotkey(for: action) }
         menuBar.onRecordRegion = { [weak self] in self?.handleScreenRecording(mode: .region) }
         menuBar.onRecordWindow = { [weak self] in self?.handleScreenRecording(mode: .window) }
         menuBar.onRecordFullScreen = { [weak self] in self?.handleScreenRecording(mode: .fullScreen) }
@@ -854,7 +873,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // 录屏收工的那张卡：文件已经落盘了，能做的就是「拿去看 / 拿去找 / 拿去用」。
         quickAccess.onPlayVideo = { url in
-            Self.openWithSystemPreview(url)
+            VideoQuickLookPresenter.shared.present(url)
         }
         quickAccess.onRevealVideo = { url in
             NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -1819,24 +1838,6 @@ struct CaptureRegionTarget {
         } catch {
             logger.error("save failed: \(error.localizedDescription)")
         }
-    }
-
-    /// 用 macOS 自带的**预览**（`/System/Applications/Preview.app`）打开。
-    ///
-    /// 不用「默认打开方式」：`.mp4` 的默认程序往往是别的播放器，而用户要的是系统那份预览
-    /// （与截图预览窗口里那颗「通过"预览"打开」是同一个 App）。预览被删了才退回默认打开方式。
-    private static func openWithSystemPreview(_ url: URL) {
-        let preview = URL(fileURLWithPath: "/System/Applications/Preview.app")
-        guard FileManager.default.fileExists(atPath: preview.path) else {
-            NSWorkspace.shared.open(url)
-            return
-        }
-        NSWorkspace.shared.open(
-            [url],
-            withApplicationAt: preview,
-            configuration: NSWorkspace.OpenConfiguration(),
-            completionHandler: nil
-        )
     }
 
     /// 视频卡的「保存」：把成片**另存一份**到用户挑的地方。

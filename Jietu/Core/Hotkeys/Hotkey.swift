@@ -4,6 +4,12 @@ import Carbon.HIToolbox
 struct Hotkey: Codable, Hashable {
     var keyCode: UInt32
     var carbonModifiers: UInt32
+    /// 录制那次按下的**字符**（`charactersIgnoringModifiers`）：菜单项要拿它当 `keyEquivalent`
+    /// 才能把快捷键显示出来。功能键 / 方向键在这里也是一个个 Unicode 字符（F1 = U+F704），
+    /// 正好是 AppKit 认的那套，不用再维护一张键码表。
+    ///
+    /// 可选：老数据（这个字段之前就存下来的）没有它，解码成 nil，菜单里就只显示不出来。
+    var menuKeyEquivalent: String?
 }
 
 extension Hotkey {
@@ -39,7 +45,24 @@ extension Hotkey {
         if flags.contains(.control) { carbon |= UInt32(controlKey) }
         // 至少需要一个修饰键，否则会吞掉正常输入。
         guard carbon != 0 else { return nil }
-        return Hotkey(keyCode: UInt32(event.keyCode), carbonModifiers: carbon)
+        // 只认「一个字符」的那种键：菜单的 keyEquivalent 也只能是一个字符。
+        let typed = event.charactersIgnoringModifiers
+        let menuKey = (typed?.count == 1) ? typed : nil
+        return Hotkey(
+            keyCode: UInt32(event.keyCode),
+            carbonModifiers: carbon,
+            menuKeyEquivalent: menuKey
+        )
+    }
+
+    /// 菜单项要用的修饰键掩码（Carbon → Cocoa）。
+    var cocoaModifiers: NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if carbonModifiers & UInt32(cmdKey) != 0 { flags.insert(.command) }
+        if carbonModifiers & UInt32(shiftKey) != 0 { flags.insert(.shift) }
+        if carbonModifiers & UInt32(optionKey) != 0 { flags.insert(.option) }
+        if carbonModifiers & UInt32(controlKey) != 0 { flags.insert(.control) }
+        return flags
     }
 
     static let keyNames: [Int: String] = [

@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Testing
 @testable import Jietu
 
@@ -77,6 +78,37 @@ struct MenuBarTests {
             }
         }
         #expect(fired == ["region", "window", "fullScreen"])
+    }
+
+    @Test("配了快捷键的菜单项显示快捷键，没配的什么都不显示")
+    @MainActor
+    func menuShowsConfiguredHotkeysOnly() {
+        let menuBar = MenuBarController()
+        // 只给「区域截图」配一个 ⌘⇧1，别的都不配。
+        let configured = Hotkey(
+            keyCode: UInt32(kVK_ANSI_1),
+            carbonModifiers: UInt32(cmdKey | shiftKey),
+            menuKeyEquivalent: "1"
+        )
+        menuBar.hotkeyProvider = { action in action == .areaCapture ? configured : nil }
+        menuBar.refresh()
+
+        func item(_ title: String) -> NSMenuItem? {
+            menuBar.menuForTesting.items.first { $0.title == title }
+        }
+        let area = item("区域截图")
+        #expect(area?.keyEquivalent == "1")
+        #expect(area?.keyEquivalentModifierMask == [.command, .shift])
+
+        for title in ["窗口截图", "全屏截图", "滚动长图…", "区域录制", "窗口录制", "全屏录制"] {
+            #expect(item(title)?.keyEquivalent == "", "\(title) 没配快捷键，就不该显示")
+            #expect(item(title)?.keyEquivalentModifierMask == [])
+        }
+
+        // 清掉配置再刷一次：显示跟着变。
+        menuBar.hotkeyProvider = { _ in nil }
+        menuBar.refresh()
+        #expect(item("区域截图")?.keyEquivalent == "")
     }
 
     @Test("点击拖拽授权「屏幕录制」触发 onAuthorizeScreenRecording 回调")

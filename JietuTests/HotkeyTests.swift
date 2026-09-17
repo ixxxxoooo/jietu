@@ -55,5 +55,16 @@ struct HotkeyTests {
         let hotkey = try #require(Hotkey.from(event: event))
         #expect(hotkey.keyCode == UInt32(kVK_ANSI_A))
         #expect(hotkey.carbonModifiers == UInt32(cmdKey | shiftKey))
+        // 菜单要拿它当 keyEquivalent：录制时按的字符（不含修饰键）一并存下来。
+        #expect(hotkey.menuKeyEquivalent == "a")
+        #expect(hotkey.cocoaModifiers == [.command, .shift])
+    }
+
+    @Test("老数据（没有 menuKeyEquivalent 字段）照样能解码")
+    func decodesLegacyHotkeyWithoutMenuKey() throws {
+        let json = #"{"keyCode":15,"carbonModifiers":\#(UInt32(cmdKey | shiftKey))}"#
+        let hotkey = try JSONDecoder().decode(Hotkey.self, from: Data(json.utf8))
+        #expect(hotkey.keyCode == UInt32(kVK_ANSI_R))
+        #expect(hotkey.menuKeyEquivalent == nil, "老数据没有这一项：菜单里就不显示快捷键")
     }
 }

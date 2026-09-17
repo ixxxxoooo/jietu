@@ -17,6 +17,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onCaptureFullScreen: (() -> Void)?
     var onCaptureTimed: ((TimeInterval) -> Void)?
     var onCaptureScrolling: (() -> Void)?
+    /// 某个动作当前配的热键（没配返回 nil）：菜单项据此显示 / 不显示快捷键。
+    var hotkeyProvider: ((HotkeyAction) -> Hotkey?)?
+
     var onRecordRegion: (() -> Void)?
     var onRecordWindow: (() -> Void)?
     var onRecordFullScreen: (() -> Void)?
@@ -52,6 +55,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     func refresh() {
+        refreshHotkeyTitles()
         let granted = ScreenCapturePermission.isGranted
         permissionItem.title = granted ? "屏幕录制权限：已授权" : "屏幕录制权限：未授权"
         permissionItem.image = NSImage(
@@ -82,20 +86,39 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         return image
     }
 
+    /// 带热键的菜单项（动作 + item）：菜单弹出时按当前设置重刷快捷键显示。
+    private var hotkeyItems: [(HotkeyAction, NSMenuItem)] = []
+
     private func buildMenu() {
         // 截图四条 + 滚动长图留在顶层（都是最常用的），录制三条另起一组，
         // 中间用一条分隔线隔开——不收起子菜单，一步就能点到。
-        menu.addItem(item("区域截图", #selector(handleCaptureArea), symbol: "viewfinder"))
-        menu.addItem(item("窗口截图", #selector(handleCaptureWindow), symbol: "macwindow"))
-        menu.addItem(item("全屏截图", #selector(handleCaptureFullScreen), symbol: "rectangle.fill"))
+        menu.addItem(hotkeyItem(.areaCapture, "区域截图", #selector(handleCaptureArea), "viewfinder"))
+        menu.addItem(
+            hotkeyItem(.windowCapture, "窗口截图", #selector(handleCaptureWindow), "macwindow")
+        )
+        menu.addItem(
+            hotkeyItem(
+                .fullScreenCapture, "全屏截图", #selector(handleCaptureFullScreen), "rectangle.fill"
+            )
+        )
         menu.addItem(timedCaptureItem())
-        menu.addItem(item("滚动长图…", #selector(handleCaptureScrolling), symbol: "scroll"))
+        menu.addItem(
+            hotkeyItem(.scrollingCapture, "滚动长图…", #selector(handleCaptureScrolling), "scroll")
+        )
 
         menu.addItem(.separator())
 
-        menu.addItem(item("区域录制", #selector(handleRecordRegion), symbol: "record.circle"))
-        menu.addItem(item("窗口录制", #selector(handleRecordWindow), symbol: "macwindow"))
-        menu.addItem(item("全屏录制", #selector(handleRecordFullScreen), symbol: "rectangle.fill"))
+        menu.addItem(
+            hotkeyItem(.screenRecording, "区域录制", #selector(handleRecordRegion), "record.circle")
+        )
+        menu.addItem(
+            hotkeyItem(.windowRecording, "窗口录制", #selector(handleRecordWindow), "macwindow")
+        )
+        menu.addItem(
+            hotkeyItem(
+                .fullScreenRecording, "全屏录制", #selector(handleRecordFullScreen), "rectangle.fill"
+            )
+        )
 
         menu.addItem(.separator())
 
@@ -145,6 +168,40 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         }
         return item
+    }
+
+    /// 绑了全局热键的菜单项：**配了就在菜单里显示那个快捷键，没配就什么都不显示**。
+    ///
+    /// 这里的 `keyEquivalent` 只当显示用：菜单挂在状态栏按钮上、不在 App 的主菜单里，
+    /// AppKit 那套「主菜单快捷键匹配」够不着它，所以不会和 Carbon 全局热键重复触发
+    /// （菜单打开时按同一组合键会高亮 / 触发这一条，那是系统自己的行为）。
+    private func hotkeyItem(
+        _ action: HotkeyAction,
+        _ title: String,
+        _ selector: Selector,
+        _ symbol: String
+    ) -> NSMenuItem {
+        let item = item(title, selector, symbol: symbol)
+        hotkeyItems.append((action, item))
+        apply(hotkey: hotkeyProvider?(action), to: item)
+        return item
+    }
+
+    private func apply(hotkey: Hotkey?, to item: NSMenuItem) {
+        guard let hotkey, let key = hotkey.menuKeyEquivalent, !key.isEmpty else {
+            item.keyEquivalent = ""
+            item.keyEquivalentModifierMask = []
+            return
+        }
+        item.keyEquivalent = key
+        item.keyEquivalentModifierMask = hotkey.cocoaModifiers
+    }
+
+    /// 菜单每次弹出都重刷一遍：用户在设置页改了快捷键，下一次打开菜单就是新的。
+    private func refreshHotkeyTitles() {
+        for (action, item) in hotkeyItems {
+            apply(hotkey: hotkeyProvider?(action), to: item)
+        }
     }
 
     private func timedCaptureItem() -> NSMenuItem {
