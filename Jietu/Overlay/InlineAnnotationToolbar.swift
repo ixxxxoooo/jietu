@@ -80,12 +80,6 @@ struct InlineMainToolbar: View {
 
             Spacer(minLength: Theme.Spacing.xl)
 
-            BarIconButton(title: "下载", systemImage: "square.and.arrow.down") {
-                model.onSave?()
-            }
-            BarIconButton(title: "钉图", systemImage: "pin") {
-                model.onPin?()
-            }
             BarIconButton(
                 title: "识别文字",
                 systemImage: "text.viewfinder",
@@ -99,6 +93,12 @@ struct InlineMainToolbar: View {
                     model.isLiveTextActive = true
                     model.tool = .select
                 }
+            }
+            BarIconButton(title: "保存", systemImage: "square.and.arrow.down") {
+                model.onSave?()
+            }
+            BarIconButton(title: "钉图", systemImage: "pin") {
+                model.onPin?()
             }
             BarIconButton(
                 title: "取消",

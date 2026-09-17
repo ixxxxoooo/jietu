@@ -539,6 +539,7 @@ struct AnnotationEditorView: View {
 
             separator
 
+            iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
             iconButton(
                 "识别文字",
                 symbol: "text.viewfinder",
@@ -552,7 +553,6 @@ struct AnnotationEditorView: View {
                     tool = .select
                 }
             }
-            iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
             iconButton("保存", symbol: "square.and.arrow.down") { exportToSave() }
             iconButton("钉图", symbol: "pin") { exportToPin() }
         }
