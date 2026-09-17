@@ -151,6 +151,11 @@ final class OverlayWindowController {
     var debugLoupePresentation: (model: CGRect, presentation: CGRect?, isHidden: Bool) {
         canvas.debugLoupePresentation
     }
+
+    /// 自检用：放大镜当前采样窗口 / 光标格子。
+    var debugLoupeState: OverlayCanvasView.DebugLoupeState? {
+        canvas.debugLoupeState
+    }
     #endif
 
     /// 滚动长图：遮罩留在原地当取景框，但**鼠标穿透**，滚轮落到下面那个页面。

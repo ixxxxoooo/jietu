@@ -83,6 +83,11 @@ final class OverlayCanvasView: NSView {
     private var sampledColor: PixelSampler.Sample?
     private var lastSampledPixel: CGPoint?
 
+    #if DEBUG
+    /// 自检用：最近一次放大镜的状态。
+    private var loupeDebugState: DebugLoupeState?
+    #endif
+
     /// 上次用过的选区，按显示器记忆，Tab 恢复。
     private static var rememberedSelection: [CGDirectDisplayID: CGRect] = [:]
 
@@ -263,6 +268,28 @@ final class OverlayCanvasView: NSView {
             presentation: loupeImageLayer.presentation()?.frame,
             isHidden: loupeImageLayer.isHidden
         )
+    }
+
+    /// 自检用：放大镜当前取的是哪一块像素、光标落在哪一格。
+    struct DebugLoupeState {
+        /// 放大镜在画布（本显示器 local，原点左下）里的位置。
+        let frame: CGRect
+        /// 采样窗口在图像里的左上角（图像像素、原点左上）。
+        let sourceOrigin: CGPoint
+        /// 光标像素（图像像素、原点左上）。
+        let cursorPixel: CGPoint
+        /// 光标的像素格子在放大镜里的位置（左上角为 0）。
+        let cell: CGPoint
+        /// 当前格子的格边长（point）。
+        let cellSide: CGFloat
+        /// 取到的颜色。
+        let hex: String?
+    }
+
+    var debugLoupeState: DebugLoupeState? {
+        guard !loupeImageLayer.isHidden else { return nil }
+        guard let state = loupeDebugState else { return nil }
+        return state
     }
     #endif
 
@@ -741,11 +768,10 @@ final class OverlayCanvasView: NSView {
         let originY = min(
             max(cursorPixel.y - span, 0), max(0, CGFloat(image.height) - cells)
         )
-        loupeImageLayer.contentsRect = CGRect(
-            x: originX / CGFloat(image.width),
-            y: originY / CGFloat(image.height),
-            width: cells / CGFloat(image.width),
-            height: cells / CGFloat(image.height)
+        loupeImageLayer.contentsRect = LoupeGeometry.contentsRect(
+            sourceOrigin: CGPoint(x: originX, y: originY),
+            cells: Loupe.cells,
+            imageSize: snapshot.pixelSize
         )
 
         let cellX = min(max(cursorPixel.x - originX, 0), cells - 1)
@@ -787,6 +813,16 @@ final class OverlayCanvasView: NSView {
         loupeBorderLayer.path = rounded
 
         updateLoupeReadout(frame: frame, pixel: cursorPixel)
+        #if DEBUG
+        loupeDebugState = DebugLoupeState(
+            frame: frame,
+            sourceOrigin: CGPoint(x: originX, y: originY),
+            cursorPixel: cursorPixel,
+            cell: CGPoint(x: cellX, y: cellY),
+            cellSide: cellSide,
+            hex: sampledColor?.hexString
+        )
+        #endif
     }
 
     /// 网格线固定（边长与格数都是常量），算一次就够，别每帧重建 24 条线段。
@@ -2260,5 +2296,31 @@ final class OverlayCanvasView: NSView {
             notifySelectionChanged()
             schedulePauseSignal()
         }
+    }
+}
+
+/// 放大镜的图层几何。
+///
+/// 单独抽出来是为了能单测：`contentsRect` 的 y 原点在 macOS 上并不直观
+/// （见 `JietuTests/ContentRectOriginTests`）——实测非 flipped 图层里
+/// **y = 0 取的是图像最后一行**，所以窗口的上边距要换算成「距底边的下边距」。
+///
+/// @author ixxxxoooo
+enum LoupeGeometry {
+    /// 采样窗口（图像像素、原点左上）→ `contentsRect`。
+    static func contentsRect(
+        sourceOrigin: CGPoint,
+        cells: Int,
+        imageSize: CGSize
+    ) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else { return .zero }
+        return CGRect(
+            x: sourceOrigin.x / imageSize.width,
+            // 屏幕坐标是「原点左上」，而 contentsRect 的 y 是「距图像底边」——
+            // 少这一次翻转，放大镜就会整体上下镜像（鼠标在空白处，镜里却全是内容）。
+            y: (imageSize.height - sourceOrigin.y - CGFloat(cells)) / imageSize.height,
+            width: CGFloat(cells) / imageSize.width,
+            height: CGFloat(cells) / imageSize.height
+        )
     }
 }

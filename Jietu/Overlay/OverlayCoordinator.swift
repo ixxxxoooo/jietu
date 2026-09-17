@@ -285,6 +285,11 @@ final class OverlayCoordinator {
         controllers.first { $0.snapshot.displayID == displayID }?.debugLoupePresentation
     }
 
+    /// 自检用：指定屏上放大镜的采样窗口 / 光标格子。
+    func debugLoupeState(displayID: CGDirectDisplayID) -> OverlayCanvasView.DebugLoupeState? {
+        controllers.first { $0.snapshot.displayID == displayID }?.debugLoupeState
+    }
+
     /// 自检用：把每个遮罩窗自己认为的 AppKit frame 报出来。
     var debugWindowFrames: [(
         displayID: CGDirectDisplayID,
