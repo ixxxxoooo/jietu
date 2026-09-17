@@ -28,7 +28,8 @@ private struct TranslationPresentationHost: View {
             .translationPresentation(
                 isPresented: $request.isPresented,
                 text: request.text,
-                // 宿主贴在「翻译」按钮上（钉图左下角），面板朝上长，别把按钮盖住。
+                // 宿主贴在「翻译」按钮上（钉图左下角），面板从按钮下方长出来
+                // （与 macOS 自己在截图预览里那颗「翻译」一致；贴到屏幕下缘时系统会自己翻边）。
                 arrowEdge: .bottom
             )
     }

@@ -431,11 +431,6 @@ final class PinContentView: NSView {
         }
 
         let point = convert(event.locationInWindow, from: nil)
-        if let translateButton {
-            NSLog(
-                "[Jietu] pin mouseDown at \(point) translateHidden=\(translateButton.isHidden) translateFrame=\(translateButton.frame)"
-            )
-        }
         if let editButton, !editButton.isHidden, editButton.frame.contains(point) {
             onRequestEdit?()
             return
@@ -822,20 +817,17 @@ final class PinContentView: NSView {
     ///
     /// 跟 macOS 预览窗口的「翻译」按钮一个路子——它也是先 Live Text 认字再翻译。
     @objc func handleTranslate() {
-        NSLog("[Jietu] handleTranslate entered (isTranslating=\(isTranslating))")
         guard !isTranslating else { return }
         if let recognizedText {
             presentSystemTranslation(recognizedText)
             return
         }
 
-        isTranslating = true
-        translateButton?.toolTip = "正在识别…"
+        setRecognizing(true)
         Task { @MainActor [weak self] in
             guard let self else { return }
             let text = await OCRService.recognizeText(in: self.cgImage)
-            self.isTranslating = false
-            self.translateButton?.toolTip = "翻译（用 macOS 自己的翻译）"
+            self.setRecognizing(false)
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
                 self.presentNothingToTranslate()
@@ -846,7 +838,19 @@ final class PinContentView: NSView {
         }
     }
 
+    /// 识别期间的可见状态：按钮压暗 + 提示语。
+    ///
+    /// 不是装饰：文字识别**首次**要先装模型（这台机器上量到过一次 12 秒以上），
+    /// 没有反馈的话用户只会以为点坏了、接着猛点。
+    private func setRecognizing(_ recognizing: Bool) {
+        isTranslating = recognizing
+        translateButton?.alphaValue = recognizing ? 0.55 : 1
+        translateButton?.toolTip = recognizing ? "正在识别图上的文字…" : "翻译（用 macOS 自己的翻译）"
+    }
+
     private func presentSystemTranslation(_ text: String) {
+        // 钉图已经收掉了（识别是异步的，用户可能等不及）：图都不在屏幕上，别弹面板。
+        guard window != nil else { return }
         // 面板是系统弹窗，得让 App 在最前面，弹出来才看得见。
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)

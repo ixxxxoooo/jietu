@@ -96,6 +96,14 @@ struct PinWindowTests {
     @Test("左下角「翻译」按钮：悬停出现、点击把原文交给 macOS 翻译")
     func translateButtonHandsTextToSystemTranslation() {
         let view = PinContentView(frame: NSRect(x: 0, y: 0, width: 400, height: 300), image: createTestImage())
+        // 系统翻译面板只从**窗口**里长出来（图都不在屏幕上就别弹面板了），所以这里得挂进窗口。
+        let window = NSWindow(
+            contentRect: NSRect(x: -5000, y: -5000, width: 400, height: 300),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = view
         view.layout()
         view.mouseEntered(with: enterExit(.mouseEntered, at: NSPoint(x: 200, y: 150)))
 
