@@ -39,6 +39,9 @@ final class ScrollingCaptureSession {
     var interval: TimeInterval = 0.25
     /// 连续多少拍没有位移就自动结束（自动模式可以短一些：合成滚动没有「人手停顿」）。
     var idleIntervalsToStop = 6
+    /// 还没动起来之前允许的空拍数：手动模式要留给用户「把鼠标挪进选区」的时间，
+    /// 否则刚弹完权限提示就开始倒计时，用户还没滚就收工了。
+    var startupIntervalsToStop = 24
     /// 长图高度上限（像素），超过就收工，避免无限增长。
     var maxPixelHeight = 20_000
 
@@ -61,6 +64,11 @@ final class ScrollingCaptureSession {
     /// 让正在跑的循环在下一拍停下。
     func stop() {
         isStopped = true
+    }
+
+    /// 当前允许的空拍上限：还没拼上任何内容时用「起步宽限」，免得用户还没滚就收工。
+    private func idleLimit(hasContent: Bool) -> Int {
+        hasContent ? idleIntervalsToStop : max(idleIntervalsToStop, startupIntervalsToStop)
     }
 
     /// 跑完整个采样过程；返回拼接好的长图。没拼出新内容时返回 nil。
@@ -95,12 +103,15 @@ final class ScrollingCaptureSession {
 
         var idleIntervals = 0
 
-        while !isStopped, idleIntervals < idleIntervalsToStop, stitchedHeight < maxPixelHeight {
+        while !isStopped, idleIntervals < idleLimit(hasContent: didCaptureAnything),
+            stitchedHeight < maxPixelHeight
+        {
             if mode == .automatic {
                 autoScroller?.postScrollStep()
-            } else {
-                try? await Task.sleep(for: .seconds(interval))
             }
+            // 合成滚动要过一拍才落到画面上：抢在它生效前抓，就会把「滚动前」那帧
+            // 当成新帧（连续几拍都判「没有新内容」，实测 0.3 秒就误收工）。
+            try? await Task.sleep(for: .seconds(interval))
 
             guard !isStopped else { break }
 

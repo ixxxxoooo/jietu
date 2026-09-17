@@ -207,6 +207,13 @@ final class OverlayCanvasView: NSView {
     #if DEBUG
     /// 自检用：当前选区（本显示器 local 坐标）。
     var debugSelection: CGRect? { selection }
+
+    /// 自检用：跳过鼠标直接摆一个选区。
+    func debugSetSelection(_ rect: CGRect) {
+        selection = rect
+        interaction = .settled
+        updateAllLayers()
+    }
     #endif
 
     // MARK: - Region pick 回报

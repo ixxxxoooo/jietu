@@ -258,6 +258,12 @@ final class OverlayCoordinator {
         controllers.map { ($0.snapshot.displayID, $0.debugSelection) }
     }
 
+    /// 自检用：跳过鼠标，直接给某块屏摆一个选区。
+    func debugSetSelection(_ localRect: CGRect, displayID: CGDirectDisplayID) {
+        controllers.first { $0.snapshot.displayID == displayID }?
+            .debugSetSelection(localRect)
+    }
+
     /// 自检用：把每个遮罩窗自己认为的 AppKit frame 报出来。
     var debugWindowFrames: [(
         displayID: CGDirectDisplayID,

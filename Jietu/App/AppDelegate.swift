@@ -527,6 +527,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         session.mode = effective
         // 自动滚动没有「人手停顿」，4 拍（1 秒）就够判定到底；手动保留 6 拍（1.5 秒）。
         session.idleIntervalsToStop = effective == .automatic ? 4 : 6
+        // 起步宽限：手动模式多给点时间让用户把鼠标挪进选区（自动 2 秒足够它自己动）。
+        session.startupIntervalsToStop = effective == .automatic ? 8 : 20
         session.onProgress = { [weak panel] height in
             panel?.update(height: height)
         }
@@ -601,7 +603,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let alert = NSAlert()
             alert.alertStyle = .informational
             alert.messageText = "没有捕获到滚动内容"
-            alert.informativeText = "请框选可滚动的区域，然后缓慢、匀速地滚动内容再试一次。"
+            alert.informativeText =
+                "选区里得是「整块能滚动的页面」，而且要真的滚起来：\n"
+                + "· 手动：点完「手动」把鼠标放进选区，自己往下滚；\n"
+                + "· 自动：Jietu 会自己发滚轮，但鼠标停在图表 / 下拉菜单这类会吃掉滚轮的控件上时会带不动。\n"
+                + "换个区域或改用手动再试一次。"
             alert.addButton(withTitle: "好")
             alert.runModal()
             return

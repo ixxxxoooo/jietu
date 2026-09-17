@@ -42,13 +42,13 @@ final class AutoScroller {
     }
 
     /// 发一步合成滚动。`wheel1` 取负 → 页面内容往下走（长截图要的方向）。
-    func postScrollStep() {
+    func postScrollStep(reversed: Bool = false) {
         guard
             let event = CGEvent(
                 scrollWheelEvent2Source: source,
                 units: .pixel,
                 wheelCount: 1,
-                wheel1: Int32(-stepPoints),
+                wheel1: Int32(reversed ? stepPoints : -stepPoints),
                 wheel2: 0,
                 wheel3: 0
             )

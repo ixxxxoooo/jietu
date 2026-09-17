@@ -11,6 +11,12 @@ import UniformTypeIdentifiers
 ///
 ///   Jietu --selftest-capture <输出目录>     冻结全部屏幕 → 落 PNG → 打印报告 → 退出
 ///   Jietu --selftest-overlay <持续秒数>     冻结全部屏幕 → 弹出遮罩 → 保持 N 秒 → 退出
+///   Jietu --selftest-region x,y,w,h         核对 SCK sourceRect 坐标系（直接抓 vs 整屏裁）
+///   Jietu --selftest-chrome x,y,w,h         取景框态下「含 / 不含本 App」各抓一张，辨黑屏
+///   Jietu --selftest-session x,y,w,h        不弹遮罩，直接跑真实采样会话（自动滚动）
+///   Jietu --selftest-frames x,y,w,h [--with-blocker]
+///                                           逐拍 dump 帧 + 平均差 / Vision 位移 / 拼接判定
+///   Jietu --selftest-scrollprobe x,y,w,h    几种合成滚轮写法哪个能真的推动目标窗口
 enum CaptureSelfTest {
     @MainActor
     static func handleCommandLineIfNeeded() -> Bool {
@@ -45,9 +51,607 @@ enum CaptureSelfTest {
             runOnboardingTest(duration: Double(value ?? "8") ?? 8)
             return true
 
+        case "--selftest-region":
+            // 核对 SCK 的 sourceRect 坐标系：同一块区域「直接抓」与「整屏抓再裁」应当一致。
+            runRegionTest(
+                spec: value ?? "0,0,400,300",
+                outputDirectory: outputDirectory(arguments, after: flagIndex)
+            )
+            return true
+
+        case "--selftest-chrome":
+            // 滚动长图取景框态：遮罩留着 + 本 App 被排除时，区域抓取到底拍到了什么。
+            runChromeTest(
+                spec: value ?? "400,400,700,500",
+                outputDirectory: outputDirectory(arguments, after: flagIndex)
+            )
+            return true
+
+        case "--selftest-scrollprobe":
+            // 合成滚动到底能不能推动目标窗口：把几种事件写法逐个试一遍。
+            runScrollProbe(
+                spec: value ?? "400,400,700,500",
+                outputDirectory: outputDirectory(arguments, after: flagIndex)
+            )
+            return true
+
+        case "--selftest-frames":
+            // 逐步滚动 + 逐帧 dump：看清「滚动到底有没有推动画面 / 拼接为什么拒绝这帧」。
+            runFramesTest(
+                spec: value ?? "400,400,700,500",
+                outputDirectory: outputDirectory(arguments, after: flagIndex)
+            )
+            return true
+
+        case "--selftest-session":
+            // 不弹遮罩，直接跑一遍真实采样会话（自动滚动），复现「没有捕获到滚动内容」。
+            runSessionTest(
+                spec: value ?? "400,400,700,500",
+                outputDirectory: outputDirectory(arguments, after: flagIndex)
+            )
+            return true
+
         default:
             return false
         }
+    }
+
+    /// `--selftest-xxx <参数> [输出目录]` 里的输出目录（缺省落临时目录）。
+    private static func outputDirectory(_ arguments: [String], after flagIndex: Int) -> URL {
+        arguments.count > flagIndex + 2
+            ? URL(fileURLWithPath: arguments[flagIndex + 2], isDirectory: true)
+            : URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+    }
+
+    private static func runScrollProbe(spec: String, outputDirectory: URL) {
+        Task { @MainActor in
+            var report: [String] = []
+            do {
+                let engine = CaptureEngine()
+                let rect = parseRect(spec) ?? CGRect(x: 400, y: 400, width: 700, height: 500)
+                let mouse = NSEvent.mouseLocation
+                let screen = NSScreen.screens.first { $0.frame.contains(mouse) }
+                    ?? NSScreen.main ?? NSScreen.screens[0]
+                guard let displayID = screen.jietu_displayID else { throw CaptureError.noDisplays }
+                let center = DisplayGeometry.cgPoint(
+                    fromLocal: CGPoint(x: rect.midX, y: screen.frame.height - rect.midY),
+                    screen: screen
+                )
+                try FileManager.default.createDirectory(
+                    at: outputDirectory, withIntermediateDirectories: true
+                )
+                let capturer = try await engine.makeRegionCapturer(
+                    displayID: displayID, regionInPoints: rect
+                )
+                report.append(
+                    "display=\(displayID) rect=\(describe(rect))"
+                        + String(format: " center(cg)=(%.0f,%.0f)", center.x, center.y)
+                        + String(format: " 鼠标=(%.0f,%.0f)", mouse.x, mouse.y)
+                )
+
+                // 大部分 App 只把滚轮送给「指针下面的窗口」，所以把光标也挪进选区。
+                CGEvent(
+                    mouseEventSource: CGEventSource(stateID: .hidSystemState),
+                    mouseType: .mouseMoved, mouseCursorPosition: center, mouseButton: .left
+                )?.post(tap: .cghidEventTap)
+                try? await Task.sleep(for: .milliseconds(250))
+
+                let variants: [(String, () -> CGEvent?)] = [
+                    ("pixel + location（现状）", {
+                        Self.scrollEvent(units: .pixel, value: -67, continuous: nil, location: center)
+                    }),
+                    ("pixel + continuous + 手势 phase", {
+                        Self.scrollEvent(
+                            units: .pixel, value: -67, continuous: true, location: center,
+                            phase: .changed
+                        )
+                    }),
+                    ("line（像真鼠标滚轮）", {
+                        Self.scrollEvent(units: .line, value: -3, continuous: false, location: center)
+                    }),
+                    ("line + 不设 location", {
+                        Self.scrollEvent(units: .line, value: -3, continuous: false, location: nil)
+                    }),
+                ]
+
+                for (index, variant) in variants.enumerated() {
+                    // 先把页滚回上面，每个变体都在同一起点起跑。
+                    for _ in 0..<4 {
+                        Self.scrollEvent(units: .line, value: 5, continuous: false, location: center)?
+                            .post(tap: .cghidEventTap)
+                        try? await Task.sleep(for: .milliseconds(80))
+                    }
+                    try? await Task.sleep(for: .milliseconds(400))
+
+                    let before = try await capturer.capture()
+                    let beforeBitmap = ScrollStitcher.BitmapData(image: before)
+                    try writePNG(
+                        before,
+                        to: outputDirectory.appendingPathComponent("probe-\(index)-before.png")
+                    )
+                    for _ in 0..<3 {
+                        variant.1()?.post(tap: .cghidEventTap)
+                        try? await Task.sleep(for: .milliseconds(150))
+                    }
+                    try? await Task.sleep(for: .milliseconds(500))
+                    let after = try await capturer.capture()
+                    let afterBitmap = ScrollStitcher.BitmapData(image: after)
+                    let url = outputDirectory.appendingPathComponent("probe-\(index)-after.png")
+                    try writePNG(after, to: url)
+                    let diff = (beforeBitmap != nil && afterBitmap != nil)
+                        ? meanDifference(beforeBitmap!, afterBitmap!) : -1
+                    report.append(
+                        String(format: "变体 %d（%@）变化=%.2f", index, variant.0, diff)
+                            + " Vision=\(String(describing: ScrollStitcher.offset(previous: before, next: after)))"
+                    )
+                }
+                report.append("RESULT: PASS")
+                finish(report, code: 0)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
+    }
+
+    private static func scrollEvent(
+        units: CGScrollEventUnit, value: Int32, continuous: Bool?, location: CGPoint?,
+        phase: CGScrollPhase? = nil
+    ) -> CGEvent? {
+        guard let source = CGEventSource(stateID: .hidSystemState) else { return nil }
+        guard
+            let event = CGEvent(
+                scrollWheelEvent2Source: source, units: units, wheelCount: 1,
+                wheel1: value, wheel2: 0, wheel3: 0
+            )
+        else { return nil }
+        if let continuous {
+            event.setIntegerValueField(.scrollWheelEventIsContinuous, value: continuous ? 1 : 0)
+        }
+        if let phase {
+            event.setIntegerValueField(.scrollWheelEventScrollPhase, value: Int64(phase.rawValue))
+        }
+        if let location {
+            event.location = location
+        }
+        return event
+    }
+
+    private static func runFramesTest(spec: String, outputDirectory: URL) {
+        Task { @MainActor in
+            var report: [String] = []
+            do {
+                let engine = CaptureEngine()
+                let rect = parseRect(spec) ?? CGRect(x: 400, y: 400, width: 700, height: 500)
+                let mouse = NSEvent.mouseLocation
+                let screen = NSScreen.screens.first { $0.frame.contains(mouse) }
+                    ?? NSScreen.main ?? NSScreen.screens[0]
+                guard let displayID = screen.jietu_displayID else { throw CaptureError.noDisplays }
+                let center = DisplayGeometry.cgPoint(
+                    fromLocal: CGPoint(x: rect.midX, y: screen.frame.height - rect.midY),
+                    screen: screen
+                )
+                try FileManager.default.createDirectory(
+                    at: outputDirectory, withIntermediateDirectories: true
+                )
+
+                let capturer = try await engine.makeRegionCapturer(
+                    displayID: displayID, regionInPoints: rect
+                )
+                let step = AutoScroller.stepPoints(forHeight: rect.height)
+                let scroller = AutoScroller(
+                    center: center,
+                    blockingRect: CGRect(
+                        x: center.x - rect.width / 2, y: center.y - rect.height / 2,
+                        width: rect.width, height: rect.height
+                    ),
+                    stepPoints: step
+                )
+                let withBlocker = CommandLine.arguments.contains("--with-blocker")
+                report.append(
+                    "display=\(displayID) rect=\(describe(rect)) step=\(step)pt"
+                        + " axTrusted=\(AccessibilityPermission.isGranted)"
+                        + " inputBlocker=\(withBlocker)"
+                )
+                if withBlocker {
+                    scroller.installInputBlocker()
+                }
+
+                var previous: ScrollStitcher.BitmapData?
+                var previousFrame: CGImage?
+                var session: ScrollStitcher.Session?
+                for index in 0...5 {
+                    if index > 0 {
+                        scroller.postScrollStep()
+                        try? await Task.sleep(for: .milliseconds(450))
+                    }
+                    let frame = try await capturer.capture()
+                    let bitmap = ScrollStitcher.BitmapData(image: frame)
+                    let url = outputDirectory.appendingPathComponent("frame-\(index).png")
+                    try writePNG(frame, to: url)
+
+                    var line = "frame \(index) \(frame.width)x\(frame.height)"
+                        + " bitmap=\(bitmap != nil)"
+                        + " mean=\(String(format: "%.3f", meanLuminance(frame)))"
+                    if let bitmap, let previous {
+                        line += " 与上帧平均差=\(String(format: "%.2f", meanDifference(previous, bitmap)))"
+                    }
+                    if let previousFrame {
+                        line += " Vision位移="
+                            + String(describing: ScrollStitcher.offset(previous: previousFrame, next: frame))
+                    }
+                    if let session {
+                        switch session.append(frame: frame) {
+                        case .appended(let h): line += " 拼接=+\(h)"
+                        case .noNewContent: line += " 拼接=无新内容"
+                        case .atLimit: line += " 拼接=到上限"
+                        }
+                    } else {
+                        session = ScrollStitcher.Session(firstFrame: frame, maxFrames: 120)
+                    }
+                    report.append(line)
+                    previous = bitmap
+                    previousFrame = frame
+                }
+
+                // 尽量把页面滚回原处，别把用户的阅读位置留在别处。
+                for _ in 0..<5 {
+                    scroller.postScrollStep(reversed: true)
+                    try? await Task.sleep(for: .milliseconds(150))
+                }
+                report.append("RESULT: PASS")
+                finish(report, code: 0)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
+    }
+
+    /// 两帧之间的平均通道差（0...255），用来看滚动到底推动了没有。
+    private static func meanDifference(
+        _ a: ScrollStitcher.BitmapData, _ b: ScrollStitcher.BitmapData
+    ) -> Double {
+        guard a.width == b.width, a.height == b.height else { return -1 }
+        var total = 0
+        var count = 0
+        let columns = stride(from: 0, to: a.width, by: max(1, a.width / 24))
+        let rows = stride(from: 0, to: a.height, by: max(1, a.height / 24))
+        for y in rows {
+            for x in columns {
+                let p = a.pixel(x: x, y: y)
+                let q = b.pixel(x: x, y: y)
+                total += abs(Int(p.r) - Int(q.r)) + abs(Int(p.g) - Int(q.g))
+                    + abs(Int(p.b) - Int(q.b))
+                count += 1
+            }
+        }
+        return count > 0 ? Double(total) / Double(count * 3) : -1
+    }
+
+    private static func runSessionTest(spec: String, outputDirectory: URL) {        Task { @MainActor in
+            var report: [String] = []
+            do {
+                let engine = CaptureEngine()
+                let rect = parseRect(spec) ?? CGRect(x: 400, y: 400, width: 700, height: 500)
+                let mouse = NSEvent.mouseLocation
+                let screen = NSScreen.screens.first { $0.frame.contains(mouse) }
+                    ?? NSScreen.main ?? NSScreen.screens[0]
+                guard let displayID = screen.jietu_displayID else {
+                    throw CaptureError.noDisplays
+                }
+                let frame = screen.frame
+                let globalRect = CGRect(
+                    origin: DisplayGeometry.cgPoint(fromLocal: rect.origin, screen: screen),
+                    size: rect.size
+                )
+                report.append(
+                    "display=\(displayID) rect(top-left)=\(describe(rect))"
+                        + " cgRect=\(describe(globalRect))"
+                )
+
+                let session = ScrollingCaptureSession(
+                    engine: engine,
+                    target: ScrollingCaptureSession.Target(
+                        displayID: displayID,
+                        regionInPoints: rect,
+                        regionInGlobalCGPoints: globalRect
+                    )
+                )
+                session.mode = .automatic
+                session.idleIntervalsToStop = 4
+
+                var heights: [Int] = []
+                var previews = 0
+                session.onProgress = { heights.append($0) }
+                session.onPreview = { image in
+                    previews += 1
+                    let url = outputDirectory.appendingPathComponent("preview-\(previews).png")
+                    try? FileManager.default.createDirectory(
+                        at: outputDirectory, withIntermediateDirectories: true
+                    )
+                    try? writePNG(image, to: url)
+                }
+                report.append(
+                    "step=\(AutoScroller.stepPoints(forHeight: rect.height))pt"
+                        + " axTrusted=\(AccessibilityPermission.isGranted)"
+                )
+
+                let started = Date()
+                let image = await session.run()
+                report.append(
+                    String(format: "耗时 %.2fs", Date().timeIntervalSince(started))
+                        + " 进度拍数=\(heights.count) 高度序列=\(heights)"
+                        + " 预览帧=\(previews)"
+                )
+                if let image {
+                    try FileManager.default.createDirectory(
+                        at: outputDirectory, withIntermediateDirectories: true
+                    )
+                    let url = outputDirectory.appendingPathComponent("stitched.png")
+                    try writePNG(image, to: url)
+                    report.append("拼接结果 \(image.width)x\(image.height) -> \(url.path)")
+                } else {
+                    report.append("拼接结果 nil（就是弹「没有捕获到滚动内容」那条）")
+                }
+                // 顺手把当前这一帧存下来，看看抓的到底是什么。
+                if let probe = try? await engine.captureRegion(
+                    displayID: displayID, regionInPoints: rect
+                ) {
+                    let url = outputDirectory.appendingPathComponent("probe.png")
+                    try? writePNG(probe, to: url)
+                    report.append("单帧 \(probe.width)x\(probe.height) -> \(url.path)")
+                }
+                report.append("RESULT: PASS")
+                finish(report, code: 0)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
+    }
+
+    private static func runChromeTest(spec: String, outputDirectory: URL) {
+        Task { @MainActor in
+            var report: [String] = []
+            do {
+                let engine = CaptureEngine()
+                let snapshots = try await engine.captureAllDisplays()
+                let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
+                let rect = parseRect(spec) ?? CGRect(x: 400, y: 400, width: 700, height: 500)
+
+                // 鼠标在哪块屏就在哪块屏取景（和真实流程一致）。
+                let mouse = NSEvent.mouseLocation
+                let screen = NSScreen.screens.first { $0.frame.contains(mouse) }
+                    ?? NSScreen.main ?? NSScreen.screens[0]
+                guard let displayID = screen.jietu_displayID,
+                    let snapshot = snapshots.first(where: { $0.displayID == displayID })
+                else { throw CaptureError.noDisplays }
+
+                let coordinator = OverlayCoordinator()
+                retainedCoordinator = coordinator
+                coordinator.purpose = .regionPick
+                coordinator.present(
+                    session: CaptureSession(snapshots: snapshots, windows: windows),
+                    inlineMode: false
+                )
+                // SCK 的 rect 是「原点左上」，画布选区是「原点左下」，换算一次才对齐。
+                let canvasRect = CGRect(
+                    x: rect.minX,
+                    y: snapshot.screenFrameInPoints.height - rect.maxY,
+                    width: rect.width,
+                    height: rect.height
+                )
+                coordinator.debugSetSelection(canvasRect, displayID: displayID)
+                coordinator.beginScrollCaptureChrome()
+                report.append(
+                    "display=\(displayID) frame=\(describe(snapshot.screenFrameInPoints))"
+                        + " selection(top-left)=\(describe(rect))"
+                        + " chrome=on"
+                )
+                try FileManager.default.createDirectory(
+                    at: outputDirectory, withIntermediateDirectories: true
+                )
+
+                try? await Task.sleep(for: .milliseconds(600))
+                dumpOwnWindows(label: "chrome")
+                report.append(contentsOf: capturedWindowLines())
+
+                // ① 本 App 被排除：应当拍到遮罩「下面」的真实画面（不是黑）。
+                let excluded = try await engine.captureRegion(
+                    displayID: displayID, regionInPoints: rect
+                )
+                let excludedURL = outputDirectory.appendingPathComponent("chrome-excluded.png")
+                try writePNG(excluded, to: excludedURL)
+                report.append(
+                    "排除本 App   \(excluded.width)x\(excluded.height)"
+                        + " mean=\(String(format: "%.3f", meanLuminance(excluded)))"
+                        + " -> \(excludedURL.lastPathComponent)"
+                )
+
+                // ② 不排除：拍到的是遮罩自己（取景框该是「透明 + 压暗」，不该是纯黑）。
+                let included = try await engine.captureRegion(
+                    displayID: displayID, regionInPoints: rect,
+                    excludingOwnApplication: false
+                )
+                let includedURL = outputDirectory.appendingPathComponent("chrome-included.png")
+                try writePNG(included, to: includedURL)
+                report.append(
+                    "含本 App     \(included.width)x\(included.height)"
+                        + " mean=\(String(format: "%.3f", meanLuminance(included)))"
+                        + " -> \(includedURL.lastPathComponent)"
+                )
+
+                // ③ 往选区中央发一步合成滚动：被排除的那条路上，画面应当随之变化。
+                let screenFrame = snapshot.screenFrameInPoints
+                let center = DisplayGeometry.cgPoint(
+                    fromLocal: CGPoint(x: rect.midX, y: screenFrame.height - rect.midY),
+                    screen: screen
+                )
+                let scroller = AutoScroller(
+                    center: center,
+                    blockingRect: CGRect(
+                        x: center.x - rect.width / 2, y: center.y - rect.height / 2,
+                        width: rect.width, height: rect.height
+                    ),
+                    stepPoints: AutoScroller.stepPoints(forHeight: rect.height)
+                )
+                postScrollSteps(scroller, count: 4)
+                try? await Task.sleep(for: .milliseconds(700))
+
+                let afterScroll = try await engine.captureRegion(
+                    displayID: displayID, regionInPoints: rect
+                )
+                let afterURL = outputDirectory.appendingPathComponent("chrome-after-scroll.png")
+                try writePNG(afterScroll, to: afterURL)
+                report.append(
+                    "滚动后       \(afterScroll.width)x\(afterScroll.height)"
+                        + " mean=\(String(format: "%.3f", meanLuminance(afterScroll)))"
+                        + " 内容变化=\(!samePixels(excluded, afterScroll))"
+                        + " -> \(afterURL.lastPathComponent)"
+                )
+
+                coordinator.cancel()
+                report.append("RESULT: PASS")
+                finish(report, code: 0)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
+    }
+
+    private static func postScrollSteps(_ scroller: AutoScroller, count: Int) {
+        for _ in 0..<count {
+            scroller.postScrollStep()
+            usleep(120_000)
+        }
+    }
+
+    /// 自检用：列出本进程在屏幕上的窗口（层级 / 位置 / alpha）。
+    private static func capturedWindowLines() -> [String] {
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        let info = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
+        return info
+            .filter { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }
+            .map { window in
+                let layer = window[kCGWindowLayer as String] as? Int ?? -999
+                let alpha = window[kCGWindowAlpha as String] as? Double ?? -1
+                let b = window[kCGWindowBounds as String] as? [String: CGFloat] ?? [:]
+                return "  自身窗口 layer=\(layer) alpha=\(alpha)"
+                    + " x=\(Int(b["X"] ?? 0)) y=\(Int(b["Y"] ?? 0))"
+                    + " w=\(Int(b["Width"] ?? 0)) h=\(Int(b["Height"] ?? 0))"
+            }
+    }
+
+    /// 把 `x,y,w,h` 解析成矩形（显示器内点坐标、原点左上——与滚动长图的 sourceRect 约定一致）。
+    private static func parseRect(_ spec: String) -> CGRect? {
+        let parts = spec.split(separator: ",").compactMap { Double($0) }
+        guard parts.count == 4 else { return nil }
+        return CGRect(x: parts[0], y: parts[1], width: parts[2], height: parts[3])
+    }
+
+    private static func runRegionTest(spec: String, outputDirectory: URL) {
+        Task { @MainActor in
+            var report: [String] = []
+            do {
+                let engine = CaptureEngine()
+                let full = try await engine.captureAllDisplays()
+                guard !full.isEmpty else { throw CaptureError.noDisplays }
+                try FileManager.default.createDirectory(
+                    at: outputDirectory, withIntermediateDirectories: true
+                )
+
+                let rect = parseRect(spec) ?? CGRect(x: 0, y: 0, width: 400, height: 300)
+                report.append("screens=\(NSScreen.screens.count) rect(top-left, points)=\(describe(rect))")
+
+                for snapshot in full {
+                    let frame = snapshot.screenFrameInPoints
+                    let scale = snapshot.effectiveScale
+                    report.append(
+                        "display=\(snapshot.displayID) frame=\(describe(frame))"
+                            + " scale=\(String(format: "%.2f", scale))"
+                    )
+
+                    // 1) SCK 按 sourceRect 直接抓（滚动长图走的就是这条）。
+                    let direct = try await engine.captureRegion(
+                        displayID: snapshot.displayID, regionInPoints: rect
+                    )
+                    let directURL = outputDirectory
+                        .appendingPathComponent("region-sck-\(snapshot.displayID).png")
+                    try writePNG(direct, to: directURL)
+                    report.append(
+                        "  sck  \(direct.width)x\(direct.height)"
+                            + " mean=\(String(format: "%.1f", meanLuminance(direct)))"
+                            + " -> \(directURL.lastPathComponent)"
+                    )
+
+                    // 2) 整屏抓 → 按同一块区域裁（已知正确的那条路）。
+                    let bottomLeft = CGRect(
+                        x: rect.minX,
+                        y: frame.height - rect.maxY,
+                        width: rect.width,
+                        height: rect.height
+                    )
+                    let crop = CaptureOutput.crop(snapshot, toLocalRect: bottomLeft)
+                    if let crop {
+                        let cropURL = outputDirectory
+                            .appendingPathComponent("region-crop-\(snapshot.displayID).png")
+                        try writePNG(crop, to: cropURL)
+                        report.append(
+                            "  crop \(crop.width)x\(crop.height)"
+                                + " mean=\(String(format: "%.1f", meanLuminance(crop)))"
+                                + " -> \(cropURL.lastPathComponent)"
+                        )
+                        report.append(
+                            "  同尺寸=\(crop.width == direct.width && crop.height == direct.height)"
+                                + " 同内容=\(Self.samePixels(crop, direct))"
+                        )
+                    } else {
+                        report.append("  crop 失败（local=\(describe(bottomLeft))）")
+                    }
+                }
+                report.append("RESULT: PASS")
+                finish(report, code: 0)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
+    }
+
+    /// 稀疏采样比像素：抓错区域时这里会直接报 false。
+    /// 先各自画进同一个 64×64 RGBA 上下文再比，免受行距 / 色彩空间差异干扰。
+    private static func samePixels(_ a: CGImage, _ b: CGImage) -> Bool {
+        guard a.width > 1, b.width > 1 else { return false }
+        let width = 64
+        let height = 64
+        func raster(_ image: CGImage) -> [UInt8]? {
+            var pixels = [UInt8](repeating: 0, count: width * height * 4)
+            guard
+                let context = CGContext(
+                    data: &pixels, width: width, height: height,
+                    bitsPerComponent: 8, bytesPerRow: width * 4,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                )
+            else { return nil }
+            context.interpolationQuality = .low
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return pixels
+        }
+        guard let pa = raster(a), let pb = raster(b) else { return false }
+        for index in stride(from: 0, to: pa.count, by: 4) {
+            if abs(Int(pa[index]) - Int(pb[index])) > 6 { return false }
+            if abs(Int(pa[index + 1]) - Int(pb[index + 1])) > 6 { return false }
+            if abs(Int(pa[index + 2]) - Int(pb[index + 2])) > 6 { return false }
+        }
+        return true
     }
 
     private static func runCaptureTest(outputDirectory: URL) {

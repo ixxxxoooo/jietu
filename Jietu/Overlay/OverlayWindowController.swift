@@ -129,9 +129,20 @@ final class OverlayWindowController {
         window.makeFirstResponder(canvas)
     }
 
+    #if DEBUG
+    /// 自检用：跳过鼠标直接摆一个选区。
+    func debugSetSelection(_ localRect: CGRect) {
+        canvas.debugSetSelection(localRect)
+    }
+    #endif
+
     /// 滚动长图：遮罩留在原地当取景框，但**鼠标穿透**，滚轮落到下面那个页面。
     func enterScrollCaptureChrome() {
         canvas.setScrollCaptureChrome(true)
+        // 取景框要「看见下面真实页面在滚」：窗口必须真的透明。
+        // 冻结图一收起，不透明窗口就只剩黑底——用户会以为黑屏崩了，手动模式也没法滚。
+        window.isOpaque = false
+        window.backgroundColor = .clear
         window.ignoresMouseEvents = true
         window.orderFrontRegardless()
     }
