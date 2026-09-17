@@ -22,11 +22,45 @@ struct AnnotationGeometryTests {
         #expect(annotation.center == CGPoint(x: 200, y: 150))
     }
 
-    @Test("命中测试：内部命中，外部不命中")
+    @Test("矩形只认边框：边上命中，框中间留白（能继续画别的），外面不命中")
     func hitTesting() {
-        let annotation = rectAnnotation()
-        #expect(annotation.contains(CGPoint(x: 200, y: 150)))
+        let annotation = rectAnnotation()  // (100,100,200x100)，线宽 4
+        // 四条边上都命中。
+        #expect(annotation.contains(CGPoint(x: 100, y: 150)))
+        #expect(annotation.contains(CGPoint(x: 300, y: 150)))
+        #expect(annotation.contains(CGPoint(x: 200, y: 100)))
+        #expect(annotation.contains(CGPoint(x: 200, y: 200)))
+        // 框**中间**是留白：不算命中，否则在里面再画一个框画不上（用户报过）。
+        #expect(!annotation.contains(CGPoint(x: 200, y: 150)))
+        // 离了边框足够远的地方也不命中。
         #expect(!annotation.contains(CGPoint(x: 20, y: 20)))
+        #expect(!annotation.contains(CGPoint(x: 200, y: 150 + 30)))
+    }
+
+    @Test("椭圆也只认那一圈线")
+    func ellipseHitTesting() {
+        let annotation = Annotation(
+            kind: .ellipse(CGRect(x: 100, y: 100, width: 200, height: 100)),
+            color: .red,
+            lineWidth: 4
+        )
+        // 左右顶点 / 上下顶点在线上。
+        #expect(annotation.contains(CGPoint(x: 100, y: 150)))
+        #expect(annotation.contains(CGPoint(x: 300, y: 150)))
+        #expect(annotation.contains(CGPoint(x: 200, y: 100)))
+        #expect(annotation.contains(CGPoint(x: 200, y: 200)))
+        // 圆心、以及「矩形四角」这种椭圆外面的位置都不命中。
+        #expect(!annotation.contains(CGPoint(x: 200, y: 150)))
+        #expect(!annotation.contains(CGPoint(x: 105, y: 105)))
+    }
+
+    @Test("实心标注仍然整块命中：高亮 / 模糊 / 马赛克")
+    func filledShapesHitWholeArea() {
+        let rect = CGRect(x: 100, y: 100, width: 200, height: 100)
+        let center = CGPoint(x: 200, y: 150)
+        #expect(Annotation(kind: .highlight(rect), color: .red, lineWidth: 4).contains(center))
+        #expect(Annotation(kind: .blur(rect, radius: 12), color: .red, lineWidth: 4).contains(center))
+        #expect(Annotation(kind: .pixelate(rect, block: 12), color: .red, lineWidth: 4).contains(center))
     }
 
     @Test("平移后包围盒整体移动")

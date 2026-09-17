@@ -21,6 +21,7 @@ import UniformTypeIdentifiers
 ///   Jietu --selftest-scrollprobe x,y,w,h    几种合成滚轮写法哪个能真的推动目标窗口
 ///   Jietu --selftest-quickaccess <输出目录> 浮窗图标：逐个注入点击，量响应速度（含截图）
 ///   Jietu --selftest-scroll-cost            滚动长图每帧成本：拼接 / 预览（含老做法对比）
+///   Jietu --selftest-inline-draw <输出目录>   就地标注：验证「框里还能再画框」
 ///   Jietu --selftest-inline-scroll <输出目录>
 ///                                           就地工具栏的「滚动截图」：点开手动 / 自动并截图
 ///   Jietu --selftest-overlay-press <输出目录>
@@ -109,6 +110,16 @@ enum CaptureSelfTest {
         case "--selftest-scroll-cost":
             // 滚动长图的每帧成本：拼接（Vision / 已知步长）、右侧预览、老做法对比。
             runScrollCostTest()
+            return true
+
+        case "--selftest-inline-draw":
+            // 就地标注：框里还能再画框（矩形/椭圆只认边框，中间是留白）。
+            runInlineDrawTest(
+                outputDirectory: URL(
+                    fileURLWithPath: value ?? NSTemporaryDirectory(),
+                    isDirectory: true
+                )
+            )
             return true
 
         case "--selftest-inline-scroll":
@@ -1052,6 +1063,122 @@ enum CaptureSelfTest {
         return image
     }
 
+    /// 就地标注「框里还能再画框」自检。
+    ///
+    /// 用户报过：画完一个矩形（或椭圆），再想在它**里面**画一个，一按就变成
+    /// 「选中并移动外面那个框」，中间根本画不上东西。
+    /// 根因：命中判定按**整块矩形**算，而渲染只画了边框（`context.stroke`）。
+    ///
+    /// 这条自检真画两个框（第二个画在第一个里面），再采样内框的上边：
+    /// 有标注色 = 框画出来了；没颜色 = 又被外面那个框吃掉了。
+    private static func runInlineDrawTest(outputDirectory: URL) {
+        Task { @MainActor in
+            var report: [String] = []
+            do {
+                let engine = CaptureEngine()
+                let snapshots = try await engine.captureAllDisplays()
+                guard let snapshot = snapshots.first else { throw CaptureError.noDisplays }
+                let displayID = snapshot.displayID
+                let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
+                try FileManager.default.createDirectory(
+                    at: outputDirectory, withIntermediateDirectories: true
+                )
+
+                let coordinator = OverlayCoordinator()
+                retainedCoordinator = coordinator
+                coordinator.purpose = .screenshot
+                // 就地模式：拖完选区松手就进标注，工具栏浮在选区下方。
+                coordinator.present(
+                    session: CaptureSession(snapshots: snapshots, windows: windows),
+                    inlineMode: true
+                )
+                try? await Task.sleep(for: .milliseconds(700))
+
+                /// 注入一次拖拽（cg 坐标）。
+                @MainActor func drag(from start: CGPoint, to end: CGPoint) async {
+                    postMouse(.mouseMoved, at: CGPoint(x: start.x - 40, y: start.y - 40))
+                    try? await Task.sleep(for: .milliseconds(120))
+                    postMouse(.mouseMoved, at: start)
+                    try? await Task.sleep(for: .milliseconds(100))
+                    postMouse(.leftMouseDown, at: start)
+                    for step in 1...6 {
+                        let t = CGFloat(step) / 6
+                        postMouse(
+                            .leftMouseDragged,
+                            at: CGPoint(
+                                x: start.x + (end.x - start.x) * t,
+                                y: start.y + (end.y - start.y) * t
+                            )
+                        )
+                        try? await Task.sleep(for: .milliseconds(30))
+                    }
+                    postMouse(.leftMouseUp, at: end)
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+
+                // 先拖出选区（松手即进就地标注）。
+                await drag(from: CGPoint(x: 420, y: 300), to: CGPoint(x: 1240, y: 900))
+                report.append(
+                    "选区=" + (coordinator.debugSelections
+                        .first { $0.displayID == displayID }?.localRect
+                        .map(describe) ?? "无")
+                )
+
+                // 外框 + **框内**的内框。
+                let outerStart = CGPoint(x: 520, y: 420)
+                let outerEnd = CGPoint(x: 1000, y: 760)
+                let innerStart = CGPoint(x: 640, y: 520)
+                let innerEnd = CGPoint(x: 880, y: 680)
+                await drag(from: outerStart, to: outerEnd)
+                await drag(from: innerStart, to: innerEnd)
+
+                let shots = try await engine.captureAllDisplays(excludingOwnApplication: false)
+                guard let shot = shots.first(where: { $0.displayID == displayID }) ?? shots.first
+                else { throw CaptureError.noDisplays }
+                let url = outputDirectory.appendingPathComponent("inline-two-rects.png")
+                try writePNG(shot.image, to: url)
+                report.append("画了内外两个框 -> \(url.path)")
+
+                // 内框上边应当描着标注色（默认红）。采样点避开边的**中点**：
+                // 画完的框是选中态，边中点正好压着一个绿色缩放手柄。
+                let fractions: [CGFloat] = [0.2, 0.3, 0.7, 0.8]
+                var samples: [(CGFloat, (red: Double, green: Double, blue: Double))] = []
+                for fraction in fractions {
+                    let point = CGPoint(
+                        x: innerStart.x + (innerEnd.x - innerStart.x) * fraction,
+                        y: innerStart.y
+                    )
+                    let rgb = meanRGB(
+                        shot.image,
+                        pixelRect: pixelRect(
+                            in: shot,
+                            at: CGPoint(x: point.x, y: DisplayGeometry.referenceHeight - point.y),
+                            size: 4
+                        )
+                    )
+                    samples.append((fraction, rgb))
+                }
+                // 至少两个采样点是明显的红（边框线宽 7px，采样框 4pt 落在线上）。
+                let reds = samples.filter { $0.1.red > $0.1.green + 0.15 && $0.1.red > $0.1.blue + 0.15 }
+                let isStroke = reds.count >= 2
+                report.append(
+                    "内框上边采样：" + samples.map {
+                        String(format: "%.1f→(%.2f,%.2f,%.2f)", $0.0, $0.1.red, $0.1.green, $0.1.blue)
+                    }.joined(separator: " ")
+                )
+                report.append("→ \(isStroke ? "有标注色：框里画上了" : "**没有标注色：又被外框吃掉了**")")
+
+                coordinator.cancel()
+                report.append("RESULT: \(isStroke ? "PASS" : "FAIL")")
+                finish(report, code: isStroke ? 0 : 1)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
+    }
+
     /// 就地编辑工具栏的「滚动截图」自检。
     ///
     /// 验两件事：
@@ -1793,6 +1920,8 @@ enum CaptureSelfTest {
                     try writePNG(snapshot.image, to: url)
                     report.append("  display \(snapshot.displayID) -> \(url.path)")
                 }
+                // 画一个框，再在**框里面**画一个：第二个必须画得出来（不是把第一个拖走）。
+                // 用户报过：矩形的命中判定按整块矩形算，框中间一按就变成「选中并移动」。
                 controller.close()
                 report.append("RESULT: PASS")
                 finish(report, code: 0)

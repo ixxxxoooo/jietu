@@ -322,8 +322,17 @@ extension Annotation {
     func contains(_ point: CGPoint, tolerance: CGFloat = 6) -> Bool {
         let local = toLocal(point)
         switch kind {
-        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect),
-            .blur(let rect, _):
+        case .rectangle(let rect):
+            // 矩形**只画了边框**（渲染器走 `stroke`，中间是透明的），命中判定也只能认边框：
+            // 之前按整块矩形判，于是框中间一按就变成「选中并移动这个框」，
+            // 想在里面再画一个框根本画不上（用户报的就是这个）。
+            return Annotation.distanceToRectBorder(local, rect: rect) <= max(tolerance, lineWidth / 2)
+        case .ellipse(let rect):
+            // 椭圆同理：只认那一圈线。
+            return Annotation.distanceToEllipseBorder(local, rect: rect)
+                <= max(tolerance, lineWidth / 2)
+        case .highlight(let rect), .blur(let rect, _):
+            // 这两个是**实心**的（高亮铺一层半透明色、模糊作用于整块），整块都算命中。
             return rect.insetBy(dx: -tolerance, dy: -tolerance).contains(local)
         case .pixelate(let rect, _):
             return rect.contains(local)
@@ -658,6 +667,40 @@ extension Annotation {
 
     static func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
         hypot(a.x - b.x, a.y - b.y)
+    }
+
+    /// 点到矩形**边框**的距离：边框上为 0，往框里 / 框外都越来越大。
+    ///
+    /// 注意不是 `rect.contains`：那是"在不在框里"，这里要的是"离那条线多远"。
+    static func distanceToRectBorder(_ point: CGPoint, rect: CGRect) -> CGFloat {
+        let outsideX = max(rect.minX - point.x, point.x - rect.maxX, 0)
+        let outsideY = max(rect.minY - point.y, point.y - rect.maxY, 0)
+        if outsideX > 0 || outsideY > 0 {
+            return hypot(outsideX, outsideY)
+        }
+        // 在框里：到最近那条边的距离。
+        return min(
+            point.x - rect.minX,
+            rect.maxX - point.x,
+            point.y - rect.minY,
+            rect.maxY - point.y
+        )
+    }
+
+    /// 点到椭圆**边框**的距离：沿「中心 → 点」这条射线量，边框上为 0。
+    static func distanceToEllipseBorder(_ point: CGPoint, rect: CGRect) -> CGFloat {
+        let rx = rect.width / 2
+        let ry = rect.height / 2
+        guard rx > 0.001, ry > 0.001 else {
+            return distance(point, CGPoint(x: rect.midX, y: rect.midY))
+        }
+        let dx = point.x - rect.midX
+        let dy = point.y - rect.midY
+        let length = hypot(dx / rx, dy / ry)
+        guard length > 0.0001 else { return max(rx, ry) }
+        // 该方向上从中心到边界的距离（归一化空间里的边界点再映回真实坐标）。
+        let border = hypot(rx * (dx / rx) / length, ry * (dy / ry) / length)
+        return abs(hypot(dx, dy) - border)
     }
 
     static func distanceToSegment(_ point: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
