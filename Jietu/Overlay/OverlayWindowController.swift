@@ -45,6 +45,12 @@ final class OverlayWindowController {
         set { canvas.onSelectionPaused = newValue }
     }
 
+    /// 就地编辑工具栏里选了「手动 / 自动滚动」（参数二是选区，本显示器 local 矩形）。
+    var onScrollCapture: ((ScrollingCaptureSession.Mode, CGRect) -> Void)? {
+        get { canvas.onScrollCapture }
+        set { canvas.onScrollCapture = newValue }
+    }
+
     /// 选区被拖 / 缩放 / 清空（nil）。
     var onSelectionChanged: ((CGRect?) -> Void)? {
         get { canvas.onSelectionChanged }
@@ -83,6 +89,15 @@ final class OverlayWindowController {
 
     /// 自检用：吸附预览（窗口描边 + 标签）是否画着。
     var debugWindowHighlightVisible: Bool { canvas.debugWindowHighlightVisible }
+
+    /// 自检用：展开就地工具栏的「滚动截图」选项 / 直接选模式。
+    @discardableResult
+    func debugOpenScrollOptions() -> Bool { canvas.debugOpenScrollOptions() }
+
+    @discardableResult
+    func debugTriggerScrollCapture(_ mode: ScrollingCaptureSession.Mode) -> Bool {
+        canvas.debugTriggerScrollCapture(mode)
+    }
 
     /// 自检用：直接送一对合成事件进遮罩（不经注入管线，见 `OverlayCoordinator.debugClick`）。
     ///

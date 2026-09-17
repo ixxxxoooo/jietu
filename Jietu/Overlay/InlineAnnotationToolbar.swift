@@ -18,6 +18,8 @@ final class InlineToolbarModel {
     /// 展开状态由模型持有，便于宿主视图观察并自适应高度。
     var showColor = false
     var showWidth = false
+    /// 「滚动截图」的两个选项（手动 / 自动）展开。
+    var showScroll = false
     /// 展开时子工具栏要对齐到哪个按钮的 midX（工具条自身坐标，由 SwiftUI 上报）。
     var optionsAnchorX: CGFloat = 0
     /// 实况文本是否开启（OCR 按钮触发）。
@@ -27,6 +29,8 @@ final class InlineToolbarModel {
     var onRedo: (() -> Void)?
     var onSave: (() -> Void)?
     var onPin: (() -> Void)?
+    /// 选了「手动 / 自动滚动」：把当前选区接着往下滚成一张长图。
+    var onScrollCapture: ((ScrollingCaptureSession.Mode) -> Void)?
     var onConfirm: (() -> Void)?
     var onCancel: (() -> Void)?
 }
@@ -94,6 +98,22 @@ struct InlineMainToolbar: View {
                     model.tool = .select
                 }
             }
+            BarIconButton(
+                title: "滚动截图",
+                systemImage: "scroll",
+                isSelected: model.showScroll
+            ) {
+                model.showScroll.toggle()
+                if model.showScroll {
+                    model.showColor = false
+                    model.showWidth = false
+                }
+            }
+            .help("滚动长图：这块区域接着往下滚成一张长图")
+            .modifier(
+                OptionsAnchorReporter(
+                    isExpanded: model.showScroll, space: Self.space, model: model))
+
             BarIconButton(title: "保存", systemImage: "square.and.arrow.down") {
                 model.onSave?()
             }
@@ -223,12 +243,48 @@ struct InlineOptionsToolbar: View {
                     }
                 }
             }
+            if model.showScroll {
+                HStack(spacing: Theme.Spacing.md) {
+                    // 与滚动长图的模式条同一套说法：只回答「谁来滚」。
+                    Image(systemName: "scroll")
+                        .font(Theme.Typography.bar)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                    Text("谁来滚")
+                        .font(Theme.Typography.bar)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                    scrollChoice("手动滚动", systemImage: "hand.draw") {
+                        model.onScrollCapture?(.manual)
+                    }
+                    .help("点完自己把鼠标放进选区往下滚")
+                    scrollChoice("自动滚动", systemImage: "wand.and.rays") {
+                        model.onScrollCapture?(.automatic)
+                    }
+                    .help("由 Jietu 自己滚（需要辅助功能权限）")
+                }
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Theme.Spacing.xl)
         .padding(.vertical, Theme.Spacing.lg)
         .fixedSize()
         .floatingSurface()
+    }
+
+    /// 滚动截图的两个选项：图标 + 文字，点一下就用这个模式开跑。
+    private func scrollChoice(
+        _ title: String, systemImage: String, action: @escaping () -> Void
+    ) -> some View {
+        BarButton(chrome: .rounded, action: action) {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: systemImage)
+                    .font(Theme.Typography.chip)
+                Text(title)
+                    .font(Theme.Typography.bar)
+            }
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .padding(.horizontal, Theme.Spacing.lg)
+            .frame(height: Theme.Size.barButtonHeight)
+        }
     }
 }
 

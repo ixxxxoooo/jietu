@@ -47,6 +47,10 @@ final class OverlayCoordinator {
     /// `purpose == .regionPick` 时：鼠标在选区上停住（或松手）→ 选区 local 矩形。
     /// 外面据此把「手动 / 自动」浮到选框下方。
     var onSelectionPaused: ((DisplaySnapshot, CGRect) -> Void)?
+    /// 就地编辑工具栏里选了「手动 / 自动滚动」→（快照、模式、选区 local 矩形）。
+    ///
+    /// 走这条就不必再弹「手动 / 自动」模式条了：用户在工具栏里已经选过了。
+    var onScrollCapture: ((DisplaySnapshot, ScrollingCaptureSession.Mode, CGRect) -> Void)?
     /// `purpose == .regionPick` 时：选区被拖 / 缩放 / 清空（nil）→ 控制条跟着走。
     var onSelectionChanged: ((DisplaySnapshot, CGRect?) -> Void)?
 
@@ -103,6 +107,9 @@ final class OverlayCoordinator {
             }
             controller.onSelectionPaused = { [weak self] localRect in
                 self?.onSelectionPaused?(snapshot, localRect)
+            }
+            controller.onScrollCapture = { [weak self] mode, localRect in
+                self?.onScrollCapture?(snapshot, mode, localRect)
             }
             controller.onSelectionChanged = { [weak self] localRect in
                 self?.onSelectionChanged?(snapshot, localRect)
@@ -289,6 +296,26 @@ final class OverlayCoordinator {
     }
 
     /// 自检用：吸附预览（窗口描边 + 标签）是否画着。
+    /// 自检用：某块屏的遮罩窗是否鼠标穿透（滚动长图取景框态）。
+    func debugWindowIgnoresMouseEvents(displayID: CGDirectDisplayID) -> Bool? {
+        controllers.first { $0.snapshot.displayID == displayID }?.window.ignoresMouseEvents
+    }
+
+    /// 自检用：等价于点一下就地工具栏的「滚动截图」（只展开选项）。
+    @discardableResult
+    func debugOpenScrollOptions(displayID: CGDirectDisplayID) -> Bool {
+        controllers.first { $0.snapshot.displayID == displayID }?.debugOpenScrollOptions() ?? false
+    }
+
+    /// 自检用：等价于点一下就地工具栏的「滚动截图」→ 选某个模式。
+    @discardableResult
+    func debugTriggerScrollCapture(
+        _ mode: ScrollingCaptureSession.Mode, displayID: CGDirectDisplayID
+    ) -> Bool {
+        controllers.first { $0.snapshot.displayID == displayID }?
+            .debugTriggerScrollCapture(mode) ?? false
+    }
+
     func debugWindowHighlightVisible(displayID: CGDirectDisplayID) -> Bool? {
         controllers.first { $0.snapshot.displayID == displayID }?.debugWindowHighlightVisible
     }

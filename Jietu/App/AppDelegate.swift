@@ -60,12 +60,139 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpLaunchAtLogin()
         notifier.requestAuthorizationIfNeeded()
 
+        #if DEBUG
+        // 需要**完整接线**的自检：就地工具栏的「滚动截图」要真的把会话跑起来。
+        // 它不归 `--selftest` 那批管（那批在这之前就 return 了，没有 AppDelegate 接线）。
+        if CommandLine.arguments.contains(CaptureSelfTest.appLevelInlineScrollFlag) {
+            runInlineScrollAppTest()
+            return
+        }
+        #endif
+
         if !ScreenCapturePermission.isGranted {
             logger.notice("screen recording permission missing, showing onboarding")
             // 启动时不主动向系统弹窗申请授权，交由用户在引导页中点击「授权屏幕录制」时手动触发
             showOnboarding()
         }
     }
+
+    #if DEBUG
+    /// 自检（要**真 App 接线**）：就地编辑工具栏点「滚动截图 → 手动滚动」，
+    /// 看滚动会话有没有真的起来：控制条在、遮罩切成取景框（鼠标穿透）、右侧预览挂上。
+    ///
+    /// 与 `--selftest-inline-scroll` 分工：那条验「工具栏 → 模式 + 选区交出去」，
+    /// 这条验「交出去之后 AppDelegate 真的把会话跑起来」。自检进程里没有 AppDelegate，
+    /// 所以这条必须挂在真启动流程上（见 `CaptureSelfTest.appLevelInlineScrollFlag`）。
+    private func runInlineScrollAppTest() {
+        Task { @MainActor in
+            var report: [String] = []
+            var budgets: [(label: String, milliseconds: Double?, limit: Double)] = []
+            do {
+                let snapshots = try await capture.captureAllDisplays()
+                guard let snapshot = snapshots.first else { throw CaptureError.noDisplays }
+                let displayID = snapshot.displayID
+                let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
+
+                overlays.purpose = .screenshot
+                overlays.present(
+                    session: CaptureSession(snapshots: snapshots, windows: windows),
+                    inlineMode: true
+                )
+                try? await Task.sleep(for: .milliseconds(700))
+
+                func post(_ type: CGEventType, at point: CGPoint) {
+                    CGEvent(
+                        mouseEventSource: CGEventSource(stateID: .hidSystemState),
+                        mouseType: type,
+                        mouseCursorPosition: point,
+                        mouseButton: .left
+                    )?.post(tap: .cghidEventTap)
+                }
+
+                // 拖一块选区：就地模式松手即进标注、弹出工具栏。
+                let start = CGPoint(x: 320, y: 260)
+                let end = CGPoint(x: 900, y: 700)
+                post(.mouseMoved, at: CGPoint(x: 200, y: 160))
+                try? await Task.sleep(for: .milliseconds(150))
+                post(.mouseMoved, at: start)
+                try? await Task.sleep(for: .milliseconds(120))
+                post(.leftMouseDown, at: start)
+                for step in 1...6 {
+                    let t = CGFloat(step) / 6
+                    post(
+                        .leftMouseDragged,
+                        at: CGPoint(
+                            x: start.x + (end.x - start.x) * t,
+                            y: start.y + (end.y - start.y) * t
+                        )
+                    )
+                    try? await Task.sleep(for: .milliseconds(40))
+                }
+                post(.leftMouseUp, at: end)
+                try? await Task.sleep(for: .milliseconds(600))
+
+                let selection = overlays.debugSelections
+                    .first { $0.displayID == displayID }?.localRect
+                report.append("就地选区=\(selection.map(CaptureSelfTest.describe) ?? "无")")
+
+                // 点「滚动截图 → 手动滚动」：这一刻会话就该起来了。
+                let firedAt = CFAbsoluteTimeGetCurrent()
+                let triggered = overlays.debugTriggerScrollCapture(.manual, displayID: displayID)
+                let triggerMs = (CFAbsoluteTimeGetCurrent() - firedAt) * 1000
+                let sessionStarted = scrollingSession != nil
+                let panelVisible = scrollingPanel?.isVisible ?? false
+                let clickThrough = overlays.debugWindowIgnoresMouseEvents(displayID: displayID) ?? false
+                try? await Task.sleep(for: .milliseconds(500))
+                let previewVisible = scrollingPreview?.isVisible ?? false
+                report.append(
+                    "点「滚动截图 → 手动滚动」→ \(triggered ? "已触发" : "**没触发**")"
+                        + "，会话=\(sessionStarted ? "在跑" : "**没起来**")"
+                        + "，控制条=\(panelVisible ? "可见" : "**不可见**")"
+                        + "，遮罩鼠标穿透=\(clickThrough ? "是（取景框）" : "**否**")"
+                        + "，右侧预览=\(previewVisible ? "挂上" : "**没挂**")"
+                )
+
+                budgets.append(("工具栏触发→会话起来", triggered ? triggerMs : nil, 300))
+                budgets.append(("会话在跑", sessionStarted ? 0 : nil, 0))
+                budgets.append(("控制条可见", panelVisible ? 0 : nil, 0))
+                budgets.append(("遮罩鼠标穿透", clickThrough ? 0 : nil, 0))
+                budgets.append(("右侧预览挂上", previewVisible ? 0 : nil, 0))
+
+                // 收尾走「取消」这条路：不弹「没有捕获到滚动内容」的框。
+                cancelScrollingCapture()
+                try? await Task.sleep(for: .milliseconds(600))
+                report.append(
+                    "取消后：会话=\(scrollingSession == nil ? "已收" : "**还在**")"
+                        + "，遮罩=\(overlays.isPresenting ? "**还在**" : "已关")"
+                )
+                budgets.append(("取消后会话收干净", scrollingSession == nil ? 0 : nil, 0))
+                budgets.append(("取消后遮罩关掉", overlays.isPresenting ? nil : 0, 0))
+
+                report.append("延迟预算：")
+                var failed = 0
+                for budget in budgets {
+                    let ok = budget.milliseconds != nil && budget.milliseconds! <= budget.limit
+                    if !ok { failed += 1 }
+                    report.append(
+                        String(
+                            format: "    %@ %@ / 预算 %.0f ms  %@",
+                            ok ? "✅" : "❌",
+                            budget.milliseconds.map { String(format: "%.0f ms", $0) } ?? "**未达成**",
+                            budget.limit,
+                            budget.label
+                        )
+                    )
+                }
+                report.append("RESULT: \(failed == 0 ? "PASS" : "FAIL（\(failed) 项未达成）")")
+                CaptureSelfTest.finish(report, code: failed == 0 ? 0 : 1)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                CaptureSelfTest.finish(report, code: 1)
+            }
+        }
+    }
+    #endif
 
     func applicationWillTerminate(_ notification: Notification) {
         hotkeys.unregisterAll()
@@ -227,6 +354,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlays.onSelectionChanged = { [weak self] snapshot, localRect in
             self?.updateScrollingSelection(snapshot: snapshot, localRect: localRect)
         }
+        // 就地编辑工具栏里的「滚动截图 → 手动 / 自动」：用户已经选过模式了，
+        // 直接拿当前选区开跑，不再弹「手动 / 自动」模式条。
+        overlays.onScrollCapture = { [weak self] snapshot, mode, localRect in
+            self?.startScrollingCaptureFromInline(
+                snapshot: snapshot, mode: mode, localRect: localRect
+            )
+        }
     }
 
     /// 已经有同 bundle id 的实例在跑？把前台交给它，然后自己退出。
@@ -239,6 +373,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 跑单元测试时宿主就是同一个 App bundle，而 App 通常正开着；
         // 这里必须放行，否则测试根本起不来。
         guard !Self.isRunningTests else { return false }
+        // app 级自检常与正式实例同时在场（它要真接线，不能当成"多开"被杀掉）。
+        guard !CommandLine.arguments.contains(CaptureSelfTest.appLevelInlineScrollFlag) else {
+            return false
+        }
         guard let bundleID = Bundle.main.bundleIdentifier, !bundleID.isEmpty else { return false }
         let selfPID = ProcessInfo.processInfo.processIdentifier
         let others = NSRunningApplication
@@ -455,6 +593,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             globalRect: globalRect,
             selectionRect: selectionRect
         )
+    }
+
+    /// 就地编辑工具栏里选了「手动 / 自动滚动」：**用当前选区直接开跑**。
+    ///
+    /// 与 `presentScrollingModeBar` 的区别只有一条：模式条那一步省掉了——
+    /// 用户在下拉里已经回答过「谁来滚」，再问一遍就是多一步。
+    private func startScrollingCaptureFromInline(
+        snapshot: DisplaySnapshot,
+        mode: ScrollingCaptureSession.Mode,
+        localRect: CGRect
+    ) {
+        guard scrollingSession == nil else { return }
+        guard let target = makeScrollingTarget(snapshot: snapshot, localRect: localRect) else {
+            return
+        }
+        // 上一次可能还留着一条模式条（用户没点开始也没取消）：先收干净。
+        if scrollingPanel != nil { dismissScrollingPanel() }
+        scrollingTarget = target
+        isScrollingCancelled = false
+
+        let panel = ScrollingCapturePanelController()
+        scrollingPanel = panel
+        panel.onStartManual = { [weak self] in self?.beginScrollingSession(mode: .manual) }
+        panel.onStartAuto = { [weak self] in self?.beginScrollingSession(mode: .automatic) }
+        panel.onFinish = { [weak self] in self?.scrollingSession?.stop() }
+        panel.onCancel = { [weak self] in self?.cancelScrollingCapture() }
+        // 直接从「进行中」起：模式已经选过了，不要再闪一下「手动 / 自动」那条。
+        panel.present(near: target.selectionRect, stage: .running(mode))
+        registerScrollingEscapeMonitor()
+        beginScrollingSession(mode: mode)
     }
 
     /// 鼠标在选区上停住（或松手）：把紧凑的「手动 / 自动」条浮到选框下方。

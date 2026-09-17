@@ -20,9 +20,18 @@ import UniformTypeIdentifiers
 ///                                           逐拍 dump 帧 + 平均差 / Vision 位移 / 拼接判定
 ///   Jietu --selftest-scrollprobe x,y,w,h    几种合成滚轮写法哪个能真的推动目标窗口
 ///   Jietu --selftest-quickaccess <输出目录> 浮窗图标：逐个注入点击，量响应速度（含截图）
+///   Jietu --selftest-inline-scroll <输出目录>
+///                                           就地工具栏的「滚动截图」：点开手动 / 自动并截图
 ///   Jietu --selftest-overlay-press <输出目录>
 ///                                           吸附预览：量「按下 → 窗口描边消失」，拖动中不许回来
 enum CaptureSelfTest {
+    /// 需要**完整 App 接线**的自检开关。
+    ///
+    /// 它不归 `handleCommandLineIfNeeded` 管（那个只看 `--selftest` 前缀，认不出的开关一律放行，
+    /// 于是启动流程会继续把菜单栏 / 各种 controller 接好），由 `AppDelegate` 接完线之后执行。
+    /// 单例守卫也要为它放行：它经常与正式实例同时在场。
+    static let appLevelInlineScrollFlag = "--selftest-app-inline-scroll"
+
     @MainActor
     static func handleCommandLineIfNeeded() -> Bool {
         let arguments = CommandLine.arguments
@@ -93,6 +102,16 @@ enum CaptureSelfTest {
             runSessionTest(
                 spec: value ?? "400,400,700,500",
                 outputDirectory: outputDirectory(arguments, after: flagIndex)
+            )
+            return true
+
+        case "--selftest-inline-scroll":
+            // 就地编辑工具栏的「滚动截图」：点开手动 / 自动，选完把选区交出去。
+            runInlineScrollTest(
+                outputDirectory: URL(
+                    fileURLWithPath: value ?? NSTemporaryDirectory(),
+                    isDirectory: true
+                )
             )
             return true
 
@@ -767,6 +786,156 @@ enum CaptureSelfTest {
     /// 放大镜自检：弹遮罩 → 自动挑一块**有细节**的屏幕区域 → 合成鼠标移动/拖拽。
     ///
     /// 参数 `x,y` 可指定「候选靶心」的搜索起点（像素、原点左上），省略就全屏找。
+    /// 就地编辑工具栏的「滚动截图」自检。
+    ///
+    /// 验两件事：
+    /// 1. **选项条长什么样**（截图给人看）：点一下工具栏的「滚动截图」，
+    ///    下方浮出「谁来滚 → 手动滚动 / 自动滚动」；
+    /// 2. 选完之后**把「模式 + 当前选区」交到了外面**（真会话要建控制条 / 实时预览、
+    ///    还要把遮罩换成取景框，那是 AppDelegate 那一层；自检进程里没有它）。
+    private static func runInlineScrollTest(outputDirectory: URL) {
+        Task { @MainActor in
+            var report: [String] = []
+            var budgets: [(label: String, milliseconds: Double?, limit: Double)] = []
+            do {
+                let engine = CaptureEngine()
+                let snapshots = try await engine.captureAllDisplays()
+                guard let snapshot = snapshots.first else { throw CaptureError.noDisplays }
+                let screen = NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID }
+                    ?? NSScreen.main ?? NSScreen.screens[0]
+                let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
+                try FileManager.default.createDirectory(
+                    at: outputDirectory, withIntermediateDirectories: true
+                )
+
+                @MainActor func waitUntil(
+                    _ since: CFAbsoluteTime, timeout: TimeInterval = 1.5,
+                    until condition: () -> Bool
+                ) async -> Double? {
+                    while CFAbsoluteTimeGetCurrent() - since < timeout {
+                        if condition() { return (CFAbsoluteTimeGetCurrent() - since) * 1000 }
+                        try? await Task.sleep(for: .milliseconds(4))
+                    }
+                    return nil
+                }
+
+                let coordinator = OverlayCoordinator()
+                retainedCoordinator = coordinator
+                coordinator.purpose = .screenshot
+                var handoff: (mode: ScrollingCaptureSession.Mode, rect: CGRect)?
+                coordinator.onScrollCapture = { _, mode, rect in handoff = (mode, rect) }
+                // 就地模式：松手即进标注，工具栏浮到选区下方。
+                coordinator.present(
+                    session: CaptureSession(snapshots: snapshots, windows: windows),
+                    inlineMode: true
+                )
+                try? await Task.sleep(for: .milliseconds(700))
+
+                // 拖一块选区。
+                let start = CGPoint(x: 320, y: 260)
+                let end = CGPoint(x: 900, y: 700)
+                postMouse(.mouseMoved, at: CGPoint(x: 200, y: 160))
+                try? await Task.sleep(for: .milliseconds(150))
+                postMouse(.mouseMoved, at: start)
+                try? await Task.sleep(for: .milliseconds(120))
+                postMouse(.leftMouseDown, at: start)
+                for step in 1...6 {
+                    let t = CGFloat(step) / 6
+                    postMouse(
+                        .leftMouseDragged,
+                        at: CGPoint(
+                            x: start.x + (end.x - start.x) * t,
+                            y: start.y + (end.y - start.y) * t
+                        )
+                    )
+                    try? await Task.sleep(for: .milliseconds(40))
+                }
+                postMouse(.leftMouseUp, at: end)
+                try? await Task.sleep(for: .milliseconds(600))
+
+                guard
+                    let selection = coordinator.debugSelections
+                        .first(where: { $0.displayID == snapshot.displayID })?.localRect
+                else {
+                    report.append("error: 就地模式没有形成选区 / 没有工具栏")
+                    report.append("RESULT: FAIL")
+                    finish(report, code: 1)
+                    return
+                }
+                report.append("就地选区=\(describe(selection))")
+
+                // 1. 点开「滚动截图」：截图看选项条。
+                guard coordinator.debugOpenScrollOptions(displayID: snapshot.displayID) else {
+                    report.append("error: 工具栏没出现（就地标注没进去）")
+                    report.append("RESULT: FAIL")
+                    finish(report, code: 1)
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(350))
+                let shots = try await engine.captureAllDisplays(excludingOwnApplication: false)
+                if let shot = shots.first(where: { $0.displayID == snapshot.displayID })
+                    ?? shots.first
+                {
+                    let url = outputDirectory.appendingPathComponent("inline-scroll-options.png")
+                    try writePNG(shot.image, to: url)
+                    report.append("选项条截图 -> \(url.path)")
+                }
+
+                // 2. 选「手动滚动」：模式 + 选区要交出去。
+                let firedAt = CFAbsoluteTimeGetCurrent()
+                let triggered = coordinator.debugTriggerScrollCapture(
+                    .manual, displayID: snapshot.displayID
+                )
+                let handoffMs = await waitUntil(firedAt, timeout: 1) { handoff != nil }
+                let rectMatches = handoff.map {
+                    abs($0.rect.minX - selection.minX) < 2 && abs($0.rect.minY - selection.minY) < 2
+                        && abs($0.rect.width - selection.width) < 2
+                        && abs($0.rect.height - selection.height) < 2
+                } ?? false
+                report.append(
+                    String(
+                        format: "点「滚动截图 → 手动滚动」→ %@，模式=%@，选区=%@ %@",
+                        triggered ? "已触发" : "**没触发**",
+                        handoff.map { $0.mode == .manual ? "手动" : "自动" } ?? "—",
+                        handoff.map { describe($0.rect) } ?? "—",
+                        rectMatches ? "（与选区一致）" : "**（与选区不一致）**"
+                    )
+                )
+                report.append(
+                    "（提示：屏幕坐标注入点在主屏上；此自检只验「模式 + 选区交出去」，"
+                        + "真会话由 AppDelegate 起）"
+                )
+
+                budgets.append(("按下→交出手续", handoffMs, 100))
+                budgets.append(("交出的选区与选区一致", rectMatches ? 0 : nil, 0))
+                _ = screen
+
+                coordinator.cancel()
+                report.append("延迟预算：")
+                var failed = 0
+                for budget in budgets {
+                    let ok = budget.milliseconds != nil && budget.milliseconds! <= budget.limit
+                    if !ok { failed += 1 }
+                    report.append(
+                        String(
+                            format: "    %@ %@ / 预算 %.0f ms  %@",
+                            ok ? "✅" : "❌",
+                            describe(milliseconds: budget.milliseconds),
+                            budget.limit,
+                            budget.label
+                        )
+                    )
+                }
+                report.append("RESULT: \(failed == 0 ? "PASS" : "FAIL（\(failed) 项超预算）")")
+                finish(report, code: failed == 0 ? 0 : 1)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
+    }
+
     /// 吸附预览「按下即收」自检。
     ///
     /// 用户报的现象：鼠标停在一个窗口上，那圈绿色吸附描边好好的；**一按下准备框选**，
@@ -2232,7 +2401,8 @@ enum CaptureSelfTest {
         }
     }
 
-    private static func describe(_ rect: CGRect) -> String {
+    /// 自检报告里的矩形格式（两批自检共用）。
+    static func describe(_ rect: CGRect) -> String {
         String(
             format: "(%.0f,%.0f %.0fx%.0f)",
             rect.origin.x, rect.origin.y, rect.width, rect.height
@@ -2349,7 +2519,8 @@ enum CaptureSelfTest {
         return (red / count, green / count, blue / count)
     }
 
-    private static func finish(_ lines: [String], code: Int32) {
+    /// 自检报告输出（`--selftest-` 与 `--selftest-app-` 两批共用）。
+    static func finish(_ lines: [String], code: Int32) {
         print("=== Jietu selftest ===")
         for line in lines { print(line) }
         print("======================")

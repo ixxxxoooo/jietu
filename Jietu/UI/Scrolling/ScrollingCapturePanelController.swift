@@ -38,10 +38,13 @@ final class ScrollingCapturePanelController {
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
-    /// 贴着选区下方展示（下方放不下就挪到上方）：初始为「待开始」。
-    func present(near screenRect: CGRect) {
+    /// 贴着选区下方展示（下方放不下就挪到上方）。
+    ///
+    /// - Parameter stage: 初始阶段。默认「待开始」（先让用户选谁滚）；
+    ///   就地编辑工具栏里**已经选过**了，就让它直接从 `.running(mode)` 起，别再问一遍。
+    func present(near screenRect: CGRect, stage: Stage = .ready) {
         close()
-        stage = .ready
+        self.stage = stage
         height = 0
         anchorRect = screenRect
 

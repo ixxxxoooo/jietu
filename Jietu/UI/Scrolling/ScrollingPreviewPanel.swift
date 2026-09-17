@@ -20,6 +20,8 @@ final class ScrollingPreviewPanel {
     private var panel: NSPanel?
     private var hosting: NSHostingView<ScrollingPreviewView>?
 
+    var isVisible: Bool { panel?.isVisible ?? false }
+
     /// 贴在选区右侧（右边放不下就翻到左侧），顶部对齐。
     func present(near selectionRect: CGRect) {
         close()

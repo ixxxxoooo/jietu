@@ -41,6 +41,8 @@ final class OverlayCanvasView: NSView {
     }
     /// 鼠标在选区上停住（或一松手）→ 选区 local 矩形。
     var onSelectionPaused: ((CGRect) -> Void)?
+    /// 就地编辑工具栏里选了「手动 / 自动滚动」：参数是模式与选区（本显示器 local 矩形）。
+    var onScrollCapture: ((ScrollingCaptureSession.Mode, CGRect) -> Void)?
     /// 选区被拖动 / 缩放 / 清空（nil）→ 让控制条跟着选框走。
     var onSelectionChanged: ((CGRect?) -> Void)?
     /// 用户选定某个窗口（单击窗口触发）。
@@ -670,6 +672,13 @@ final class OverlayCanvasView: NSView {
         hintLayer.isHidden = on
         crosshairLayer.isHidden = on
         crosshairLayer.path = nil
+        // 从就地编辑进来的：工具栏 / 实况文本 / 进行中的文字框都得收掉——
+        // 取景框期间遮罩是鼠标穿透的，留着它们既点不到，也只是挡着下面真实页面。
+        if on {
+            hideToolbar()
+            liveTextHost?.isHidden = true
+            textField?.isHidden = true
+        }
         updateLoupe()
         CATransaction.commit()
     }
@@ -1863,6 +1872,7 @@ final class OverlayCanvasView: NSView {
             guard let self, let image = self.currentAnnotatedImage() else { return }
             self.onPinImage?(image, self.selection ?? .zero)
         }
+        model.onScrollCapture = { [weak self] mode in self?.beginScrollCapture(mode: mode) }
         toolbarModel = model
 
         // 主工具栏：固定尺寸，永不重算 → 展开选项时也不闪烁。
@@ -1905,6 +1915,35 @@ final class OverlayCanvasView: NSView {
         }
     }
 
+    /// 就地编辑工具栏里选了「手动 / 自动滚动」：把当前选区交给外面开跑滚动长图。
+    ///
+    /// 这里只做「收起自己的选项条 + 上报」：真正的会话要建控制条与实时预览、还要把遮罩
+    /// 换成取景框（鼠标穿透），那是 AppDelegate 那一层的事。
+    private func beginScrollCapture(mode: ScrollingCaptureSession.Mode) {
+        guard let selection else { return }
+        toolbarModel?.showScroll = false
+        onScrollCapture?(mode, selection)
+    }
+
+    #if DEBUG
+    /// 自检用：等价于点一下工具栏的「滚动截图」（只展开选项，不真的开跑）。
+    @discardableResult
+    func debugOpenScrollOptions() -> Bool {
+        guard toolbarModel != nil, selection != nil else { return false }
+        toolbarModel?.showScroll = true
+        return true
+    }
+
+    /// 自检用：等价于点一下工具栏的「滚动截图」→ 选某个模式。
+    @discardableResult
+    func debugTriggerScrollCapture(_ mode: ScrollingCaptureSession.Mode) -> Bool {
+        guard toolbarModel != nil, selection != nil else { return false }
+        toolbarModel?.showScroll = true
+        beginScrollCapture(mode: mode)
+        return true
+    }
+    #endif
+
     private func hideToolbar() {
         mainToolbarHost?.removeFromSuperview()
         mainToolbarHost = nil
@@ -1918,6 +1957,7 @@ final class OverlayCanvasView: NSView {
         withObservationTracking {
             _ = model.showColor
             _ = model.showWidth
+            _ = model.showScroll
             _ = model.isLiveTextActive
             // 编辑文字时改颜色 / 粗细，输入框要跟着变（所见即所得）。
             _ = model.color
@@ -1961,7 +2001,8 @@ final class OverlayCanvasView: NSView {
         optionsToolbarHost?.removeFromSuperview()
         optionsToolbarHost = nil
 
-        guard let model = toolbarModel, model.showColor || model.showWidth else { return }
+        guard let model = toolbarModel, model.showColor || model.showWidth || model.showScroll
+        else { return }
         let host = NSHostingView(rootView: InlineOptionsToolbar(model: model))
         host.translatesAutoresizingMaskIntoConstraints = true
         addSubview(host)
