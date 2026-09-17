@@ -52,10 +52,20 @@ struct MenuBarTests {
         menuBar.onRecordFullScreen = { fired.append("fullScreen") }
 
         let menu = menuBar.menuForTesting
+        // 截图与录制分居两个子菜单：先确认结构，再逐条点。
+        let capture = menu.items.first { $0.title == "截图" }?.submenu
+        let recording = menu.items.first { $0.title == "录制" }?.submenu
+        #expect(capture != nil, "菜单里没有「截图 ▸」")
+        #expect(recording != nil, "菜单里没有「录制 ▸」")
+        #expect(!menu.items.contains { $0.title == "区域截图" }, "截图的动作不该再平铺在顶层")
+        #expect(!menu.items.contains { $0.title == "区域录制" }, "录制的动作不该再平铺在顶层")
+        #expect(capture?.items.map(\.title) == ["区域截图", "窗口截图", "全屏截图", "定时截图", "滚动长图…"])
+        #expect(recording?.items.map(\.title) == ["区域录制", "窗口录制", "全屏录制"])
+
         let want = ["区域录制", "窗口录制", "全屏录制"]
         for title in want {
-            guard let item = menu.items.first(where: { $0.title == title }) else {
-                Issue.record("菜单里没有「\(title)」")
+            guard let item = recording?.items.first(where: { $0.title == title }) else {
+                Issue.record("「录制 ▸」里没有「\(title)」")
                 continue
             }
             #expect(item.target != nil)

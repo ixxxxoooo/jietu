@@ -83,14 +83,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func buildMenu() {
-        menu.addItem(item("区域截图", #selector(handleCaptureArea), symbol: "viewfinder"))
-        menu.addItem(item("窗口截图", #selector(handleCaptureWindow), symbol: "macwindow"))
-        menu.addItem(item("全屏截图", #selector(handleCaptureFullScreen), symbol: "rectangle.fill"))
-        menu.addItem(timedCaptureItem())
-        menu.addItem(item("滚动长图…", #selector(handleCaptureScrolling), symbol: "scroll"))
-        menu.addItem(item("区域录制", #selector(handleRecordRegion), symbol: "record.circle"))
-        menu.addItem(item("窗口录制", #selector(handleRecordWindow), symbol: "macwindow"))
-        menu.addItem(item("全屏录制", #selector(handleRecordFullScreen), symbol: "rectangle.fill"))
+        // 截图与录制各占一个子菜单：两家族的动作不再在同一列里混着排。
+        menu.addItem(captureItem())
+        menu.addItem(recordingItem())
 
         menu.addItem(.separator())
 
@@ -140,6 +135,32 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         }
         return item
+    }
+
+    /// 「截图 ▸」：区域 / 窗口 / 全屏 / 定时 / 滚动长图。
+    private func captureItem() -> NSMenuItem {
+        let parent = NSMenuItem(title: "截图", action: nil, keyEquivalent: "")
+        parent.image = NSImage(systemSymbolName: "viewfinder", accessibilityDescription: nil)
+        let submenu = NSMenu()
+        submenu.addItem(item("区域截图", #selector(handleCaptureArea), symbol: "viewfinder"))
+        submenu.addItem(item("窗口截图", #selector(handleCaptureWindow), symbol: "macwindow"))
+        submenu.addItem(item("全屏截图", #selector(handleCaptureFullScreen), symbol: "rectangle.fill"))
+        submenu.addItem(timedCaptureItem())
+        submenu.addItem(item("滚动长图…", #selector(handleCaptureScrolling), symbol: "scroll"))
+        parent.submenu = submenu
+        return parent
+    }
+
+    /// 「录制 ▸」：区域 / 窗口 / 全屏。
+    private func recordingItem() -> NSMenuItem {
+        let parent = NSMenuItem(title: "录制", action: nil, keyEquivalent: "")
+        parent.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: nil)
+        let submenu = NSMenu()
+        submenu.addItem(item("区域录制", #selector(handleRecordRegion), symbol: "record.circle"))
+        submenu.addItem(item("窗口录制", #selector(handleRecordWindow), symbol: "macwindow"))
+        submenu.addItem(item("全屏录制", #selector(handleRecordFullScreen), symbol: "rectangle.fill"))
+        parent.submenu = submenu
+        return parent
     }
 
     private func timedCaptureItem() -> NSMenuItem {
