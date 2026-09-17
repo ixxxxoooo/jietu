@@ -73,4 +73,38 @@ struct MenuBarTests {
         model.refresh()
         #expect(model.isAccessibilityGranted == AccessibilityPermission.isGranted)
     }
+
+    @Test("截图历史合并到最近截图：主菜单保留最近截图且二级子菜单承载预览卡片")
+    @MainActor
+    func recentCapturesMergedWithHistory() {
+        let menuBar = MenuBarController()
+        menuBar.refresh()
+        let menu = menuBar.menuForTesting
+
+        let titles = menu.items.map(\.title)
+        #expect(titles.contains("最近截图"))
+        #expect(!titles.contains { $0.contains("截图历史") })
+
+        guard let recentItem = menu.items.first(where: { $0.title == "最近截图" }) else {
+            Issue.record("未找到「最近截图」菜单项")
+            return
+        }
+        #expect(recentItem.submenu != nil)
+
+        let testItem = HistoryItem(
+            id: "test-id",
+            date: Date(),
+            image: NSImage(size: NSSize(width: 100, height: 100)),
+            url: nil,
+            cgImage: nil
+        )
+        menuBar.historyItemsProvider = { [testItem] }
+
+        // 触发菜单更新
+        menuBar.menuNeedsUpdate(menuBar.recentMenuForTesting)
+        let recentMenu = menuBar.recentMenuForTesting
+        #expect(recentMenu.items.count == 1)
+        #expect(recentMenu.items.first?.view is MenuHostingView<RecentHistoryMenuView>)
+    }
 }
+

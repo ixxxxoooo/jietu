@@ -83,7 +83,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onOpenRecent = { url in
             NSWorkspace.shared.activateFileViewerSelecting([url])
         }
-        menuBar.onClearRecents = { [weak self] in self?.settings.clearRecentCaptures() }
+        menuBar.onSelectHistoryItem = { [weak self] item in
+            self?.openHistoryItem(item)
+        }
+        menuBar.onClearRecents = { [weak self] in self?.clearAllHistory() }
         menuBar.onOpenFolder = { [weak self] in self?.openSaveFolder() }
         menuBar.onOpenHistory = { [weak self] in self?.showHistory() }
         menuBar.onAuthorizeScreenRecording = { PermissionDragController.shared.present(pane: .screenRecording) }
@@ -92,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onOpenSettings = { [weak self] in self?.showSettings() }
         menuBar.onRelaunch = { ScreenCapturePermission.relaunchApp() }
         menuBar.onQuit = { NSApp.terminate(nil) }
+        menuBar.historyItemsProvider = { [weak self] in self?.historyItems() ?? [] }
         menuBar.recentProvider = { [weak self] in self?.settings.recentCaptureURLs ?? [] }
         menuBar.refresh()
         self.menuBar = menuBar
@@ -808,6 +812,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 落盘后的统一收尾：记入最近截图 + 图标闪烁 + 通知。
     private func didSave(to url: URL) {
+        if let first = sessionHistory.first, first.url == nil {
+            sessionHistory[0] = HistoryItem(
+                id: url.path,
+                date: first.date,
+                image: first.image,
+                url: url,
+                cgImage: first.cgImage
+            )
+        }
         settings.recordCapture(url)
         logger.notice("saved capture to \(url.path, privacy: .public)")
         menuBar?.flashCaptureFeedback()
@@ -816,41 +829,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 托盘历史面板。
+    /// 打开历史某一项进入标注。
+    private func openHistoryItem(_ item: HistoryItem) {
+        if let cgImage = item.cgImage {
+            openAnnotationEditor(cgImage)
+            return
+        }
+        guard let url = item.url,
+            let image = NSImage(contentsOf: url),
+            let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else { return }
+        openAnnotationEditor(cgImage)
+    }
+
+    /// 清空所有历史与最近记录。
+    private func clearAllHistory() {
+        settings.clearRecentCaptures()
+        sessionHistory.removeAll()
+        HistoryThumbnailCache.shared.clear()
+    }
+
+    /// 托盘历史面板（保留兼容）。
     private func showHistory() {
         if historyPanel == nil {
             let controller = HistoryPanelController()
             controller.itemsProvider = { [weak self] in self?.historyItems() ?? [] }
             controller.onSelect = { [weak self] item in
-                guard let self else { return }
-                if let cgImage = item.cgImage {
-                    self.openAnnotationEditor(cgImage)
-                    return
-                }
-                guard let url = item.url,
-                    let image = NSImage(contentsOf: url),
-                    let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
-                else { return }
-                self.openAnnotationEditor(cgImage)
+                self?.openHistoryItem(item)
             }
             historyPanel = controller
         }
         historyPanel?.toggle()
     }
 
-    /// 会话内截图（最新在前）+ 磁盘上保存过的截图，按时间倒序。
+    /// 会话内截图（最新在前）+ 磁盘上保存过的截图，按时间倒序且按路径去重。
     private func historyItems() -> [HistoryItem] {
-        let saved = settings.recentCaptureURLs.map { url -> HistoryItem in
-            HistoryItem(
-                id: url.path,
-                date: FilenameTemplate.captureDate(of: url),
-                image: NSImage(contentsOf: url),
-                url: url,
-                cgImage: nil
+        var seenURLs = Set<URL>()
+        var result: [HistoryItem] = []
+
+        for item in sessionHistory {
+            if let url = item.url {
+                seenURLs.insert(url)
+            }
+            result.append(item)
+        }
+
+        for url in settings.recentCaptureURLs {
+            guard !seenURLs.contains(url) else { continue }
+            seenURLs.insert(url)
+            result.append(
+                HistoryItem(
+                    id: url.path,
+                    date: FilenameTemplate.captureDate(of: url),
+                    image: HistoryThumbnailCache.shared.image(for: url),
+                    url: url,
+                    cgImage: nil
+                )
             )
         }
-        let merged = sessionHistory + saved
-        return merged
+
+        return result
             .sorted { $0.date > $1.date }
             .prefix(40)
             .map { $0 }

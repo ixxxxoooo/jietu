@@ -23,6 +23,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onClearRecents: (() -> Void)?
     var onOpenFolder: (() -> Void)?
     var onOpenHistory: (() -> Void)?
+    var onSelectHistoryItem: ((HistoryItem) -> Void)?
     var onAuthorizeScreenRecording: (() -> Void)?
     var onAuthorizeAccessibility: (() -> Void)?
     var onOpenOnboarding: (() -> Void)?
@@ -32,9 +33,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     /// 最近截图提供者，菜单每次弹出时拉取一次。
     var recentProvider: (() -> [URL])?
+    /// 历史条目提供者（优先于 recentProvider）。
+    var historyItemsProvider: (() -> [HistoryItem])?
 
     /// 供单元测试检查菜单项。
     var menuForTesting: NSMenu { menu }
+    var recentMenuForTesting: NSMenu { recentMenu }
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -42,6 +46,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         configureStatusButton()
         buildMenu()
         menu.delegate = self
+        recentMenu.delegate = self
         statusItem.menu = menu
     }
 
@@ -105,7 +110,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         menu.addItem(recentCaptureItem())
-        menu.addItem(item("截图历史…", #selector(handleOpenHistory), symbol: "clock"))
         menu.addItem(item("打开截图文件夹", #selector(handleOpenFolder), symbol: "folder"))
 
         menu.addItem(.separator())
@@ -181,132 +185,78 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     // MARK: - NSMenuDelegate
 
     func menuNeedsUpdate(_ menu: NSMenu) {
-        refresh()
-        rebuildRecentMenu()
+        if menu == self.menu {
+            refresh()
+            rebuildRecentMenu()
+        } else if menu == recentMenu {
+            rebuildRecentMenu()
+        }
     }
+
     private func rebuildRecentMenu() {
         recentMenu.removeAllItems()
-        let urls = (recentProvider?() ?? []).prefix(Self.recentPreviewCount)
 
-        if urls.isEmpty {
-            let empty = NSMenuItem(title: "暂无（截图后会出现在这里）", action: nil, keyEquivalent: "")
-            empty.isEnabled = false
-            recentMenu.addItem(empty)
-            return
+        let items: [HistoryItem]
+        if let provider = historyItemsProvider {
+            items = provider()
+        } else if let urlProvider = recentProvider {
+            items = urlProvider().prefix(20).map { url in
+                HistoryItem(
+                    id: url.path,
+                    date: FilenameTemplate.captureDate(of: url),
+                    image: HistoryThumbnailCache.shared.image(for: url),
+                    url: url,
+                    cgImage: nil
+                )
+            }
+        } else {
+            items = []
         }
 
-        for url in urls {
-            let entry = NSMenuItem(
-                title: "",
-                action: #selector(handleOpenRecent(_:)),
-                keyEquivalent: ""
-            )
-            entry.target = self
-            entry.representedObject = url
-            entry.image = Self.preview(for: url)
-            // 图片读不出来时至少还能看文件名点进去。
-            if entry.image == nil { entry.title = url.lastPathComponent }
-            recentMenu.addItem(entry)
+        let contentView = RecentHistoryMenuView(
+            items: items,
+            onSelect: { [weak self] item in
+                self?.menu.cancelTracking()
+                self?.onSelectHistoryItem?(item)
+            },
+            onRevealInFinder: { [weak self] item in
+                self?.menu.cancelTracking()
+                if let url = item.url {
+                    self?.onOpenRecent?(url)
+                }
+            },
+            onCopy: { item in
+                if let cg = item.cgImage {
+                    CaptureOutput.copyToPasteboard(cg)
+                } else if let img = item.image,
+                          let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                    CaptureOutput.copyToPasteboard(cg)
+                }
+            },
+            onClear: { [weak self] in
+                self?.onClearRecents?()
+                self?.rebuildRecentMenu()
+            },
+            onOpenFolder: { [weak self] in
+                self?.menu.cancelTracking()
+                self?.onOpenFolder?()
+            }
+        )
+
+        let hostingView = MenuHostingView(rootView: contentView)
+        let height: CGFloat
+        if items.isEmpty {
+            height = 130
+        } else {
+            let count = min(items.count, 5)
+            height = min(CGFloat(count) * 165 + 44, 480)
         }
+        hostingView.frame = NSRect(x: 0, y: 0, width: 320, height: height)
 
-        recentMenu.addItem(.separator())
-        let clear = NSMenuItem(title: "清除记录", action: #selector(handleClearRecents), keyEquivalent: "")
-        clear.target = self
-        recentMenu.addItem(clear)
+        let hostItem = NSMenuItem()
+        hostItem.view = hostingView
+        recentMenu.addItem(hostItem)
     }
-
-    // MARK: - Thumbnails
-
-    /// 最近截图只预览这么多张。
-    private static let recentPreviewCount = 10
-    private static let previewHeight: CGFloat = 56
-    private static let previewMinWidth: CGFloat = 80
-    private static let previewMaxWidth: CGFloat = 132
-
-    /// 预览图：等比裁切到统一高度，左下角烙上截图时间。
-    ///
-    /// 时间直接画进图里而不是走菜单项标题：条目只放一张图，看起来更像「预览」。
-    ///
-    /// 用 `drawingHandler` 而不是自己拼位图代表：手工建 rep 时 `NSImage.size`
-    /// 会在绘制阶段被折半（视网膜下量出来只有一半大），交给 AppKit 渲染则尺寸稳定。
-    private static func preview(for url: URL) -> NSImage? {
-        guard let source = NSImage(contentsOf: url), source.size.width > 0, source.size.height > 0
-        else { return nil }
-
-        let aspect = source.size.width / source.size.height
-        let size = NSSize(
-            width: min(max((previewHeight * aspect).rounded(), previewMinWidth), previewMaxWidth),
-            height: previewHeight
-        )
-        let time = timeText(for: url)
-        return NSImage(size: size, flipped: false) { rect in
-            draw(source: source, in: rect, time: time)
-            return true
-        }
-    }
-
-    private static func draw(source: NSImage, in rect: NSRect, time: String) {
-        // 铺满画布（等比裁切），保证底部时间条区域始终有图垫底。
-        let fillScale = max(rect.width / source.size.width, rect.height / source.size.height)
-        let filled = NSSize(
-            width: source.size.width * fillScale,
-            height: source.size.height * fillScale
-        )
-        source.draw(
-            in: NSRect(
-                x: rect.midX - filled.width / 2,
-                y: rect.midY - filled.height / 2,
-                width: filled.width,
-                height: filled.height
-            ),
-            from: .zero,
-            operation: .sourceOver,
-            fraction: 1,
-            respectFlipped: false,
-            hints: [.interpolation: NSImageInterpolation.high.rawValue]
-        )
-
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold),
-            .foregroundColor: NSColor.white,
-        ]
-        let textSize = (time as NSString).size(withAttributes: attributes)
-        let inset: CGFloat = 4
-        let padding = NSSize(width: 4, height: 2)
-        let badge = NSRect(
-            x: rect.minX + inset,
-            y: rect.minY + inset,
-            width: textSize.width + padding.width * 2,
-            height: textSize.height + padding.height * 2
-        )
-        NSColor.black.withAlphaComponent(0.6).setFill()
-        NSBezierPath(roundedRect: badge, xRadius: 3, yRadius: 3).fill()
-        (time as NSString).draw(
-            at: NSPoint(x: badge.minX + padding.width, y: badge.minY + padding.height),
-            withAttributes: attributes
-        )
-    }
-
-    /// 今天只报时分秒，更早的补上日期。
-    private static func timeText(for url: URL) -> String {
-        let date = FilenameTemplate.captureDate(of: url)
-        let isToday = Calendar.current.isDateInToday(date)
-        return (isToday ? timeOnlyFormatter : dateTimeFormatter).string(from: date)
-    }
-
-    private static let timeOnlyFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter
-    }()
-
-    private static let dateTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "MM-dd HH:mm"
-        return formatter
-    }()
 
     // MARK: - Actions
 
