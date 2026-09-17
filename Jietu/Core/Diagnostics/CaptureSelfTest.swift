@@ -1,3 +1,4 @@
+import AVFoundation
 import AppKit
 import ImageIO
 import QuartzCore
@@ -21,6 +22,7 @@ import UniformTypeIdentifiers
 ///   Jietu --selftest-scrollprobe x,y,w,h    几种合成滚轮写法哪个能真的推动目标窗口
 ///   Jietu --selftest-quickaccess <输出目录> 浮窗图标：逐个注入点击，量响应速度（含截图）
 ///   Jietu --selftest-scroll-cost            滚动长图每帧成本：拼接 / 预览（含老做法对比）
+///   Jietu --selftest-record <输出目录>       录屏：真录一段（含暂停），读回成片验时长/尺寸
 ///   Jietu --selftest-inline-draw <输出目录>   就地标注：验证「框里还能再画框」
 ///   Jietu --selftest-inline-scroll <输出目录>
 ///                                           就地工具栏的「滚动截图」：点开手动 / 自动并截图
@@ -33,6 +35,9 @@ enum CaptureSelfTest {
     /// 于是启动流程会继续把菜单栏 / 各种 controller 接好），由 `AppDelegate` 接完线之后执行。
     /// 单例守卫也要为它放行：它经常与正式实例同时在场。
     static let appLevelInlineScrollFlag = "--selftest-app-inline-scroll"
+
+    /// 需要完整接线的录屏自检：菜单/遮罩/红框/控制条/落盘，一条链走完。
+    static let appLevelRecordingFlag = "--selftest-app-record"
 
     @MainActor
     static func handleCommandLineIfNeeded() -> Bool {
@@ -110,6 +115,16 @@ enum CaptureSelfTest {
         case "--selftest-scroll-cost":
             // 滚动长图的每帧成本：拼接（Vision / 已知步长）、右侧预览、老做法对比。
             runScrollCostTest()
+            return true
+
+        case "--selftest-record":
+            // 录屏：真录一段（中间暂停一次），再用 AVFoundation 读回成片验时长 / 尺寸 / 音视频轨。
+            runRecordTest(
+                outputDirectory: URL(
+                    fileURLWithPath: value ?? NSTemporaryDirectory(),
+                    isDirectory: true
+                )
+            )
             return true
 
         case "--selftest-inline-draw":
@@ -701,10 +716,12 @@ enum CaptureSelfTest {
                 PinWindowController.pin(image: image, on: screen)
                 try? await Task.sleep(for: .milliseconds(700))
 
-                // 钉图窗口居中、按原始大小显示（和 PinWindowController 的默认摆放一致）。
-                let size = CGSize(
+                // 钉图窗口居中、按原始大小显示（和 PinWindowController 的默认摆放一致）：
+                // 窗口 = 截图 + 卡片外框一圈（`PreviewCard.inset`）。
+                let contentSize = CGSize(
                     width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale
                 )
+                let size = PreviewCard.cardSize(forContent: contentSize)
                 let frame = NSRect(
                     x: visible.midX - size.width / 2,
                     y: visible.midY - size.height / 2,
@@ -712,7 +729,7 @@ enum CaptureSelfTest {
                     height: size.height
                 ).integral
                 report.append(
-                    "pin frame=\(describe(frame)) (白底图 \(image.width)x\(image.height)px)"
+                    "pin frame=\(describe(frame))（白底图 \(image.width)x\(image.height)px + 外框 \(PreviewCard.inset)）"
                 )
 
                 // 鼠标挪进钉图窗口，浮动按钮才会出现（用户可能同时在动鼠标，多试两次）。
@@ -750,12 +767,19 @@ enum CaptureSelfTest {
                 try writePNG(snapshot.image, to: url)
                 report.append("截图 -> \(url.path)")
 
-                // 两个按钮的中心（右上 / 右下，各留 8pt 边距，直径 28）；
+                // 四个角按钮的中心（各留 8pt 边距；圆盘直径 28，左下角的「翻译」是胶囊）；
                 // 各取两块：圆盘边缘（不含图标）与圆心（图标）——前者代表按钮自身的亮度。
+                let translateSize = GlassControlButton.preferredSize(
+                    diameter: 28, labelText: "翻译"
+                )
+                let translateCenter = CGPoint(
+                    x: frame.minX + 8 + translateSize.width / 2, y: frame.minY + 22
+                )
                 let buttonCenters = [
                     ("右上关闭", closeCenter),
-                    ("右下实况文本", CGPoint(x: frame.maxX - 22, y: frame.minY + 22)),
+                    ("右下识别文本", CGPoint(x: frame.maxX - 22, y: frame.minY + 22)),
                     ("左上编辑", CGPoint(x: frame.minX + 22, y: frame.maxY - 22)),
+                    ("左下翻译", translateCenter),
                 ]
                 for (name, center) in buttonCenters {
                     let disc = luminance(in: snapshot, at: center, size: 6)
@@ -767,7 +791,7 @@ enum CaptureSelfTest {
                     )
                 }
 
-                // 点一下右下角的实况文本按钮：开启后图标应换成**居中的绿色对勾**。
+                // 点一下右下角的「识别文本」按钮：开启后应当变成 **macOS 那种蓝底实心圆**。
                 // 探针用 AppKit 坐标，注入的鼠标事件得翻成 CG 的 Y 向下坐标。
                 let liveTextCenter = CGPoint(x: frame.maxX - 22, y: frame.minY + 22)
                 let liveTextClick = CGPoint(
@@ -789,19 +813,27 @@ enum CaptureSelfTest {
                 else { throw CaptureError.noDisplays }
                 let litURL = outputDirectory.appendingPathComponent("pin-livetext.png")
                 try writePNG(lit.image, to: litURL)
-                report.append("开启实况文本后截图 -> \(litURL.path)")
+                report.append("开启识别文本后截图 -> \(litURL.path)")
 
-                // 按钮正中间那条勾：点亮前后都取同一块，比「绿偏移」（G−R）。
-                // 未点亮是黑图标（G−R≈0），点亮后是绿勾（G−R 明显为正）——光比亮度分不出来。
-                let offGreen = greenBias(in: snapshot, at: liveTextCenter, size: 6)
-                let litGreen = greenBias(in: lit, at: liveTextCenter, size: 6)
-                // 未点亮时那里是黑图标（G−R≈0），点亮后是绿勾（G−R 明显为正）。
-                // 阈值取小一点：勾是细线，探针框里大部分还是白玻璃。
-                let turnedGreen = litGreen > 0.05 && litGreen - offGreen > 0.05
+                // 按钮圆盘：点亮前后都取同一块，比「蓝偏移」（B−R）——蓝底白图标比绿勾更好认，
+                // 未点亮是白玻璃上的黑图标（B−R≈0），点亮后是整块品牌蓝（B−R 明显为正）。
+                let offBlue = blueBias(in: snapshot, at: liveTextCenter, size: 6)
+                let litBlue = blueBias(in: lit, at: liveTextCenter, size: 6)
+                let discBlue = blueBias(in: lit, at: CGPoint(x: frame.maxX - 22, y: frame.minY + 15), size: 4)
+                let turnedBlue = litBlue > 0.2 && litBlue - offBlue > 0.2
                 report.append(
-                    String(format: "按钮中心绿偏移：点亮前 %.3f → 点亮后 %.3f → %@",
-                           offGreen, litGreen, turnedGreen ? "已变成绿勾" : "**没变绿**")
+                    String(format: "按钮中心蓝偏移：点亮前 %.3f → 点亮后 %.3f（圆盘边缘 %.3f）→ %@",
+                           offBlue, litBlue, discBlue, turnedBlue ? "已是蓝底实心" : "**没变蓝**")
                 )
+
+                // 左下角「翻译」：先关掉识别文本（它会把覆盖层铺满截图，点不到下面的按钮），
+                // 再点一次「翻译」，看 macOS 自己的翻译面板有没有弹出来。
+                postMouse(.mouseMoved, at: liveTextClick)
+                try? await Task.sleep(for: .milliseconds(200))
+                postMouse(.leftMouseDown, at: liveTextClick)
+                try? await Task.sleep(for: .milliseconds(80))
+                postMouse(.leftMouseUp, at: liveTextClick)
+                try? await Task.sleep(for: .milliseconds(400))
 
                 // 关闭按钮的响应：从注入「按下」到窗口真的从屏幕上消失。
                 // 用户感知的就是这一段（按下动画 + 抬起后关窗）。
@@ -836,15 +868,104 @@ enum CaptureSelfTest {
                     report.append("关闭按钮：3 秒内窗口**没关掉**")
                 }
 
-                // 左上角「编辑」：点一下应当把「图 + 钉图位置」交出去，并把自己收掉
-                // （回到标注编辑器那条路）。再钉一张来验：上面那张已经关掉了。
-                PinWindowController.pin(image: image, on: screen)
+                // 左下角「翻译」：钉一张**有字**的图（白图识别不出文字，只会弹「没识别到文字」），
+                // 点一次看 macOS 自己的翻译面板有没有弹出来。上面那张已经关掉了，这张仍居中。
+                let textImage = try makeTextTestImage(width: 520, height: 240)
+                PinWindowController.pin(image: textImage, on: screen)
                 try? await Task.sleep(for: .milliseconds(700))
+                let textContent = CGSize(
+                    width: CGFloat(textImage.width) / scale, height: CGFloat(textImage.height) / scale
+                )
+                let textCard = PreviewCard.cardSize(forContent: textContent)
+                let textFrame = NSRect(
+                    x: visible.midX - textCard.width / 2,
+                    y: visible.midY - textCard.height / 2,
+                    width: textCard.width,
+                    height: textCard.height
+                )
+                let textTranslateCenter = CGPoint(
+                    x: textFrame.minX + 8 + translateSize.width / 2, y: textFrame.minY + 22
+                )
+                let windowsBefore = Set(NSApp.windows.map(ObjectIdentifier.init))
+                postMouse(.mouseMoved, at: CGPoint(x: textFrame.minX - 60, y: textFrame.midY))
+                try? await Task.sleep(for: .milliseconds(150))
+                let translateClick = CGPoint(
+                    x: textTranslateCenter.x,
+                    y: DisplayGeometry.referenceHeight - textTranslateCenter.y
+                )
+                let translatePressAt = CFAbsoluteTimeGetCurrent()
+                postMouse(.mouseMoved, at: translateClick)
+                try? await Task.sleep(for: .milliseconds(250))
+                postMouse(.leftMouseDown, at: translateClick)
+                try? await Task.sleep(for: .milliseconds(80))
+                postMouse(.leftMouseUp, at: translateClick)
+
+                // 识别 + 拉系统翻译面板都需要时间（首次还可能提示下载语言包），等久一点。
+                var translationWindowAppeared = false
+                while CFAbsoluteTimeGetCurrent() - translatePressAt < 6 {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    if NSApp.windows.contains(where: {
+                        !windowsBefore.contains(ObjectIdentifier($0)) && $0.isVisible
+                    }) {
+                        translationWindowAppeared = true
+                        break
+                    }
+                }
+                let translationMs = (CFAbsoluteTimeGetCurrent() - translatePressAt) * 1000
+                // 走到哪一步了：宿主挂上没有 / 识别出原文没有 / 有没有要求系统弹面板。
+                let pinContent = NSApp.windows
+                    .compactMap { $0 as? PinPanel }
+                    .compactMap { $0.contentView as? PinContentView }
+                    .first
+                report.append(
+                    "「翻译」进度：宿主已挂=\(pinContent?.isTranslationHostAttached ?? false)，"
+                        + "识别原文=\(pinContent?.recognizedTextForTesting.map { "\($0.count) 字" } ?? "**还没识别**")，"
+                        + "要求弹面板=\(pinContent?.isSystemTranslationPresented ?? false)"
+                )
+                try? await Task.sleep(for: .milliseconds(700))
+                let translateShots = try await CaptureEngine().captureAllDisplays(
+                    excludingOwnApplication: false
+                )
+                if let shot = translateShots.first(where: { $0.displayID == snapshot.displayID })
+                    ?? translateShots.first
+                {
+                    let url = outputDirectory.appendingPathComponent("pin-translate.png")
+                    try writePNG(shot.image, to: url)
+                    report.append("点「翻译」后截图 -> \(url.path)")
+                    // 系统翻译面板是浅色浮层：窗口上方三分之一应当明显不再是白图。
+                    let probe = luminance(
+                        in: shot,
+                        at: CGPoint(x: textFrame.minX + 60, y: textFrame.maxY - 60),
+                        size: 8
+                    )
+                    report.append(
+                        String(format: "「翻译」：点击后 %.0f ms，系统翻译面板新窗口=%@，面板区亮度 %.3f",
+                               translationMs,
+                               translationWindowAppeared ? "已出现" : "**没出现**",
+                               probe)
+                    )
+                } else {
+                    report.append("「翻译」：抓不到屏幕，没法看面板")
+                }
+
+                // 先把翻译面板收掉：点一下钉图正中（面板外面、按钮外面），免得它挡住下一手操作。
+                let dismissClick = CGPoint(
+                    x: textFrame.midX, y: DisplayGeometry.referenceHeight - textFrame.midY
+                )
+                postMouse(.mouseMoved, at: dismissClick)
+                try? await Task.sleep(for: .milliseconds(150))
+                postMouse(.leftMouseDown, at: dismissClick)
+                try? await Task.sleep(for: .milliseconds(60))
+                postMouse(.leftMouseUp, at: dismissClick)
+                try? await Task.sleep(for: .milliseconds(400))
+
+                // 左上角「编辑」：点一下应当把「图 + 钉图位置」交出去，并把自己收掉
+                // （回到标注编辑器那条路）。就用手上这张有字的图来验。
                 var editHandoff: (imageSize: CGSize, rect: CGRect)?
                 PinWindowController.onRequestEdit = { edited, rect in
                     editHandoff = (CGSize(width: edited.width, height: edited.height), rect)
                 }
-                let editCenter = CGPoint(x: frame.minX + 22, y: frame.maxY - 22)
+                let editCenter = CGPoint(x: textFrame.minX + 22, y: textFrame.maxY - 22)
                 let editClick = CGPoint(
                     x: editCenter.x, y: DisplayGeometry.referenceHeight - editCenter.y
                 )
@@ -872,11 +993,13 @@ enum CaptureSelfTest {
                         pinGone ? "是" : "**否**"
                     )
                 )
-                let editOK = editHandoff?.imageSize == CGSize(width: image.width, height: image.height)
+                let editOK = editHandoff?.imageSize
+                    == CGSize(width: textImage.width, height: textImage.height)
                     && pinGone
 
-                report.append("RESULT: \(turnedGreen && editOK ? "PASS" : "FAIL")")
-                finish(report, code: turnedGreen && editOK ? 0 : 1)
+                let passed = turnedBlue && editOK
+                report.append("RESULT: \(passed ? "PASS" : "FAIL")")
+                finish(report, code: passed ? 0 : 1)
             } catch {
                 report.append("error: \(error.localizedDescription)")
                 report.append("RESULT: FAIL")
@@ -1061,6 +1184,159 @@ enum CaptureSelfTest {
         }
         guard let image = context.makeImage() else { throw CaptureError.emptyImage(0) }
         return image
+    }
+
+    /// 录屏自检：同一段画面**录两次**（一次中间暂停、一次不暂停），再用 AVFoundation 读回成片比时长。
+    ///
+    /// 为什么要比而不是绝对值：SCK 首帧来得有早有晚（静止画面只在变化时出帧），
+    /// 单看一次录制的时长会把「首帧晚到」算进去。两次录制的环境一样，
+    /// 差值就是「暂停那一段有没有被抽掉」+「暂停后有没有继续录」：
+    /// - 差值 ≈ 第二段的有效时长（1.4s）→ 正确；
+    /// - 差值 ≈ 暂停时长 + 第二段（2.9s）→ 暂停被算进成片了（bug）。
+    private static func runRecordTest(outputDirectory: URL) {
+        Task { @MainActor in
+            var report: [String] = []
+            var budgets: [(label: String, milliseconds: Double?, limit: Double)] = []
+            do {
+                guard let screen = NSScreen.main, let displayID = screen.jietu_displayID
+                else { throw CaptureError.noDisplays }
+                try FileManager.default.createDirectory(
+                    at: outputDirectory, withIntermediateDirectories: true
+                )
+
+                // 显示器 local 坐标（原点左上）：屏幕中上部一块，避开菜单栏。
+                let region = CGRect(x: 240, y: 200, width: 560, height: 360)
+                let scale = screen.backingScaleFactor
+                report.append(
+                    "区域 \(describe(region)) 缩放 \(scale)x → 期望像素 "
+                        + "\(Int(region.width * scale))×\(Int(region.height * scale))"
+                )
+
+                let engineOptions = RecordingEngine.Options(fps: 30, capturesSystemAudio: false)
+
+                /// 录制期间持续在选区里挪光标：SCK 只在画面有变化时出帧。
+                @MainActor func wiggle(seconds: Double) async {
+                    let deadline = CFAbsoluteTimeGetCurrent() + seconds
+                    var index = 0
+                    while CFAbsoluteTimeGetCurrent() < deadline {
+                        let t = CGFloat(index) * 0.35
+                        postMouse(
+                            .mouseMoved,
+                            at: CGPoint(
+                                x: region.midX + cos(t) * region.width * 0.32,
+                                y: region.midY + sin(t) * region.height * 0.32
+                            )
+                        )
+                        index += 1
+                        try? await Task.sleep(for: .milliseconds(70))
+                    }
+                }
+
+                /// 录一段（`pauseSeconds > 0` 时在中间暂停一下），返回成片时长。
+                @MainActor func record(phase: Double, pauseSeconds: Double, name: String) async -> (
+                    duration: Double, url: URL?, error: Error?
+                ) {
+                    let engine = RecordingEngine()
+                    var finished: URL?
+                    var failure: Error?
+                    var ticks = 0
+                    engine.onTick = { _ in ticks += 1 }
+                    engine.onFinish = { finished = $0 }
+                    engine.onFail = { failure = $0 }
+                    do {
+                        try await engine.start(
+                            displayID: displayID,
+                            regionInPoints: region,
+                            options: engineOptions,
+                            excludingWindowNumbers: []
+                        )
+                    } catch {
+                        return (-1, nil, error)
+                    }
+                    await wiggle(seconds: phase)
+                    if pauseSeconds > 0 {
+                        engine.pause()
+                        try? await Task.sleep(for: .milliseconds(Int(pauseSeconds * 1000)))
+                        engine.resume()
+                        await wiggle(seconds: phase)
+                    }
+                    await engine.stop()
+                    report.append("  \(name)：tick \(ticks) 次")
+                    guard let url = finished else { return (-1, nil, failure) }
+                    let saved = outputDirectory.appendingPathComponent("\(name).mp4")
+                    try? FileManager.default.removeItem(at: saved)
+                    try? FileManager.default.moveItem(at: url, to: saved)
+                    let asset = AVURLAsset(url: saved)
+                    let duration = (try? await asset.load(.duration)).map {
+                        CMTimeGetSeconds($0)
+                    } ?? -1
+                    return (duration, saved, failure)
+                }
+
+                let phase = 1.4
+                let pause = 1.5
+                let plain = await record(phase: phase, pauseSeconds: 0, name: "record-plain")
+                let paused = await record(phase: phase, pauseSeconds: pause, name: "record-paused")
+                report.append(String(format: "  不暂停：%.2fs（期望 ~%.1fs）", plain.duration, phase))
+                report.append(
+                    String(
+                        format: "  中间暂停 %.1fs：%.2fs（期望 ~%.1fs，不是 ~%.1fs）",
+                        pause, paused.duration, phase * 2, phase * 2 + pause
+                    )
+                )
+
+                if let error = plain.error ?? paused.error {
+                    report.append("error: 录制失败 —— \(error.localizedDescription)")
+                    report.append("RESULT: FAIL")
+                    finish(report, code: 1)
+                    return
+                }
+                guard let url = paused.url else {
+                    report.append("error: 没有拿到成片")
+                    report.append("RESULT: FAIL")
+                    finish(report, code: 1)
+                    return
+                }
+
+                // 成片规格：像素 = 区域 × 缩放；没开系统音频时只有一条视频轨。
+                let asset = AVURLAsset(url: url)
+                let videoTracks = (try? await asset.loadTracks(withMediaType: .video)) ?? []
+                let audioTracks = (try? await asset.loadTracks(withMediaType: .audio)) ?? []
+                let naturalSize = (try? await videoTracks.first?.load(.naturalSize)) ?? .zero
+                let expectedSize = CGSize(width: region.width * scale, height: region.height * scale)
+                let sizeOK = abs((naturalSize.width) - expectedSize.width) < 3
+                    && abs((naturalSize.height) - expectedSize.height) < 3
+                report.append(
+                    "成片 -> \(url.path)；像素 \(Int(naturalSize.width))×\(Int(naturalSize.height))、"
+                        + "视频轨 \(videoTracks.count) 条 / 音频轨 \(audioTracks.count) 条"
+                )
+
+                let delta = paused.duration - plain.duration
+                let plainOK = plain.duration > 0.8 && plain.duration < phase + 0.9
+                let deltaOK = delta > 0.6 && delta < phase + 0.8
+                budgets.append(("不暂停那次的时长 ≈ 有效时长", plainOK ? 0 : nil, 0))
+                budgets.append(
+                    ("暂停后被继续录制、且暂停没算进成片（Δ=\(String(format: "%.2f", delta))s）",
+                     deltaOK ? 0 : nil, 0)
+                )
+                budgets.append(("像素尺寸 = 区域 × 缩放", sizeOK ? 0 : nil, 0))
+                budgets.append(("一条视频轨、没声音时没音频轨", videoTracks.count == 1 && audioTracks.isEmpty ? 0 : nil, 0))
+
+                report.append("延迟预算：")
+                var failed = 0
+                for budget in budgets {
+                    let ok = budget.milliseconds != nil && budget.milliseconds! <= budget.limit
+                    if !ok { failed += 1 }
+                    report.append("    \(ok ? "✅" : "❌") \(budget.label)")
+                }
+                report.append("RESULT: \(failed == 0 ? "PASS" : "FAIL（\(failed) 项未达成）")")
+                finish(report, code: failed == 0 ? 0 : 1)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
     }
 
     /// 就地标注「框里还能再画框」自检。
@@ -1948,6 +2224,43 @@ enum CaptureSelfTest {
         context.setStrokeColor(CGColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1))
         context.setLineWidth(2)
         context.stroke(CGRect(x: 1, y: 1, width: width - 2, height: height - 2))
+        guard let image = context.makeImage() else { throw CaptureError.emptyImage(0) }
+        return image
+    }
+
+    /// 自检用的一张**有字**的图：钉图的「翻译」要先认出字才谈得上翻译。
+    private static func makeTextTestImage(width: Int, height: Int) throws -> CGImage {
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { throw CaptureError.emptyImage(0) }
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+
+        let graphics = NSGraphicsContext(cgContext: context, flipped: false)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = graphics
+        let title = "System Requirements"
+        let body = "Optimized for Apple Silicon. Runs great on Intel."
+        (title as NSString).draw(
+            at: NSPoint(x: 40, y: CGFloat(height) - 70),
+            withAttributes: [
+                .font: NSFont.systemFont(ofSize: 30, weight: .bold),
+                .foregroundColor: NSColor.black,
+            ]
+        )
+        (body as NSString).draw(
+            at: NSPoint(x: 40, y: CGFloat(height) - 110),
+            withAttributes: [
+                .font: NSFont.systemFont(ofSize: 18),
+                .foregroundColor: NSColor.darkGray,
+            ]
+        )
+        NSGraphicsContext.restoreGraphicsState()
         guard let image = context.makeImage() else { throw CaptureError.emptyImage(0) }
         return image
     }
@@ -2895,6 +3208,14 @@ enum CaptureSelfTest {
     ) -> Double {
         let rgb = meanRGB(snapshot.image, pixelRect: pixelRect(in: snapshot, at: center, size: size))
         return rgb.green - rgb.red
+    }
+
+    /// 「蓝偏移」（B−R）：识别文本按钮点亮后是品牌蓝实心，探测它比探绿勾更稳。
+    private static func blueBias(
+        in snapshot: DisplaySnapshot, at center: CGPoint, size: CGFloat
+    ) -> Double {
+        let rgb = meanRGB(snapshot.image, pixelRect: pixelRect(in: snapshot, at: center, size: size))
+        return rgb.blue - rgb.red
     }
 
     /// 屏幕点（AppKit 全局坐标）→ 截图像素矩形。

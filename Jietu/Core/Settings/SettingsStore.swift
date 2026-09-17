@@ -64,6 +64,8 @@ enum EditorMode: String, CaseIterable, Identifiable {
 @Observable
 final class SettingsStore {
     private enum Key {
+        static let recordSystemAudio = "recording.systemAudio"
+        static let recordFrameRate = "recording.frameRate"
         /// 多热键映射（动作 rawValue → 组合键）。
         static let hotkeys = "hotkeys.map"
         /// 旧版本只存区域截图一个热键，启动时迁移到 `hotkeys`。
@@ -154,6 +156,16 @@ final class SettingsStore {
     }
 
     /// 落盘格式。
+    /// 录屏时是否连系统声音一起录（页面里的视频 / 音乐）。默认关：不录声音更省事也更少翻车。
+    var recordSystemAudio: Bool {
+        didSet { defaults.set(recordSystemAudio, forKey: Key.recordSystemAudio) }
+    }
+
+    /// 录屏帧率（30 / 60）。60 更顺，文件也更大。
+    var recordFrameRate: Int {
+        didSet { defaults.set(recordFrameRate, forKey: Key.recordFrameRate) }
+    }
+
     var saveFormat: SaveFormat {
         didSet { defaults.set(saveFormat.rawValue, forKey: Key.saveFormat) }
     }
@@ -241,6 +253,9 @@ final class SettingsStore {
         self.quickAccessAutoCloseDelay =
             defaults.object(forKey: Key.quickAccessAutoCloseDelay) as? Double ?? 30
         self.launchAtLogin = defaults.object(forKey: Key.launchAtLogin) as? Bool ?? false
+        self.recordSystemAudio =
+            defaults.object(forKey: Key.recordSystemAudio) as? Bool ?? false
+        self.recordFrameRate = defaults.object(forKey: Key.recordFrameRate) as? Int ?? 30
         self.recentCapturePaths = defaults.stringArray(forKey: Key.recentCapturePaths) ?? []
         self.saveFormat =
             (defaults.string(forKey: Key.saveFormat).flatMap(SaveFormat.init(rawValue:))) ?? .png

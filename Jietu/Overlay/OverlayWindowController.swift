@@ -45,6 +45,17 @@ final class OverlayWindowController {
         set { canvas.onSelectionPaused = newValue }
     }
 
+    /// 录屏模式（框好区域 / 点窗口就开录）。
+    var isRecordMode: Bool {
+        get { canvas.isRecordMode }
+        set { canvas.isRecordMode = newValue }
+    }
+
+    var onRecordRegionPicked: ((CGRect) -> Void)? {
+        get { canvas.onRecordRegionPicked }
+        set { canvas.onRecordRegionPicked = newValue }
+    }
+
     /// 就地编辑工具栏里选了「手动 / 自动滚动」（参数二是选区，本显示器 local 矩形）。
     var onScrollCapture: ((ScrollingCaptureSession.Mode, CGRect) -> Void)? {
         get { canvas.onScrollCapture }

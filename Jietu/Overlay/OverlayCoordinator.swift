@@ -40,6 +40,8 @@ final class OverlayCoordinator {
         case screenshot
         case windowCapture
         case regionPick
+        /// 只要一块区域，用来录屏。
+        case record
     }
 
     /// 遮罩这一次要干什么（截图 / 只要一个矩形）。**用完即复位**，见 `finish()`。
@@ -47,6 +49,9 @@ final class OverlayCoordinator {
     /// `purpose == .regionPick` 时：鼠标在选区上停住（或松手）→ 选区 local 矩形。
     /// 外面据此把「手动 / 自动」浮到选框下方。
     var onSelectionPaused: ((DisplaySnapshot, CGRect) -> Void)?
+    /// `purpose == .record` 时：框好要录的区域 → 选区 local 矩形。
+    var onRecordRegionPicked: ((DisplaySnapshot, CGRect) -> Void)?
+
     /// 就地编辑工具栏里选了「手动 / 自动滚动」→（快照、模式、选区 local 矩形）。
     ///
     /// 走这条就不必再弹「手动 / 自动」模式条了：用户在工具栏里已经选过了。
@@ -97,6 +102,7 @@ final class OverlayCoordinator {
             }
             // 滚动长图起步：选区不急着交付，鼠标停住就交给外面的控制条。
             controller.isRegionPickMode = (purpose == .regionPick)
+            controller.isRecordMode = (purpose == .record)
             // 专选窗口模式（直接高亮并选窗）
             controller.isWindowOnlyMode = (purpose == .windowCapture)
             controller.onWindowSelected = { [weak self] window in
@@ -107,6 +113,9 @@ final class OverlayCoordinator {
             }
             controller.onSelectionPaused = { [weak self] localRect in
                 self?.onSelectionPaused?(snapshot, localRect)
+            }
+            controller.onRecordRegionPicked = { [weak self] localRect in
+                self?.onRecordRegionPicked?(snapshot, localRect)
             }
             controller.onScrollCapture = { [weak self] mode, localRect in
                 self?.onScrollCapture?(snapshot, mode, localRect)

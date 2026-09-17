@@ -34,10 +34,20 @@ final class HoverTintView: NSView {
 ///
 /// @author ixxxxoooo
 final class GlassControlButton: NSControl {
+    /// 按钮外形。
+    enum Prominence {
+        /// 系统玻璃圆盘 / 胶囊（默认，钉图与浮窗的常规控件）。
+        case glass
+        /// 强调色实心圆 + 白图标：macOS 自己那颗「识别文本（Live Text）」按钮的样子。
+        case accent
+    }
+
     var onClick: (() -> Void)?
 
-    /// 开关型按钮（钉图的实况文本）点开后的样子：图标换成**居中的绿色对勾**。
-    /// 不用角标——28pt 的圆盘上角标又小又偏，勾在正中间才对得上「已生效」。
+    /// 开关型按钮（钉图的识别文本）点开后的样子：
+    /// - `.glass`：图标换成**居中的绿色对勾**。不用角标——28pt 的圆盘上角标又小又偏，
+    ///   勾在正中间才对得上「已生效」；
+    /// - `.accent`：外形本身就是「亮着」的意思，图标不换（macOS 那颗蓝钮也不换图标）。
     var isActive = false {
         didSet {
             guard isActive != oldValue else { return }
@@ -45,9 +55,28 @@ final class GlassControlButton: NSControl {
         }
     }
 
-    private let symbolName: String
+    /// 实心强调色填充层（`.accent` 用；垫在图标下面）。
+    private let accentFill = HoverTintView()
+
+    /// 按钮外形。可以在运行时切（钉图的识别文本：开着才是蓝底实心，跟 macOS 那颗钮一样）。
+    var prominence: Prominence = .glass {
+        didSet {
+            guard prominence != oldValue else { return }
+            applyProminence()
+        }
+    }
+
+    /// 图标符号。可以在运行时换（录屏控制条的「暂停 ↔ 继续」就是这么做的）。
+    var symbolName: String {
+        didSet {
+            guard symbolName != oldValue else { return }
+            updateIcon()
+        }
+    }
     private let labelText: String?
     private let diameter: CGFloat
+    /// 图标着色（功能色，如停止键的红）。nil = 跟随外观的墨色。
+    private let iconTint: NSColor?
 
     /// 当前实际画出来的符号（点亮后是 `checkmark`），测试用。
     private var currentSymbolName = ""
@@ -71,6 +100,12 @@ final class GlassControlButton: NSControl {
         ? .srgbInk(1, alpha: 1)
         : .srgbInk(0, alpha: 1)
     }
+    /// 强调色实心底上的图标：白墨（跟 macOS 那颗蓝钮一样，不跟随明暗）。
+    private static let accentIconInk = NSColor.srgbInk(1, alpha: 1)
+
+    /// 强调色：与 `Theme.Colors.brand` 同源（App 的 `AccentColor` 资产 = 品牌蓝 #0D44E8），
+    /// 取不到再退系统强调色。
+    static let accentInk = NSColor(named: "AccentColor") ?? .controlAccentColor
 
     /// 尺寸是纯函数（自检 / 单测要按它算注入点，所以不能藏在 layout 里）。
     static func preferredSize(diameter: CGFloat = 28, labelText: String? = nil) -> NSSize {
@@ -90,10 +125,19 @@ final class GlassControlButton: NSControl {
         Self.preferredSize(diameter: diameter, labelText: labelText)
     }
 
-    init(symbol: String, labelText: String? = nil, diameter: CGFloat = 28, tooltip: String) {
+    init(
+        symbol: String,
+        labelText: String? = nil,
+        diameter: CGFloat = 28,
+        tooltip: String,
+        iconTint: NSColor? = nil,
+        prominence: Prominence = .glass
+    ) {
         self.symbolName = symbol
         self.labelText = labelText
         self.diameter = diameter
+        self.iconTint = iconTint
+        self.prominence = prominence
         super.init(frame: NSRect(origin: .zero, size: Self.preferredSize(
             diameter: diameter, labelText: labelText
         )))
@@ -113,22 +157,24 @@ final class GlassControlButton: NSControl {
         glassContainer.wantsLayer = true
         glassView.contentView = glassContainer
 
-        // 2. 悬停微光高亮层（ramp 的 menuHover）
-        hoverOverlay.tintColor = NSColor(name: nil) { $0.isDark
-            ? .srgbInk(1, alpha: 0.10)
-            : .srgbInk(0, alpha: 0.09)
-        }
+        // 2. 实心强调色底（只给 `.accent`）：macOS 那颗蓝钮的底就是这么一块实色，
+        //    不是玻璃——玻璃上的蓝会被材质搅成灰蓝，读不出「亮着」。
+        accentFill.tintColor = Self.accentInk
+        accentFill.wantsLayer = true
+        glassContainer.addSubview(accentFill)
+
+        // 3. 悬停微光高亮层（ramp 的 menuHover）
         hoverOverlay.alphaValue = 0
         hoverOverlay.wantsLayer = true
         glassContainer.addSubview(hoverOverlay)
 
-        // 3. 图标（SF Symbol，未点亮走 alpha ramp 的 textPrimary；点亮换成绿勾）
+        // 4. 图标（SF Symbol，未点亮走 alpha ramp 的 textPrimary；点亮换成绿勾）
         iconView.imageScaling = .scaleProportionallyDown
         iconView.wantsLayer = true
         glassContainer.addSubview(iconView)
         updateIcon()
 
-        // 4. 胶囊的文字（圆盘不用）
+        // 5. 胶囊的文字（圆盘不用）
         titleLabel.stringValue = labelText ?? ""
         titleLabel.font = Self.labelFont
         titleLabel.textColor = Self.inkColor
@@ -136,11 +182,29 @@ final class GlassControlButton: NSControl {
         titleLabel.isHidden = labelText == nil
         glassContainer.addSubview(titleLabel)
 
-        // 5. 原生柔和投影，增强玻璃浮空通透感（白底图上也要能把按钮「托」出来）
+        // 6. 原生柔和投影，增强玻璃浮空通透感（白底图上也要能把按钮「托」出来）
         shadow = NSShadow()
         shadow?.shadowColor = NSColor.black.withAlphaComponent(0.35)
         shadow?.shadowOffset = NSSize(width: 0, height: -1)
         shadow?.shadowBlurRadius = 3
+
+        // 子视图齐了才谈得上上色（`prominence` 的 didSet 也走这里）。
+        applyProminence()
+    }
+
+    /// 按外形上色：`.accent` 是实心强调色底 + 白图标，悬停压一层白墨；
+    /// `.glass` 走 ramp（深色白墨 / 浅色黑墨）。
+    private func applyProminence() {
+        accentFill.isHidden = prominence != .accent
+        accentFill.needsDisplay = true
+        hoverOverlay.tintColor = prominence == .accent
+            ? .srgbInk(1, alpha: 0.14)
+            : NSColor(name: nil) { $0.isDark
+                ? .srgbInk(1, alpha: 0.10)
+                : .srgbInk(0, alpha: 0.09)
+            }
+        hoverOverlay.needsDisplay = true
+        updateIcon()
     }
 
     @available(*, unavailable)
@@ -149,18 +213,26 @@ final class GlassControlButton: NSControl {
     }
 
     /// 未点亮：原形图标 + `textPrimary`；点亮：居中的绿色对勾（功能色 `success`）。
+    ///
+    /// `.accent` 不换图标（实心底本身就是点亮态），图标恒为白墨。
     private func updateIcon() {
-        let symbol = isActive ? "checkmark" : symbolName
+        let showsCheckmark = isActive && prominence == .glass
+        let symbol = showsCheckmark ? "checkmark" : symbolName
         // 勾单独放大了才不显小（原图标四周有留白，勾是满格的）。
         let config = NSImage.SymbolConfiguration(
-            pointSize: isActive ? 13 : 12,
+            pointSize: showsCheckmark ? 13 : 12,
             weight: .semibold
         )
         currentSymbolName = symbol
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: toolTip)?
             .withSymbolConfiguration(config)
         iconView.image = image
-        iconView.contentTintColor = isActive ? NSColor(Theme.Colors.success) : Self.inkColor
+        if showsCheckmark {
+            iconView.contentTintColor = NSColor(Theme.Colors.success)
+        } else {
+            iconView.contentTintColor =
+                iconTint ?? (prominence == .accent ? Self.accentIconInk : Self.inkColor)
+        }
     }
 
     override var acceptsFirstResponder: Bool { false }
@@ -186,6 +258,9 @@ final class GlassControlButton: NSControl {
         glassView.frame = bounds
         glassView.cornerRadius = labelText == nil ? bounds.width / 2 : bounds.height / 2
         glassContainer.frame = glassView.bounds
+        accentFill.frame = glassContainer.bounds
+        accentFill.cornerRadius = glassView.cornerRadius
+        accentFill.needsDisplay = true
         hoverOverlay.frame = glassContainer.bounds
         hoverOverlay.cornerRadius = glassView.cornerRadius
         hoverOverlay.needsDisplay = true
@@ -326,6 +401,9 @@ final class GlassControlButton: NSControl {
 
     /// 测试用：当前图标颜色。
     var renderedIconTint: NSColor? { iconView.contentTintColor }
+
+    /// 测试用：强调色实心底是不是画出来了（只有 `.accent` 外形才有）。
+    var showsAccentFill: Bool { !accentFill.isHidden && accentFill.tintColor.alphaComponent > 0 }
 
     /// 测试用：是否处于按下态（按下反馈应当**当场**就位，不等抬起）。
     var isPressedNow: Bool { isPressed }

@@ -41,6 +41,9 @@ final class OverlayCanvasView: NSView {
     }
     /// 鼠标在选区上停住（或一松手）→ 选区 local 矩形。
     var onSelectionPaused: ((CGRect) -> Void)?
+    /// 录屏模式：框好（或点一下窗口）就把区域交出去开录。
+    var isRecordMode = false
+    var onRecordRegionPicked: ((CGRect) -> Void)?
     /// 就地编辑工具栏里选了「手动 / 自动滚动」：参数是模式与选区（本显示器 local 矩形）。
     var onScrollCapture: ((ScrollingCaptureSession.Mode, CGRect) -> Void)?
     /// 选区被拖动 / 缩放 / 清空（nil）→ 让控制条跟着选框走。
@@ -1065,7 +1068,9 @@ final class OverlayCanvasView: NSView {
             size.height,
             snapshot.effectiveScale
         )
-        if isRegionPickMode {
+        if isRecordMode {
+            text += "  ·  拖拽框选要录的区域（或点一下某个窗口），松手即开录  ·  Esc 取消"
+        } else if isRegionPickMode {
             text += selection == nil
                 ? "  ·  拖拽框选（鼠标停住出「手动 / 自动」）  ·  Esc 取消"
                 : "  ·  鼠标停住出「手动 / 自动」，选区还能接着调  ·  Esc 取消"
@@ -1346,6 +1351,21 @@ final class OverlayCanvasView: NSView {
         case .pressing:
             // 单击：命中窗口
             if let hoveredWindow {
+                // 录屏：不拖也行——点哪个窗口就录哪个窗口。
+                if isRecordMode {
+                    let rect = DisplayGeometry.localRect(
+                        fromCGRect: hoveredWindow.frameInCGPoints, screen: screen
+                    ).intersection(canvasBounds)
+                    guard !rect.isEmpty else {
+                        interaction = .idle
+                        return
+                    }
+                    selection = rect
+                    interaction = .settled
+                    updateAllLayers()
+                    onRecordRegionPicked?(rect)
+                    return
+                }
                 if isRegionPickMode {
                     selection = DisplayGeometry.localRect(
                         fromCGRect: hoveredWindow.frameInCGPoints,
@@ -1400,6 +1420,18 @@ final class OverlayCanvasView: NSView {
             updateAllLayers()
             updateHoveredWindow(at: point)
             updateWindowHighlight()
+            return
+        }
+
+        // 录屏：选区成型就直接开录（不留遮罩让用户再调——松手即录，与参考实现一致）。
+        if isRecordMode {
+            if isSettled, let selection {
+                onRecordRegionPicked?(selection)
+            } else {
+                selection = nil
+                interaction = .idle
+                updateAllLayers()
+            }
             return
         }
 

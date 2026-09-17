@@ -79,6 +79,64 @@ struct PinWindowTests {
         #expect(button.renderedSymbolName == "text.viewfinder")
     }
 
+    @Test("预览卡片外框：截图不贴边，四面各留一圈 inset")
+    func pinContentIsInsetByCardFrame() {
+        let view = PinContentView(frame: NSRect(x: 0, y: 0, width: 200, height: 150), image: createTestImage())
+        view.layout()
+        #expect(
+            view.contentRectForTesting
+                == NSRect(
+                    x: PreviewCard.inset, y: PreviewCard.inset,
+                    width: 200 - PreviewCard.inset * 2,
+                    height: 150 - PreviewCard.inset * 2
+                )
+        )
+    }
+
+    @Test("左下角「翻译」按钮：悬停出现、点击把原文交给 macOS 翻译")
+    func translateButtonHandsTextToSystemTranslation() {
+        let view = PinContentView(frame: NSRect(x: 0, y: 0, width: 400, height: 300), image: createTestImage())
+        view.layout()
+        view.mouseEntered(with: enterExit(.mouseEntered, at: NSPoint(x: 200, y: 150)))
+
+        guard let button = view.translateButtonForTesting else {
+            Issue.record("没有左下角「翻译」按钮")
+            return
+        }
+        #expect(!button.isHidden, "悬停后翻译按钮应当出现")
+        #expect(button.renderedLabel == "翻译")
+        #expect(view.hitTest(NSPoint(x: button.frame.midX, y: button.frame.midY)) === button, "点击必须落在按钮上，不是边缘缩放手柄")
+
+        // 预置原文（真跑一次 OCR 要几百毫秒，这里只验接线）。
+        view.presetRecognizedText("System Requirements")
+        button.mouseDown(with: mouseEvent(.leftMouseDown, at: NSPoint(x: button.frame.midX, y: button.frame.midY)))
+        button.mouseUp(with: mouseEvent(.leftMouseUp, at: NSPoint(x: button.frame.midX, y: button.frame.midY)))
+
+        #expect(view.isTranslationHostAttached, "点「翻译」应当把系统翻译面板的宿主挂上")
+        #expect(view.presentedTranslationText == "System Requirements")
+    }
+
+    @Test("右下角「识别文本」点亮后换成 macOS 那种蓝底实心，关掉回普通玻璃")
+    func liveTextButtonTurnsAccentFilledWhileOn() {
+        let view = PinContentView(frame: NSRect(x: 0, y: 0, width: 400, height: 300), image: createTestImage())
+        guard let button = view.liveTextButtonForTesting else {
+            Issue.record("没有右下角「识别文本」按钮")
+            return
+        }
+        #expect(button.prominence == .glass)
+        #expect(!button.showsAccentFill, "关着的时候是普通玻璃圆盘")
+
+        view.toggleLiveText()
+        #expect(view.liveTextButtonForTesting?.prominence == .accent)
+        #expect(view.liveTextButtonForTesting?.showsAccentFill == true)
+        // 蓝底上是白图标：不是墨色，也不换勾（macOS 那颗钮也不换图标）。
+        #expect(view.liveTextButtonForTesting?.renderedSymbolName == "text.viewfinder")
+
+        view.toggleLiveText()
+        #expect(view.liveTextButtonForTesting?.prominence == .glass)
+        #expect(view.liveTextButtonForTesting?.showsAccentFill == false)
+    }
+
     @Test("PinPanel 具备成为 Key 窗口的能力且去除了 nonactivatingPanel")
     func pinPanelCanBecomeKey() {
         let panel = PinPanel(

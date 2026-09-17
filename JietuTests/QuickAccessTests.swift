@@ -50,15 +50,16 @@ struct QuickAccessTests {
 
     @Test("卡片尺寸：极端宽高比被最小尺寸夹住，比例正常的原样算")
     func panelSizeClampsToMinimum() {
-        // 正常比例：只受上限约束（800×600 按 0.3 缩到 240×180）。
+        // 正常比例：截图等比塞进**内容区**（卡片减掉外框那一圈 8pt），再加上外框。
+        // 800×600 → 内容 219×164（被 164 高卡住）→ 卡片 235×180。
         #expect(QuickAccessView.panelSize(for: CGSize(width: 800, height: 600))
-            == CGSize(width: 240, height: 180))
+            == CGSize(width: 235, height: 180))
         #expect(QuickAccessView.panelSize(for: CGSize(width: 1000, height: 800))
-            == CGSize(width: 225, height: 180))
+            == CGSize(width: 221, height: 180))
 
-        // 竖长截图（600×1200）：按比例只有 90 宽 → 夹到最小宽度，图片居中留白。
+        // 竖长截图（600×1200）：按比例内容只有 82 宽 → 加外框 98，已不低于最小宽度。
         let tall = QuickAccessView.panelSize(for: CGSize(width: 600, height: 1200))
-        #expect(tall.width == Theme.Size.quickAccessCardMin.width)
+        #expect(tall.width == 98)
         #expect(tall.height == 180)
 
         // 超宽截图（1600×600）：按比例只有 98 高 → 夹到最小高度。
@@ -88,8 +89,8 @@ struct QuickAccessTests {
         #expect(view.imageDisplaySize == tiny, "小图按原始点尺寸显示，不放大")
     }
 
-    @Test("大图正好填满卡片：显示尺寸 = 卡片尺寸")
-    func largeImageFillsCard() {
+    @Test("大图正好填满内容区：截图不贴边，四周留一圈外框")
+    func largeImageFillsContentArea() {
         let pointSize = CGSize(width: 400, height: 300)
         let card = QuickAccessView.panelSize(for: pointSize)
         let view = QuickAccessView(
@@ -99,7 +100,10 @@ struct QuickAccessTests {
             onCopy: {}, onSave: {}, onAnnotate: {}, onPin: {}, onClose: {},
             onHoverChange: { _ in }, dragProvider: { NSItemProvider() }
         )
-        #expect(view.imageDisplaySize == card)
+        #expect(view.imageDisplaySize == view.contentAreaSize)
+        // 卡片比截图大一圈，且四面都是 `PreviewCard.inset`。
+        #expect(card.width - view.imageDisplaySize.width == PreviewCard.inset * 2)
+        #expect(card.height - view.imageDisplaySize.height == PreviewCard.inset * 2)
     }
 
     @Test("最小尺寸的卡片上，五个图标互不重叠、都在卡片里")

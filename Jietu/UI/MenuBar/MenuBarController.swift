@@ -17,6 +17,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onCaptureFullScreen: (() -> Void)?
     var onCaptureTimed: ((TimeInterval) -> Void)?
     var onCaptureScrolling: (() -> Void)?
+    var onStartRecording: (() -> Void)?
     var onOpenRecent: ((URL) -> Void)?
     var onClearRecents: (() -> Void)?
     var onOpenFolder: (() -> Void)?
@@ -85,6 +86,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(item("全屏截图", #selector(handleCaptureFullScreen), symbol: "rectangle.fill"))
         menu.addItem(timedCaptureItem())
         menu.addItem(item("滚动长图…", #selector(handleCaptureScrolling), symbol: "scroll"))
+        menu.addItem(item("录屏…", #selector(handleStartRecording), symbol: "record.circle"))
 
         menu.addItem(.separator())
 
@@ -288,6 +290,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     @objc private func handleCaptureTimed(_ sender: NSMenuItem) {
         guard let seconds = sender.representedObject as? TimeInterval else { return }
         onCaptureTimed?(seconds)
+    }
+
+    @objc private func handleStartRecording() {
+        onStartRecording?()
     }
 
     @objc private func handleCaptureScrolling() {

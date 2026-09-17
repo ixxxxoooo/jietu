@@ -95,20 +95,50 @@ enum CaptureOutput {
             throw CaptureOutputError.encodingFailed
         }
 
+        let url = try uniqueURL(
+            in: directory, nameTemplate: nameTemplate, fileExtension: format.fileExtension, date: date
+        )
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    /// 把**已有文件**搬进保存目录（录屏的 mp4 走这条：先写临时文件，收工才落盘）。
+    ///
+    /// 命名规则与截图完全一致（模板 + 同名自动加序号）——两处共用 `uniqueURL`。
+    static func moveFile(
+        _ source: URL,
+        toDirectory directory: URL,
+        nameTemplate: String = FilenameTemplate.defaultTemplate,
+        fileExtension: String = "mp4",
+        date: Date = Date()
+    ) throws -> URL {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = try uniqueURL(
+            in: directory, nameTemplate: nameTemplate, fileExtension: fileExtension, date: date
+        )
+        try FileManager.default.moveItem(at: source, to: url)
+        return url
+    }
+
+    /// 按命名模板算出一个**目录里还不存在**的文件 URL（同名就追加 -1 / -2 …）。
+    static func uniqueURL(
+        in directory: URL,
+        nameTemplate: String,
+        fileExtension: String,
+        date: Date = Date()
+    ) throws -> URL {
         let counter = FilenameTemplate.nextCounter(
             template: nameTemplate,
             in: directory,
-            fileExtension: format.fileExtension
+            fileExtension: fileExtension
         )
         let base = FilenameTemplate.makeName(template: nameTemplate, date: date, counter: counter)
-
-        var url = directory.appendingPathComponent("\(base).\(format.fileExtension)")
+        var url = directory.appendingPathComponent("\(base).\(fileExtension)")
         var suffix = 1
         while FileManager.default.fileExists(atPath: url.path) {
-            url = directory.appendingPathComponent("\(base)-\(suffix).\(format.fileExtension)")
+            url = directory.appendingPathComponent("\(base)-\(suffix).\(fileExtension)")
             suffix += 1
         }
-        try data.write(to: url, options: .atomic)
         return url
     }
 

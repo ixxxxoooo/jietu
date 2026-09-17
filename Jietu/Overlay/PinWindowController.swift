@@ -4,15 +4,19 @@ import VisionKit
 
 /// 「钉图」：把截图钉在屏幕上，作为一个可拖动、可缩放的浮动窗口。
 ///
+/// 外观是 macOS 自己那个截图预览窗口的样子（见 `PreviewCard`）：截图不贴边，
+/// 外面留一圈大圆角玻璃外框；四个角上悬停浮出玻璃按钮。
+///
 /// 支持：
 /// - 拖动任意位置移动
 /// - 拖动边缘 / 角改变大小（保持宽高比）
 /// - 滚轮 / 触控板捏合缩放
-/// - 右键菜单：实况文本（OCR）、复制图像、关闭
+/// - 右键菜单：识别文本、翻译、复制图像、关闭
 /// - 双击关闭；Esc 关闭；⌘W 快速关闭
-/// - 右上角磨砂玻璃关闭按钮（悬停显示；进入实况文本后常驻）
+/// - 右上角磨砂玻璃关闭按钮（悬停显示；进入识别文本后常驻）
 /// - 左上角编辑按钮：点一下回到标注编辑器（钉图关掉，编辑器用同一张图打开）
-/// - 右下角实况文本按钮：点开即选中态，右上角挂对勾；再点一次退出
+/// - 左下角翻译按钮：识别图上的文字，交给 **macOS 自己的翻译面板**（Translation.framework）
+/// - 右下角识别文本按钮：点开即选中态，按钮转成 macOS 那颗蓝底实心样式；再点一次退出
 ///
 /// @author ixxxxoooo
 final class PinWindowController: NSObject {
@@ -42,10 +46,12 @@ final class PinWindowController: NSObject {
         let target = screen ?? NSScreen.main
         let visible = target?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
 
+        // 卡片外框那一圈不算截图：所有尺寸都先按内容算，再包上 `PreviewCard.inset`。
+        let inset = PreviewCard.inset
         let frame: NSRect
         if let targetFrame, targetFrame.width > 1, targetFrame.height > 1 {
-            // 原地钉图：直接使用编辑器里图片所在的位置与大小。
-            frame = targetFrame
+            // 原地钉图：给的是截图该占的位置与大小，外框往外扩一圈（图不挪地方）。
+            frame = targetFrame.insetBy(dx: -inset, dy: -inset)
         } else {
             // 默认按**原始大小**显示：像素尺寸除以屏幕缩放。超过屏幕 90% 才等比缩小。
             let backingScale = target?.backingScaleFactor ?? 2
@@ -53,12 +59,20 @@ final class PinWindowController: NSObject {
                 width: CGFloat(image.width) / backingScale,
                 height: CGFloat(image.height) / backingScale
             )
-            let maxSize = CGSize(width: visible.width * 0.9, height: visible.height * 0.9)
+            let maxSize = CGSize(
+                width: visible.width * 0.9 - inset * 2,
+                height: visible.height * 0.9 - inset * 2
+            )
             let scale = min(
                 1,
                 min(maxSize.width / naturalSize.width, maxSize.height / naturalSize.height)
             )
-            let size = CGSize(width: naturalSize.width * scale, height: naturalSize.height * scale)
+            let size = PreviewCard.cardSize(
+                forContent: CGSize(
+                    width: naturalSize.width * scale,
+                    height: naturalSize.height * scale
+                )
+            )
             // 钉在屏幕正中；每多钉一张向右下错开一点，避免完全重叠。
             let offset = CGFloat(PinWindowController.controllers.count % 6) * 24
             let origin = CGPoint(
@@ -170,6 +184,7 @@ final class PinPanel: NSPanel {
 /// @author ixxxxoooo
 final class PinContentView: NSView {
     let cgImage: CGImage
+    /// 截图本身。尺寸按**内容区**给（窗口比它大一圈外框）。
     private let nsImage: NSImage
     private var activeHandle: SelectionHandle?
     private var isDraggingWindow = false
@@ -181,6 +196,10 @@ final class PinContentView: NSView {
     /// 点了左上角的「编辑」：回到标注编辑器（由 `PinWindowController` 转出去）。
     var onRequestEdit: (() -> Void)?
 
+    /// 卡片外框（截图底下那层玻璃 + 描边）。
+    private let chrome = PreviewCardChrome()
+    /// 截图本身，单独一层视图。
+    private let imageView: PinImageView
     private var editButton: GlassControlButton?
     private var closeButton: GlassControlButton?
     private var liveTextOverlay: ImageAnalysisOverlayView?
@@ -188,17 +207,35 @@ final class PinContentView: NSView {
     private var liveTextButton: GlassControlButton?
     private var isLiveTextOn = false
 
+    /// 左下角「翻译」。
+    private var translateButton: GlassControlButton?
+    /// 系统翻译面板（macOS 自己的翻译 UI），只在第一次点「翻译」时挂上。
+    private let translationPresenter = SystemTranslationPresenter()
+    private var translationHostInstalled = false
+    private var isTranslating = false
+    /// 识别过的原文（同一张图只用识别一次）。
+    private var recognizedText: String?
+
+    /// 截图在窗口里的矩形（原点左下）。
+    private var contentRect: NSRect { PreviewCard.contentRect(in: bounds) }
+
     init(frame: NSRect, image: CGImage) {
         self.cgImage = image
-        self.nsImage = NSImage(cgImage: image, size: frame.size)
+        let contentSize = PreviewCard.contentRect(in: NSRect(origin: .zero, size: frame.size)).size
+        let nsImage = NSImage(cgImage: image, size: contentSize)
+        self.nsImage = nsImage
+        self.imageView = PinImageView(image: nsImage)
         super.init(frame: frame)
         wantsLayer = true
-        layer?.cornerRadius = 10
-        layer?.masksToBounds = true
         layerContentsRedrawPolicy = .duringViewResize
+
+        addSubview(chrome)
+        imageView.frame = contentRect
+        addSubview(imageView)
         configureEditButton()
         configureCloseButton()
         configureLiveTextButton()
+        configureTranslateButton()
 
         // 若鼠标当前已落在窗口范围内，初始就展示浮动按钮
         if frame.contains(NSEvent.mouseLocation) {
@@ -225,6 +262,9 @@ final class PinContentView: NSView {
         }
         if let liveTextButton, !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
             return liveTextButton
+        }
+        if let translateButton, !translateButton.isHidden, translateButton.frame.contains(point) {
+            return translateButton
         }
         // 边缘手柄检测区优先由 PinContentView 响应，避免被全屏覆盖的实况文本视图拦截
         if PinGeometry.handle(at: point, in: bounds) != nil {
@@ -263,8 +303,8 @@ final class PinContentView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSGraphicsContext.current?.imageInterpolation = .high
-        nsImage.draw(in: bounds)
+        // 截图不在这里画：`draw` 落在子视图**下面**，卡片玻璃（子视图）会把它糊掉。
+        // 见 `PinImageView`。
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -320,6 +360,9 @@ final class PinContentView: NSView {
             NSCursor.arrow.set()
         } else if let liveTextButton, !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
             NSCursor.arrow.set()
+        } else if let translateButton, !translateButton.isHidden,
+            translateButton.frame.contains(point) {
+            NSCursor.arrow.set()
         } else if let handle = activeHandle {
             SelectionCursor.cursor(for: handle).set()
         } else if let handle = PinGeometry.handle(at: point, in: bounds) {
@@ -345,11 +388,12 @@ final class PinContentView: NSView {
 
     // MARK: - Floating Buttons
 
-    /// 浮动按钮（右上角「关闭」、右下角「实况文本」）的统一显隐入口。
+    /// 四个角上浮动按钮（编辑 / 关闭 / 翻译 / 识别文本）的统一显隐入口。
     private func setFloatingButtonsVisible(_ visible: Bool) {
         editButton?.isHidden = !visible
         closeButton?.isHidden = !visible
         liveTextButton?.isHidden = !visible
+        translateButton?.isHidden = !visible
     }
 
     /// 依鼠标是否落在窗口内刷新浮动按钮；无窗口（构造期 / 测试）时保持原状。
@@ -369,6 +413,9 @@ final class PinContentView: NSView {
         )
         liveTextButton?.setHovering(
             liveTextButton.map { !$0.isHidden && $0.frame.contains(point) } ?? false
+        )
+        translateButton?.setHovering(
+            translateButton.map { !$0.isHidden && $0.frame.contains(point) } ?? false
         )
     }
 
@@ -394,6 +441,10 @@ final class PinContentView: NSView {
         }
         if let liveTextButton, !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
             toggleLiveText()
+            return
+        }
+        if let translateButton, !translateButton.isHidden, translateButton.frame.contains(point) {
+            handleTranslate()
             return
         }
 
@@ -430,7 +481,8 @@ final class PinContentView: NSView {
                 handle: handle,
                 startMouse: startMouse,
                 currentMouse: currentMouse,
-                aspectRatio: aspectRatio
+                aspectRatio: aspectRatio,
+                contentInset: PreviewCard.inset
             )
             window.setFrame(newFrame, display: true, animate: false)
             window.invalidateShadow()
@@ -494,6 +546,7 @@ final class PinContentView: NSView {
             factor: factor,
             mouseLocationInWindow: mouseInWindow,
             aspectRatio: CGFloat(cgImage.width) / CGFloat(cgImage.height),
+            contentInset: PreviewCard.inset,
             maxSize: maxSize
         )
 
@@ -525,7 +578,7 @@ final class PinContentView: NSView {
 
         menu.addItem(NSMenuItem.separator())
 
-        let liveTextTitle = isLiveTextOn ? "退出实况文本" : "实况文本"
+        let liveTextTitle = isLiveTextOn ? "退出识别文本" : "识别文本"
         let liveTextItem = NSMenuItem(
             title: liveTextTitle,
             action: #selector(toggleLiveText),
@@ -533,6 +586,14 @@ final class PinContentView: NSView {
         )
         liveTextItem.target = self
         menu.addItem(liveTextItem)
+
+        let translateItem = NSMenuItem(
+            title: "翻译…",
+            action: #selector(handleTranslate),
+            keyEquivalent: ""
+        )
+        translateItem.target = self
+        menu.addItem(translateItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -550,9 +611,11 @@ final class PinContentView: NSView {
     @objc private func handleActualSize() {
         guard let window else { return }
         let scale = window.backingScaleFactor > 0 ? window.backingScaleFactor : 2
-        let naturalSize = CGSize(
-            width: CGFloat(cgImage.width) / scale,
-            height: CGFloat(cgImage.height) / scale
+        let naturalSize = PreviewCard.cardSize(
+            forContent: CGSize(
+                width: CGFloat(cgImage.width) / scale,
+                height: CGFloat(cgImage.height) / scale
+            )
         )
         let currentFrame = window.frame
         let origin = CGPoint(
@@ -594,11 +657,15 @@ final class PinContentView: NSView {
         self.closeButton = button
     }
 
+    /// 识别文本：`text.viewfinder`，跟 macOS 那颗 Live Text 按钮同一个图标。
+    ///
+    /// 关着是普通玻璃圆盘，点亮后换成**蓝底白图标的实心**（`prominence = .accent`）——
+    /// 「亮着」这件事由外形直接说，不用再挂个勾。
     private func configureLiveTextButton() {
         let button = GlassControlButton(
             symbol: "text.viewfinder",
             diameter: 28,
-            tooltip: "实况文本"
+            tooltip: "识别文本"
         )
         button.onClick = { [weak self] in
             self?.toggleLiveText()
@@ -608,11 +675,29 @@ final class PinContentView: NSView {
         self.liveTextButton = button
     }
 
+    /// 左下角「翻译」：胶囊 + 图标 + 文字（与浮窗中央那颗「保存」同一套外形）。
+    private func configureTranslateButton() {
+        let button = GlassControlButton(
+            symbol: "translate",
+            labelText: "翻译",
+            diameter: 28,
+            tooltip: "翻译（用 macOS 自己的翻译）"
+        )
+        button.onClick = { [weak self] in
+            self?.handleTranslate()
+        }
+        button.isHidden = true
+        addSubview(button)
+        self.translateButton = button
+    }
+
     override func layout() {
         super.layout()
+        chrome.frame = bounds
+        imageView.frame = contentRect
         let size: CGFloat = 28
         let padding: CGFloat = 8
-        // 「编辑」放左上角：右上角是关闭、右下角是实况文本，左上一个角刚好空着。
+        // 四角各一个：左上编辑、右上关闭、左下翻译、右下识别文本。
         editButton?.frame = CGRect(
             x: bounds.minX + padding,
             y: bounds.maxY - size - padding,
@@ -631,6 +716,19 @@ final class PinContentView: NSView {
             width: size,
             height: size
         )
+        if let translateButton {
+            let translateSize = translateButton.preferredSize
+            translateButton.frame = CGRect(
+                x: bounds.minX + padding,
+                y: bounds.minY + padding,
+                width: translateSize.width,
+                height: translateSize.height
+            )
+        }
+        // 识别文本的覆盖层只盖截图那块：卡片外框不是图，别把文字层画到框上去。
+        liveTextOverlay?.frame = contentRect
+        // 翻译面板从「翻译」按钮那块长出来。
+        translationPresenter.updateAnchor(translateButton?.frame ?? .zero)
     }
 
     override func mouseEntered(with event: NSEvent) {
@@ -639,7 +737,7 @@ final class PinContentView: NSView {
 
     override func mouseExited(with event: NSEvent) {
         let mouseInView = convert(event.locationInWindow, from: nil)
-        // 实况文本下按钮**常驻**：它是「退出实况文本」与「关闭钉图」的唯一可见入口。
+        // 识别文本下按钮**常驻**：它是「退出识别文本」与「关闭钉图」的唯一可见入口。
         if !bounds.contains(mouseInView), !isLiveTextOn {
             setFloatingButtonsVisible(false)
             NSCursor.arrow.set()
@@ -647,9 +745,10 @@ final class PinContentView: NSView {
         editButton?.setHovering(false)
         closeButton?.setHovering(false)
         liveTextButton?.setHovering(false)
+        translateButton?.setHovering(false)
     }
 
-    /// 点击才进入实况文本；默认拖动是移动窗口。
+    /// 点击才进入识别文本；默认拖动是移动窗口。
     @objc func toggleLiveText() {
         if isLiveTextOn {
             stopLiveText()
@@ -661,17 +760,18 @@ final class PinContentView: NSView {
     private func startLiveText() {
         guard liveTextOverlay == nil else { return }
         isLiveTextOn = true
-        // 按钮不隐藏：覆盖层会接走右键菜单，退出的路只剩这两个按钮。
+        // 按钮不隐藏：覆盖层会接走右键菜单，退出的路只剩这几个按钮。
         // 右上角「关闭」必须一直在（用户明确要求 OCR 时也要能关掉钉图），
-        // 右下角「实况文本」留着点回普通态。
+        // 右下角「识别文本」留着点回普通态。
         setFloatingButtonsVisible(true)
-        liveTextButton?.toolTip = "退出实况文本"
+        liveTextButton?.toolTip = "退出识别文本"
         liveTextButton?.isActive = true
+        // macOS 那颗 Live Text 按钮亮着就是蓝底实心。
+        liveTextButton?.prominence = .accent
 
         let overlay = ImageAnalysisOverlayView(liveTextDelegate)
         overlay.preferredInteractionTypes = .textSelection
-        overlay.frame = bounds
-        overlay.autoresizingMask = [.width, .height]
+        overlay.frame = contentRect
         let topView = closeButton ?? liveTextButton
         if let topView {
             addSubview(overlay, positioned: .below, relativeTo: topView)
@@ -699,13 +799,65 @@ final class PinContentView: NSView {
         liveTextOverlay = nil
         isLiveTextOn = false
         liveTextButton?.isActive = false
+        liveTextButton?.prominence = .glass
         liveTextButton?.isHidden = true
         closeButton?.isHidden = true
         editButton?.isHidden = true
+        translateButton?.isHidden = true
     }
 
     @objc private func handleExitLiveText() {
         stopLiveText()
+    }
+
+    // MARK: - 翻译（macOS 自己的翻译）
+
+    /// 点「翻译」：先认出图上的字，再把原文交给 **macOS 自己的翻译面板**
+    /// （`translationPresentation`，弹出来就是系统那个能选语言、能朗读的翻译框）。
+    ///
+    /// 跟 macOS 预览窗口的「翻译」按钮一个路子——它也是先 Live Text 认字再翻译。
+    @objc func handleTranslate() {
+        guard !isTranslating else { return }
+        if let recognizedText {
+            presentSystemTranslation(recognizedText)
+            return
+        }
+
+        isTranslating = true
+        translateButton?.toolTip = "正在识别…"
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let text = await OCRService.recognizeText(in: self.cgImage)
+            self.isTranslating = false
+            self.translateButton?.toolTip = "翻译（用 macOS 自己的翻译）"
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                self.presentNothingToTranslate()
+                return
+            }
+            self.recognizedText = trimmed
+            self.presentSystemTranslation(trimmed)
+        }
+    }
+
+    private func presentSystemTranslation(_ text: String) {
+        // 面板是系统弹窗，得让 App 在最前面，弹出来才看得见。
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        if translationHostInstalled == false {
+            translationPresenter.attach(to: self, anchor: translateButton?.frame ?? .zero)
+            translationHostInstalled = true
+        }
+        translationPresenter.updateAnchor(translateButton?.frame ?? .zero)
+        translationPresenter.present(text: text)
+    }
+
+    private func presentNothingToTranslate() {
+        let alert = NSAlert()
+        alert.messageText = "没识别到文字"
+        alert.informativeText = "这张图里没有可以翻译的文字。"
+        alert.addButton(withTitle: "好")
+        alert.runModal()
     }
 
     @objc private func handleCopy() {
@@ -717,8 +869,81 @@ final class PinContentView: NSView {
     @objc private func handleClose() {
         onRequestClose?()
     }
+
+    // MARK: - 测试钩子
+
+    /// 测试用：截图在窗口里的矩形（窗口比它大一圈外框）。
+    var contentRectForTesting: NSRect { contentRect }
+
+    /// 测试用：左下角「翻译」按钮。
+    var translateButtonForTesting: GlassControlButton? { translateButton }
+
+    /// 测试用：右下角「识别文本」按钮。
+    var liveTextButtonForTesting: GlassControlButton? { liveTextButton }
+
+    /// 测试用：预置「已识别的原文」，免去真跑一次 OCR。
+    func presetRecognizedText(_ text: String) {
+        recognizedText = text
+    }
+
+    /// 测试用：交给系统翻译的原文（没点过「翻译」是空串）。
+    var presentedTranslationText: String { translationPresenter.presentedText }
+
+    /// 测试用：系统翻译面板的宿主是不是挂上了。
+    var isTranslationHostAttached: Bool { translationHostInstalled }
+
+    /// 测试用：识别出来的原文（nil = 还没识别过）。空串说明图里没字。
+    var recognizedTextForTesting: String? { recognizedText }
+
+    /// 测试用：系统翻译面板是不是**我们要求弹出**了（SwiftUI 那边有没有接手另说）。
+    var isSystemTranslationPresented: Bool { translationPresenter.isPresented }
 }
 
+
+/// 卡片里那层截图。
+///
+/// 必须是**子视图**：AppKit 里父视图自己的 `draw` 永远落在子视图下面，
+/// 卡片底板（玻璃）也是子视图——截图要是还画在 `PinContentView.draw` 里，
+/// 就会被那层玻璃盖住、整张图被洗成一片模糊的白（自检截图里一眼就看出来了）。
+///
+/// @author ixxxxoooo
+final class PinImageView: NSView {
+    let image: NSImage
+
+    init(image: NSImage) {
+        self.image = image
+        super.init(frame: .zero)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .duringViewResize
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    /// 截图不参与命中：命中一律交给宿主（拖动 / 缩放手柄 / 四角按钮都在那儿判定）。
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard bounds.width > 1, bounds.height > 1 else { return }
+        let path = NSBezierPath(
+            roundedRect: bounds,
+            xRadius: PreviewCard.contentRadius,
+            yRadius: PreviewCard.contentRadius
+        )
+        NSGraphicsContext.saveGraphicsState()
+        path.addClip()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        image.draw(in: bounds)
+        NSGraphicsContext.restoreGraphicsState()
+
+        // 截图自己那圈发丝描边：白图 / 深图都从外框里「浮」出来（macOS 预览窗口同款）。
+        path.lineWidth = Theme.Size.hairline
+        NSColor.jietuCardStroke.setStroke()
+        path.stroke()
+    }
+}
 
 /// 实况文本覆盖层的 contentsRect 提供者（覆盖整张图）。
 ///

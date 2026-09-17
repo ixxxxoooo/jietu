@@ -8,6 +8,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case capture
     case hotkeys
     case quickAccess
+    case recording
     case annotation
     case permission
     case about
@@ -20,6 +21,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .capture: return "截图"
         case .hotkeys: return "快捷键"
         case .quickAccess: return "浮窗"
+        case .recording: return "录屏"
         case .annotation: return "标注"
         case .permission: return "权限"
         case .about: return "关于"
@@ -32,6 +34,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .capture: return "camera.viewfinder"
         case .hotkeys: return "keyboard"
         case .quickAccess: return "rectangle.on.rectangle"
+        case .recording: return "record.circle"
         case .annotation: return "pencil.tip.crop.circle"
         case .permission: return "lock.shield"
         case .about: return "info.circle"

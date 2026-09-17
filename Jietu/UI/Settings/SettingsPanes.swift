@@ -62,6 +62,51 @@ struct GeneralSettingsPane: View {
     }
 }
 
+/// 录屏：系统音频 / 帧率 / 保存位置。
+///
+/// 保存位置与截图共用（`saveDirectory`）——录下来的东西和截图落在一起最省心。
+///
+/// @author ixxxxoooo
+struct RecordingSettingsPane: View {
+    @Bindable var settings: SettingsStore
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(isOn: $settings.recordSystemAudio) {
+                    Text("录制系统声音")
+                    Text("把页面里的视频 / 音乐一起录进去（麦克风暂不支持）。")
+                }
+                Picker(selection: $settings.recordFrameRate) {
+                    Text("30 fps").tag(30)
+                    Text("60 fps").tag(60)
+                } label: {
+                    Text("帧率")
+                    Text("60 更顺滑，文件也更大。")
+                }
+            } header: {
+                SettingsSectionHeader(title: "录制")
+            }
+
+            Section {
+                LabeledContent {
+                    Button("在访达中显示") {
+                        NSWorkspace.shared.activateFileViewerSelecting([settings.saveDirectory])
+                    }
+                } label: {
+                    Text("保存位置")
+                    Text(settings.saveDirectory.path)
+                }
+            } header: {
+                SettingsSectionHeader(title: "输出")
+            } footer: {
+                Text("录屏保存为 mp4（H.264），与截图共用上面的位置与命名模板。")
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
 /// 截图：保存位置 / 格式 / 命名。
 ///
 /// @author ixxxxoooo

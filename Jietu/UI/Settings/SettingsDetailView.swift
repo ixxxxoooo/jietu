@@ -22,6 +22,8 @@ struct SettingsDetailView: View {
                 HotkeysSettingsPane(settings: settings, onHotkeyChange: onHotkeyChange)
             case .quickAccess:
                 QuickAccessSettingsPane(settings: settings)
+            case .recording:
+                RecordingSettingsPane(settings: settings)
             case .annotation:
                 AnnotationSettingsPane(settings: settings)
             case .permission:

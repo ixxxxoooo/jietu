@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import os
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -19,10 +20,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var scrollingPanel: ScrollingCapturePanelController?
     private var scrollingEscapeMonitor: Any?
     private var isScrollingCancelled = false
+    /// 正在进行的录屏会话与控制条 / 红框。
+    private var recordingEngine: RecordingEngine?
+    private var recordingHUD: RecordingControlPanel?
+    private var recordingBorder: RecordingBorderPanel?
+    private var recordingKeyMonitors: [Any] = []
+    /// 已录时长（秒，暂停不计）：收工时的通知里要写。
+    private var recordingElapsed: TimeInterval = 0
+
     /// 滚动长图的右侧实时预览。
     private var scrollingPreview: ScrollingPreviewPanel?
     /// 本次滚动长图的选区（含三套换算好的坐标）：用户中途改选区时跟着更新。
-    private var scrollingTarget: ScrollingTarget?
+    private var scrollingTarget: CaptureRegionTarget?
     /// 会话内的截图历史（新截的即时可见，不必先保存）。
     private var sessionHistory: [HistoryItem] = []
     private var annotationEditors: [AnnotationEditorWindowController] = []
@@ -67,6 +76,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runInlineScrollAppTest()
             return
         }
+        if CommandLine.arguments.contains(CaptureSelfTest.appLevelRecordingFlag) {
+            runRecordingAppTest()
+            return
+        }
         #endif
 
         if !ScreenCapturePermission.isGranted {
@@ -83,6 +96,128 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 与 `--selftest-inline-scroll` 分工：那条验「工具栏 → 模式 + 选区交出去」，
     /// 这条验「交出去之后 AppDelegate 真的把会话跑起来」。自检进程里没有 AppDelegate，
     /// 所以这条必须挂在真启动流程上（见 `CaptureSelfTest.appLevelInlineScrollFlag`）。
+    /// 自检（要**真 App 接线**）：菜单「录屏…」→ 遮罩框一块区域 → 红框 + 控制条起来 → 点完成 → 落盘。
+    ///
+    /// 这条验的是接线（选区域之后 AppDelegate 有没有真的把它变成一次录制、收工有没有真落盘），
+    /// 引擎本身的画质 / 时长 / 暂停由 `--selftest-record` 验。
+    private func runRecordingAppTest() {
+        Task { @MainActor in
+            var report: [String] = []
+            var budgets: [(label: String, milliseconds: Double?, limit: Double)] = []
+            let savedDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("jietu-record-apptest-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: savedDirectory) }
+            do {
+                // 落盘目录指到临时目录，别污染用户真实的截图文件夹。
+                settings.saveDirectory = savedDirectory
+                settings.showSaveNotification = false
+
+                func post(_ type: CGEventType, at point: CGPoint) {
+                    CGEvent(
+                        mouseEventSource: CGEventSource(stateID: .hidSystemState),
+                        mouseType: type,
+                        mouseCursorPosition: point,
+                        mouseButton: .left
+                    )?.post(tap: .cghidEventTap)
+                }
+
+                // 1. 走菜单那条路：进遮罩，等用户框区域。
+                handleScreenRecording()
+                try? await Task.sleep(for: .milliseconds(900))
+                report.append("遮罩弹出了=\(overlays.isPresenting ? "是" : "**否**")")
+
+                // 2. 注入一次拖拽当作「框好区域」。
+                let start = CGPoint(x: 420, y: 320)
+                let end = CGPoint(x: 980, y: 760)
+                post(.mouseMoved, at: CGPoint(x: 300, y: 220))
+                try? await Task.sleep(for: .milliseconds(150))
+                post(.mouseMoved, at: start)
+                try? await Task.sleep(for: .milliseconds(120))
+                post(.leftMouseDown, at: start)
+                for step in 1...6 {
+                    let t = CGFloat(step) / 6
+                    post(
+                        .leftMouseDragged,
+                        at: CGPoint(
+                            x: start.x + (end.x - start.x) * t,
+                            y: start.y + (end.y - start.y) * t
+                        )
+                    )
+                    try? await Task.sleep(for: .milliseconds(30))
+                }
+                post(.leftMouseUp, at: end)
+                try? await Task.sleep(for: .milliseconds(1200))
+
+                let engineUp = recordingEngine != nil
+                let hudUp = recordingHUD?.isVisible ?? false
+                let borderUp = recordingBorder?.isVisible ?? false
+                let overlayGone = !overlays.isPresenting
+                report.append(
+                    "选区交出去之后：会话=\(engineUp ? "在录" : "**没起来**")"
+                        + "，控制条=\(hudUp ? "可见" : "**不可见**")"
+                        + "，红框=\(borderUp ? "可见" : "**不可见**")"
+                        + "，遮罩=\(overlayGone ? "已收" : "**还在**")"
+                )
+                budgets.append(("会话起来了", engineUp ? 0 : nil, 0))
+                budgets.append(("控制条可见", hudUp ? 0 : nil, 0))
+                budgets.append(("红框可见", borderUp ? 0 : nil, 0))
+
+                // 3. 让画面动起来（不动的话 SCK 不出帧，成片可能是空的），再点「完成」。
+                for index in 0..<10 {
+                    let t = CGFloat(index) * 0.6
+                    post(
+                        .mouseMoved,
+                        at: CGPoint(
+                            x: (start.x + end.x) / 2 + cos(t) * 160,
+                            y: (start.y + end.y) / 2 + sin(t) * 100
+                        )
+                    )
+                    try? await Task.sleep(for: .milliseconds(90))
+                }
+                let stopAt = CFAbsoluteTimeGetCurrent()
+                if let engine = recordingEngine {
+                    await engine.stop()
+                }
+                try? await Task.sleep(for: .milliseconds(800))
+                let elapsed = (CFAbsoluteTimeGetCurrent() - stopAt) * 1000
+
+                let files = (try? FileManager.default.contentsOfDirectory(
+                    at: savedDirectory, includingPropertiesForKeys: nil
+                )) ?? []
+                let mp4 = files.first { $0.pathExtension == "mp4" }
+                var duration: Double = -1
+                if let mp4 {
+                    duration = (try? await AVURLAsset(url: mp4).load(.duration)).map {
+                        CMTimeGetSeconds($0)
+                    } ?? -1
+                }
+                report.append(
+                    "点完成 → 落盘：文件=\(mp4?.lastPathComponent ?? "**没有**")"
+                        + String(format: "，时长 %.2fs", duration)
+                        + "，控制条=\(recordingHUD == nil ? "已收" : "**没收**")"
+                )
+                budgets.append(("落盘出 mp4", mp4 != nil ? 0 : nil, 0))
+                budgets.append(("成片有内容（时长 > 0.2s）", duration > 0.2 ? 0 : nil, 0))
+                budgets.append(("收工后控制条收掉", recordingHUD == nil ? 0 : nil, 0))
+                report.append(String(format: "「完成」→ 收工耗时 %.0f ms", elapsed))
+
+                report.append("延迟预算：")
+                var failed = 0
+                for budget in budgets {
+                    let ok = budget.milliseconds != nil && budget.milliseconds! <= budget.limit
+                    if !ok { failed += 1 }
+                    report.append("    \(ok ? "✅" : "❌") \(budget.label)")
+                }
+                report.append("RESULT: \(failed == 0 ? "PASS" : "FAIL（\(failed) 项未达成）")")
+                CaptureSelfTest.finish(report, code: failed == 0 ? 0 : 1)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                CaptureSelfTest.finish(report, code: 1)
+            }
+        }
+    }
+
     private func runInlineScrollAppTest() {
         Task { @MainActor in
             var report: [String] = []
@@ -366,6 +501,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onCaptureFullScreen = { [weak self] in self?.handleFullScreenCapture() }
         menuBar.onCaptureTimed = { [weak self] seconds in self?.handleTimedCapture(after: seconds) }
         menuBar.onCaptureScrolling = { [weak self] in self?.handleScrollingCapture() }
+        menuBar.onStartRecording = { [weak self] in self?.handleScreenRecording() }
         menuBar.onOpenRecent = { url in
             NSWorkspace.shared.activateFileViewerSelecting([url])
         }
@@ -408,6 +544,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             handleTimedCapture(after: HotkeyAction.timedCaptureDelay)
         case .scrollingCapture:
             handleScrollingCapture()
+        case .screenRecording:
+            handleScreenRecording()
         }
     }
 
@@ -519,6 +657,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         PinWindowController.onRequestEdit = { [weak self] image, _ in
             self?.openAnnotationEditor(image)
         }
+        // 录屏：框好区域（或点一下窗口）就把遮罩收掉、开录。
+        overlays.onRecordRegionPicked = { [weak self] snapshot, localRect in
+            self?.beginRecording(snapshot: snapshot, localRect: localRect)
+        }
         overlays.onScrollCapture = { [weak self] snapshot, mode, localRect in
             self?.startScrollingCaptureFromInline(
                 snapshot: snapshot, mode: mode, localRect: localRect
@@ -537,7 +679,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 这里必须放行，否则测试根本起不来。
         guard !Self.isRunningTests else { return false }
         // app 级自检常与正式实例同时在场（它要真接线，不能当成"多开"被杀掉）。
-        guard !CommandLine.arguments.contains(CaptureSelfTest.appLevelInlineScrollFlag) else {
+        for flag in [
+            CaptureSelfTest.appLevelInlineScrollFlag, CaptureSelfTest.appLevelRecordingFlag,
+        ] where CommandLine.arguments.contains(flag) {
             return false
         }
         guard let bundleID = Bundle.main.bundleIdentifier, !bundleID.isEmpty else { return false }
@@ -648,6 +792,196 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Screen recording
+
+    /// 录屏入口：先弹遮罩框一块区域（或点一下某个窗口），松手即开录。
+    private func handleScreenRecording() {
+        guard recordingEngine == nil else {
+            logger.notice("recording ignored: already running")
+            return
+        }
+        guard !overlays.isPresenting else {
+            logger.notice("recording ignored: overlay is presenting")
+            return
+        }
+        guard requireScreenCapturePermission() else { return }
+
+        Task { @MainActor in
+            do {
+                let snapshots = try await capture.captureAllDisplays()
+                let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
+                overlays.purpose = .record
+                overlays.present(
+                    session: CaptureSession(snapshots: snapshots, windows: windows),
+                    inlineMode: false
+                )
+            } catch {
+                overlays.purpose = .screenshot
+                presentCaptureFailure(error)
+            }
+        }
+    }
+
+    /// 选区到手：收掉遮罩 → 上红框与控制条 → 开录。
+    private func beginRecording(snapshot: DisplaySnapshot, localRect: CGRect) {
+        guard recordingEngine == nil else { return }
+        guard let target = makeRegionTarget(snapshot: snapshot, localRect: localRect) else {
+            overlays.cancel()
+            return
+        }
+        // 遮罩用完即收：接着是红框 + 控制条，两者都会被录制排除。
+        overlays.cancel()
+
+        let screen = NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID }
+            ?? NSScreen.main
+        let border = RecordingBorderPanel()
+        border.present(around: target.selectionRect)
+        let hud = RecordingControlPanel()
+        hud.present(near: target.selectionRect, in: screen)
+        recordingBorder = border
+        recordingHUD = hud
+
+        let engine = RecordingEngine()
+        engine.onTick = { [weak self, weak hud] elapsed in
+            hud?.update(elapsed: elapsed)
+            self?.recordingElapsed = elapsed
+        }
+        engine.onFinish = { [weak self] url in self?.finishRecording(temporaryURL: url) }
+        engine.onFail = { [weak self] error in self?.failRecording(error) }
+        recordingEngine = engine
+        recordingElapsed = 0
+
+        hud.onTogglePause = { [weak self] in self?.toggleRecordingPause() }
+        hud.onStop = { [weak self] in
+            guard let engine = self?.recordingEngine else { return }
+            Task { await engine.stop() }
+        }
+        hud.onCancel = { [weak self] in self?.cancelRecording() }
+        registerRecordingKeyMonitors()
+
+        let options = RecordingEngine.Options(
+            fps: settings.recordFrameRate,
+            capturesSystemAudio: settings.recordSystemAudio
+        )
+        let excluded = [hud.windowNumber, border.windowNumber].compactMap { $0 }
+        Task { @MainActor in
+            do {
+                try await engine.start(
+                    displayID: snapshot.displayID,
+                    regionInPoints: target.region,
+                    options: options,
+                    excludingWindowNumbers: excluded
+                )
+            } catch {
+                failRecording(error)
+            }
+        }
+    }
+
+    /// 暂停 / 继续。
+    private func toggleRecordingPause() {
+        guard let engine = recordingEngine else { return }
+        if engine.isPaused {
+            engine.resume()
+            recordingHUD?.setPaused(false)
+        } else {
+            engine.pause()
+            recordingHUD?.setPaused(true)
+        }
+    }
+
+    /// 取消：不保存。
+    private func cancelRecording() {
+        guard let engine = recordingEngine else { return }
+        Task { await engine.cancel() }
+        stopRecordingUI()
+    }
+
+    /// 录屏收工：把临时 mp4 搬进保存目录（命名模板 + 同名序号），再给一条通知。
+    private func finishRecording(temporaryURL: URL) {
+        let elapsed = recordingElapsed
+        stopRecordingUI()
+        do {
+            let url = try CaptureOutput.moveFile(
+                temporaryURL,
+                toDirectory: settings.saveDirectory,
+                nameTemplate: settings.effectiveFilenameTemplate,
+                fileExtension: "mp4"
+            )
+            logger.notice("recording saved: \(url.lastPathComponent)")
+            if settings.showSaveNotification {
+                notifier.notifyRecordingSaved(fileURL: url, duration: elapsed)
+            }
+        } catch {
+            presentRecordingFailure(error)
+        }
+    }
+
+    private func failRecording(_ error: Error) {
+        logger.error("recording failed: \(error.localizedDescription)")
+        stopRecordingUI()
+        presentRecordingFailure(error)
+    }
+
+    private func presentRecordingFailure(_ error: Error) {
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "录屏没能完成"
+        alert.informativeText = error.localizedDescription
+        alert.addButton(withTitle: "好")
+        alert.runModal()
+    }
+
+    /// 收掉控制条 / 红框 / 按键监视器（会话本身由引擎自己收尾）。
+    private func stopRecordingUI() {
+        for monitor in recordingKeyMonitors {
+            NSEvent.removeMonitor(monitor)
+        }
+        recordingKeyMonitors.removeAll()
+        recordingHUD?.close()
+        recordingHUD = nil
+        recordingBorder?.close()
+        recordingBorder = nil
+        recordingEngine = nil
+    }
+
+    /// Esc = 取消（不保存）；⌘⇧P 暂停 / 继续；⌘⇧S 完成。
+    ///
+    /// 本地 + 全局都装：录屏时用户多半在操作别的 App，只有本地监视器收不到按键。
+    /// 全局监视器只能旁观、拦不住事件（系统限制），所以两边都挂。
+    private func registerRecordingKeyMonitors() {
+        for monitor in recordingKeyMonitors {
+            NSEvent.removeMonitor(monitor)
+        }
+        recordingKeyMonitors.removeAll()
+
+        let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if event.keyCode == 53 {
+                self.cancelRecording()
+                return nil
+            }
+            if flags == [.command, .shift], let key = event.charactersIgnoringModifiers?.lowercased() {
+                if key == "p" {
+                    self.toggleRecordingPause()
+                    return nil
+                }
+                if key == "s" {
+                    if let engine = self.recordingEngine { Task { await engine.stop() } }
+                    return nil
+                }
+            }
+            return event
+        }
+        let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53 else { return }
+            Task { @MainActor in self?.cancelRecording() }
+        }
+        recordingKeyMonitors = [local, global].compactMap { $0 }
+    }
+
     // MARK: - Scrolling capture
 
     /// 滚动长图：先用遮罩取一块选区；鼠标一停住就把「手动 / 自动」浮到选框下方，
@@ -711,7 +1045,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Scrolling capture: selection
 
     /// 滚动长图选区：三套坐标一次算好，用户中途改选区时跟着更新。
-    private struct ScrollingTarget {
+    /// 一块区域的三套坐标（滚动长图与录屏共用）。
+struct CaptureRegionTarget {
         let snapshot: DisplaySnapshot
         /// SCK 的 `sourceRect`（本显示器内、原点左上）。
         let region: CGRect
@@ -721,10 +1056,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let selectionRect: CGRect
     }
 
-    private func makeScrollingTarget(
+    /// 把「本显示器 local 矩形」换算成三套坐标（SCK 的 sourceRect / 全局 cg / 面板摆放用的 AppKit 全局）。
+    ///
+    /// 滚动长图与录屏都用它：前者反复采样同一块，后者开一条采集流。
+    private func makeRegionTarget(
         snapshot: DisplaySnapshot,
         localRect: CGRect
-    ) -> ScrollingTarget? {
+    ) -> CaptureRegionTarget? {
         let screenFrame = snapshot.screenFrameInPoints
         // local（原点左下）→ 显示器坐标（原点左上），SCK 的 sourceRect 用后者。
         let region = CGRect(
@@ -749,7 +1087,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             width: localRect.width,
             height: localRect.height
         )
-        return ScrollingTarget(
+        return CaptureRegionTarget(
             snapshot: snapshot,
             region: region,
             globalRect: globalRect,
@@ -767,7 +1105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         localRect: CGRect
     ) {
         guard scrollingSession == nil else { return }
-        guard let target = makeScrollingTarget(snapshot: snapshot, localRect: localRect) else {
+        guard let target = makeRegionTarget(snapshot: snapshot, localRect: localRect) else {
             return
         }
         // 上一次可能还留着一条模式条（用户没点开始也没取消）：先收干净。
@@ -790,7 +1128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 鼠标在选区上停住（或松手）：把紧凑的「手动 / 自动」条浮到选框下方。
     private func presentScrollingModeBar(snapshot: DisplaySnapshot, localRect: CGRect) {
         guard overlays.purpose == .regionPick, scrollingSession == nil else { return }
-        guard let target = makeScrollingTarget(snapshot: snapshot, localRect: localRect) else {
+        guard let target = makeRegionTarget(snapshot: snapshot, localRect: localRect) else {
             return
         }
         scrollingTarget = target
@@ -818,7 +1156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateScrollingSelection(snapshot: DisplaySnapshot, localRect: CGRect?) {
         guard overlays.purpose == .regionPick, scrollingSession == nil else { return }
         guard let localRect,
-            let target = makeScrollingTarget(snapshot: snapshot, localRect: localRect)
+            let target = makeRegionTarget(snapshot: snapshot, localRect: localRect)
         else {
             dismissScrollingPanel()
             return
