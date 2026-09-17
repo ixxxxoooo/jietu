@@ -142,6 +142,7 @@ final class QuickAccessPanelController {
             saveDirectory: saveDirectory,
             dragURL: dragURL
         )
+        entry.deadline = nextDeadline()
         let wasEmpty = entries.isEmpty
         entries.append(entry)
         if wasEmpty { onVisibilityChanged?(true) }
