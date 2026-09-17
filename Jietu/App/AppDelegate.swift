@@ -307,6 +307,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 cancelScrollingCapture()
                 try? await Task.sleep(for: .milliseconds(600))
 
+                // MARK: 三、钉图上的「编辑」：点了要回到标注编辑器。
+                // 按钮本身 → 回调这条链由 `--selftest-pin` 验；这里验 AppDelegate 接的那一段
+                // （收掉钉图、用同一张图开编辑器）。
+                if let pinImage = try? CaptureSelfTest.makeTestImage(width: 520, height: 340) {
+                    PinWindowController.pin(image: pinImage, on: NSScreen.main)
+                    try? await Task.sleep(for: .milliseconds(700))
+                    let editorsBefore = annotationEditors.count
+                    let pinnedVisible = NSApp.windows.contains { $0 is PinPanel && $0.isVisible }
+                    PinWindowController.onRequestEdit?(pinImage, .zero)
+                    try? await Task.sleep(for: .milliseconds(700))
+                    let editorOpened = annotationEditors.count > editorsBefore
+                        && (annotationEditors.last?.isVisible ?? false)
+                    report.append(
+                        "钉图「编辑」→ 标注编辑器：钉图在=\(pinnedVisible ? "是" : "**否**")"
+                            + "，编辑器=\(editorOpened ? "打开了" : "**没打开**")"
+                    )
+                    budgets.append(("钉图「编辑」→ 编辑器", editorOpened ? 0 : nil, 0))
+                }
+
                 report.append("延迟预算：")
                 var failed = 0
                 for budget in budgets {
@@ -496,6 +515,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // 就地编辑工具栏里的「滚动截图 → 手动 / 自动」：用户已经选过模式了，
         // 直接拿当前选区开跑，不再弹「手动 / 自动」模式条。
+        // 钉图上的「编辑」：把钉图收掉，用同一张图开标注编辑器（回到编辑窗口）。
+        PinWindowController.onRequestEdit = { [weak self] image, _ in
+            self?.openAnnotationEditor(image)
+        }
         overlays.onScrollCapture = { [weak self] snapshot, mode, localRect in
             self?.startScrollingCaptureFromInline(
                 snapshot: snapshot, mode: mode, localRect: localRect

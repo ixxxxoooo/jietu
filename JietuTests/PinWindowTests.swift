@@ -5,6 +5,34 @@ import Testing
 @Suite("钉图窗口与交互")
 struct PinWindowTests {
 
+    private func enterExit(_ type: NSEvent.EventType, at point: NSPoint) -> NSEvent {
+        NSEvent.enterExitEvent(
+            with: type,
+            location: point,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 1,
+            trackingNumber: 1,
+            userData: nil
+        )!
+    }
+
+    private func mouseEvent(_ type: NSEvent.EventType, at point: NSPoint) -> NSEvent {
+        NSEvent.mouseEvent(
+            with: type,
+            location: point,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 1,
+            clickCount: 1,
+            pressure: type == .leftMouseDown ? 1 : 0
+        )!
+    }
+
     private func createTestImage(width: Int = 200, height: Int = 150) -> CGImage {
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let ctx = CGContext(
@@ -171,6 +199,32 @@ struct PinWindowTests {
 
         panel.cancelOperation(nil)
         #expect(closeCalled == true)
+    }
+
+    @Test("左上角「编辑」按钮可点击并触发 onRequestEdit（回到标注编辑器）")
+    func editButtonTriggersEdit() {
+        let image = createTestImage()
+        let view = PinContentView(frame: NSRect(x: 0, y: 0, width: 200, height: 150), image: image)
+        view.layout()
+
+        var editCalled = false
+        view.onRequestEdit = { editCalled = true }
+
+        view.mouseEntered(with: enterExit(.mouseEntered, at: NSPoint(x: 100, y: 75)))
+
+        // 左上角编辑按钮中心：x = 8 + 14 = 22，y = 150 - 8 - 14 = 128。
+        let center = NSPoint(x: 22, y: 128)
+        guard let button = view.hitTest(center) else {
+            Issue.record("未命中左上角编辑按钮")
+            return
+        }
+        // 命中对象必须是按钮本身（命中 view 就会变成拖拽 / 缩放边缘）。
+        #expect(button !== view)
+        #expect(button.acceptsFirstMouse(for: nil))
+
+        button.mouseDown(with: mouseEvent(.leftMouseDown, at: center))
+        button.mouseUp(with: mouseEvent(.leftMouseUp, at: center))
+        #expect(editCalled)
     }
 
     @Test("右上角关闭按钮区域优先响应点击，不被边缘缩放手柄劫持")

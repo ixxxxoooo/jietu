@@ -744,6 +744,7 @@ enum CaptureSelfTest {
                 let buttonCenters = [
                     ("右上关闭", closeCenter),
                     ("右下实况文本", CGPoint(x: frame.maxX - 22, y: frame.minY + 22)),
+                    ("左上编辑", CGPoint(x: frame.minX + 22, y: frame.maxY - 22)),
                 ]
                 for (name, center) in buttonCenters {
                     let disc = luminance(in: snapshot, at: center, size: 6)
@@ -824,8 +825,47 @@ enum CaptureSelfTest {
                     report.append("关闭按钮：3 秒内窗口**没关掉**")
                 }
 
-                report.append("RESULT: \(turnedGreen ? "PASS" : "FAIL")")
-                finish(report, code: turnedGreen ? 0 : 1)
+                // 左上角「编辑」：点一下应当把「图 + 钉图位置」交出去，并把自己收掉
+                // （回到标注编辑器那条路）。再钉一张来验：上面那张已经关掉了。
+                PinWindowController.pin(image: image, on: screen)
+                try? await Task.sleep(for: .milliseconds(700))
+                var editHandoff: (imageSize: CGSize, rect: CGRect)?
+                PinWindowController.onRequestEdit = { edited, rect in
+                    editHandoff = (CGSize(width: edited.width, height: edited.height), rect)
+                }
+                let editCenter = CGPoint(x: frame.minX + 22, y: frame.maxY - 22)
+                let editClick = CGPoint(
+                    x: editCenter.x, y: DisplayGeometry.referenceHeight - editCenter.y
+                )
+                postMouse(.mouseMoved, at: editClick)
+                try? await Task.sleep(for: .milliseconds(250))
+                let editPressAt = CFAbsoluteTimeGetCurrent()
+                postMouse(.leftMouseDown, at: editClick)
+                try? await Task.sleep(for: .milliseconds(80))
+                postMouse(.leftMouseUp, at: editClick)
+                var editMs: Double?
+                while CFAbsoluteTimeGetCurrent() - editPressAt < 2 {
+                    if editHandoff != nil {
+                        editMs = (CFAbsoluteTimeGetCurrent() - editPressAt) * 1000
+                        break
+                    }
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
+                let pinGone = !NSApp.windows.contains { $0 is PinPanel && $0.isVisible }
+                report.append(
+                    String(
+                        format: "左上角「编辑」→ %@ %@，交出的图=%@，钉图已收掉=%@",
+                        editHandoff == nil ? "**没触发**" : "已触发",
+                        describe(milliseconds: editMs),
+                        editHandoff.map { "\(Int($0.imageSize.width))×\(Int($0.imageSize.height))" } ?? "—",
+                        pinGone ? "是" : "**否**"
+                    )
+                )
+                let editOK = editHandoff?.imageSize == CGSize(width: image.width, height: image.height)
+                    && pinGone
+
+                report.append("RESULT: \(turnedGreen && editOK ? "PASS" : "FAIL")")
+                finish(report, code: turnedGreen && editOK ? 0 : 1)
             } catch {
                 report.append("error: \(error.localizedDescription)")
                 report.append("RESULT: FAIL")
@@ -1784,7 +1824,8 @@ enum CaptureSelfTest {
     }
 
     /// 自检用的小图：彩色块 + 斜线，够看出缩放 / 裁切。
-    private static func makeTestImage(width: Int, height: Int) throws -> CGImage {
+    /// 自检用的小图（app 级自检也要用）。
+    static func makeTestImage(width: Int, height: Int) throws -> CGImage {
         guard
             let context = CGContext(
                 data: nil, width: width, height: height,

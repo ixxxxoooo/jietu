@@ -11,11 +11,17 @@ import VisionKit
 /// - 右键菜单：实况文本（OCR）、复制图像、关闭
 /// - 双击关闭；Esc 关闭；⌘W 快速关闭
 /// - 右上角磨砂玻璃关闭按钮（悬停显示；进入实况文本后常驻）
+/// - 左上角编辑按钮：点一下回到标注编辑器（钉图关掉，编辑器用同一张图打开）
 /// - 右下角实况文本按钮：点开即选中态，右上角挂对勾；再点一次退出
 ///
 /// @author ixxxxoooo
 final class PinWindowController: NSObject {
     private static var controllers: [PinWindowController] = []
+
+    /// 点了钉图上的「编辑」：把图与钉图的位置交给外面（`AppDelegate` 据此开标注编辑器）。
+    ///
+    /// 钉图本身不碰编辑器——它连 AppDelegate 都不该知道；这条闭包由 AppDelegate 在启动时接上。
+    static var onRequestEdit: ((CGImage, CGRect) -> Void)?
 
     private let window: NSWindow
     private let content: PinContentView
@@ -86,6 +92,7 @@ final class PinWindowController: NSObject {
         window.acceptsMouseMovedEvents = true
 
         content.onRequestClose = { [weak self] in self?.close() }
+        content.onRequestEdit = { [weak self] in self?.requestEdit() }
 
         // Esc / ⌘W 快捷关闭当前 key 钉图浮窗
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -99,8 +106,19 @@ final class PinWindowController: NSObject {
                 self.close()
                 return nil
             }
+            if flags == .command, event.charactersIgnoringModifiers?.lowercased() == "e" {
+                self.requestEdit()
+                return nil
+            }
             return event
         }
+    }
+
+    /// 「编辑」：先把钉图收掉，再把图交给外面开编辑器（回到编辑器的感觉，不留一张重复的钉图）。
+    private func requestEdit() {
+        let frame = window.frame
+        close()
+        PinWindowController.onRequestEdit?(content.cgImage, frame)
     }
 
     private func close() {
@@ -160,7 +178,10 @@ final class PinContentView: NSView {
     private var trackingArea: NSTrackingArea?
 
     var onRequestClose: (() -> Void)?
+    /// 点了左上角的「编辑」：回到标注编辑器（由 `PinWindowController` 转出去）。
+    var onRequestEdit: (() -> Void)?
 
+    private var editButton: GlassControlButton?
     private var closeButton: GlassControlButton?
     private var liveTextOverlay: ImageAnalysisOverlayView?
     private let liveTextDelegate = PinLiveTextDelegate()
@@ -175,6 +196,7 @@ final class PinContentView: NSView {
         layer?.cornerRadius = 10
         layer?.masksToBounds = true
         layerContentsRedrawPolicy = .duringViewResize
+        configureEditButton()
         configureCloseButton()
         configureLiveTextButton()
 
@@ -195,6 +217,9 @@ final class PinContentView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard bounds.contains(point) else { return nil }
+        if let editButton, !editButton.isHidden, editButton.frame.contains(point) {
+            return editButton
+        }
         if let closeButton, !closeButton.isHidden, closeButton.frame.contains(point) {
             return closeButton
         }
@@ -289,7 +314,9 @@ final class PinContentView: NSView {
     }
 
     private func updateCursor(at point: CGPoint) {
-        if let closeButton, !closeButton.isHidden, closeButton.frame.contains(point) {
+        if let editButton, !editButton.isHidden, editButton.frame.contains(point) {
+            NSCursor.arrow.set()
+        } else if let closeButton, !closeButton.isHidden, closeButton.frame.contains(point) {
             NSCursor.arrow.set()
         } else if let liveTextButton, !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
             NSCursor.arrow.set()
@@ -320,6 +347,7 @@ final class PinContentView: NSView {
 
     /// 浮动按钮（右上角「关闭」、右下角「实况文本」）的统一显隐入口。
     private func setFloatingButtonsVisible(_ visible: Bool) {
+        editButton?.isHidden = !visible
         closeButton?.isHidden = !visible
         liveTextButton?.isHidden = !visible
     }
@@ -333,6 +361,9 @@ final class PinContentView: NSView {
     /// 圆形按钮的悬停态统一在这里算：宿主视图的 tracking 比按钮自己的更可靠
     /// （按钮自 `isHidden` 切换后不一定重建 tracking area）。
     private func updateButtonHover(at point: NSPoint) {
+        editButton?.setHovering(
+            editButton.map { !$0.isHidden && $0.frame.contains(point) } ?? false
+        )
         closeButton?.setHovering(
             closeButton.map { !$0.isHidden && $0.frame.contains(point) } ?? false
         )
@@ -353,6 +384,10 @@ final class PinContentView: NSView {
         }
 
         let point = convert(event.locationInWindow, from: nil)
+        if let editButton, !editButton.isHidden, editButton.frame.contains(point) {
+            onRequestEdit?()
+            return
+        }
         if let closeButton, !closeButton.isHidden, closeButton.frame.contains(point) {
             onRequestClose?()
             return
@@ -531,6 +566,20 @@ final class PinContentView: NSView {
 
     // MARK: - Close & Live Text Buttons
 
+    private func configureEditButton() {
+        let button = GlassControlButton(
+            symbol: "square.and.pencil",
+            diameter: 28,
+            tooltip: "编辑 (⌘E)"
+        )
+        button.onClick = { [weak self] in
+            self?.onRequestEdit?()
+        }
+        button.isHidden = true
+        addSubview(button)
+        self.editButton = button
+    }
+
     private func configureCloseButton() {
         let button = GlassControlButton(
             symbol: "xmark",
@@ -563,6 +612,13 @@ final class PinContentView: NSView {
         super.layout()
         let size: CGFloat = 28
         let padding: CGFloat = 8
+        // 「编辑」放左上角：右上角是关闭、右下角是实况文本，左上一个角刚好空着。
+        editButton?.frame = CGRect(
+            x: bounds.minX + padding,
+            y: bounds.maxY - size - padding,
+            width: size,
+            height: size
+        )
         closeButton?.frame = CGRect(
             x: bounds.maxX - size - padding,
             y: bounds.maxY - size - padding,
@@ -588,6 +644,7 @@ final class PinContentView: NSView {
             setFloatingButtonsVisible(false)
             NSCursor.arrow.set()
         }
+        editButton?.setHovering(false)
         closeButton?.setHovering(false)
         liveTextButton?.setHovering(false)
     }
@@ -644,6 +701,7 @@ final class PinContentView: NSView {
         liveTextButton?.isActive = false
         liveTextButton?.isHidden = true
         closeButton?.isHidden = true
+        editButton?.isHidden = true
     }
 
     @objc private func handleExitLiveText() {
