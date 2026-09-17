@@ -14,6 +14,8 @@ import SwiftUI
 /// @author ixxxxoooo
 struct QuickAccessView: View {
     let image: NSImage
+    /// 截图的**自然点尺寸**（像素 ÷ 屏幕缩放）：决定它在卡片里显示多大。
+    var imagePointSize: CGSize = .zero
     /// 卡片尺寸（由控制器按截图尺寸算好，保证与面板 frame 一致）。
     let cardSize: CGSize
     var onCopy: () -> Void
@@ -30,6 +32,17 @@ struct QuickAccessView: View {
 
     private static let cornerRadius = Theme.Radius.menuPanel
 
+    /// 图片在卡片里该显示多大：等比放进卡片，且**不放大**（小图保持原始点尺寸、居中留白）。
+    var imageDisplaySize: CGSize {
+        let size = imagePointSize.width > 0 && imagePointSize.height > 0 ? imagePointSize : cardSize
+        let fit = min(cardSize.width / size.width, cardSize.height / size.height)
+        let scale = min(1, fit)
+        return CGSize(
+            width: max(1, (size.width * scale).rounded()),
+            height: max(1, (size.height * scale).rounded())
+        )
+    }
+
     /// 卡片尺寸：按截图宽高比等比塞进最大框，再夹进**最小框**。
     ///
     /// 只等比缩放 → 不拉伸、不变形；只受上下限约束 → 尺寸不同的截图走同一套交互。
@@ -37,11 +50,17 @@ struct QuickAccessView: View {
     /// 最小框是给极端宽高比兜底的：竖长截图（1:4）按比例算出来只有几十点宽，
     /// 四角按钮会互相压住、中央胶囊也放不下；超宽截图则只剩十几点高。
     /// 夹住之后图片按比例居中留白（`.fit`），既不拉伸，按钮也永远有地方站。
-    static func panelSize(for imageSize: CGSize) -> CGSize {
+    /// 卡片尺寸：等比缩放到上下限之间，**不放大**。
+    ///
+    /// - Parameter imagePointSize: 图片的自然点尺寸（不是像素）。
+    static func panelSize(for imagePointSize: CGSize) -> CGSize {
         let maxSize = Theme.Size.quickAccessCardMax
         let minSize = Theme.Size.quickAccessCardMin
+        let imageSize = imagePointSize
         guard imageSize.width > 0, imageSize.height > 0 else { return maxSize }
-        let scale = min(maxSize.width / imageSize.width, maxSize.height / imageSize.height)
+        // `min(1, ...)`：小图**不放大**（截了 20×10 点的图就按 20×10 显示，
+        // 卡片按最小尺寸兜底、图片居中）。以前这里没夹 1，几十像素的小图会被撑到 260 宽。
+        let scale = min(1, min(maxSize.width / imageSize.width, maxSize.height / imageSize.height))
         return CGSize(
             width: min(maxSize.width, max(minSize.width, (imageSize.width * scale).rounded())),
             height: min(maxSize.height, max(minSize.height, (imageSize.height * scale).rounded()))
@@ -55,11 +74,18 @@ struct QuickAccessView: View {
                 .resizable()
                 // `.fit`：卡片正好是图片的等比尺寸时=铺满；被最小尺寸夹住时=居中留白（不裁切、不拉伸）。
                 .aspectRatio(contentMode: .fit)
-                .frame(width: cardSize.width, height: cardSize.height)
+                // 不铺满整张卡片：`imageDisplaySize` 已经保证「放得下且不放大」，
+                // 小图居中、大图正好填满卡片。
+                .frame(width: imageDisplaySize.width, height: imageDisplaySize.height)
                 // 悬停时轻微模糊，把底下的毛玻璃透出来；不压色、不缩放，
                 // 按钮自己带玻璃底，不靠压暗截图来凸显。
-                .blur(radius: isHovering ? 16 : 0)
+                // 模糊半径跟着图片尺寸走：固定 16 会把几十点的小图直接糊没（只剩一块毛玻璃）。
+                .blur(radius: isHovering ? min(16, max(4, imageDisplaySize.width / 8)) : 0)
                 .clipped()
+                // 热区再撑回**整张卡片**：小图（几十点）在卡片里居中留白，边上也得能点 / 能拖。
+                // 手势只能挂在图片这一层：挂到上面的 ZStack 上，SwiftUI 会把点击装到容器上，
+                // 连 AppKit 那层图标按钮的点击都一起抢走（自检里量到五个图标全点不动）。
+                .frame(width: cardSize.width, height: cardSize.height)
                 .contentShape(Rectangle())
                 .onTapGesture { onAnnotate() }
                 .onDrag { dragProvider() }

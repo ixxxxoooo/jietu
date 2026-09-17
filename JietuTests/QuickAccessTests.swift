@@ -71,6 +71,37 @@ struct QuickAccessTests {
         #expect(extreme == CGSize(width: 260, height: Theme.Size.quickAccessCardMin.height))
     }
 
+    @Test("小图不放大：卡片按最小尺寸兜底，图片保持原始点尺寸")
+    func tinyImageIsNotUpscaled() {
+        // 40×20 像素（2x 屏 = 20×10 点）的小截图。
+        let tiny = CGSize(width: 20, height: 10)
+        let card = QuickAccessView.panelSize(for: tiny)
+        #expect(card == Theme.Size.quickAccessCardMin, "小卡片尺寸兜到最小框")
+
+        let view = QuickAccessView(
+            image: NSImage(size: NSSize(width: 20, height: 10)),
+            imagePointSize: tiny,
+            cardSize: card,
+            onCopy: {}, onSave: {}, onAnnotate: {}, onPin: {}, onClose: {},
+            onHoverChange: { _ in }, dragProvider: { NSItemProvider() }
+        )
+        #expect(view.imageDisplaySize == tiny, "小图按原始点尺寸显示，不放大")
+    }
+
+    @Test("大图正好填满卡片：显示尺寸 = 卡片尺寸")
+    func largeImageFillsCard() {
+        let pointSize = CGSize(width: 400, height: 300)
+        let card = QuickAccessView.panelSize(for: pointSize)
+        let view = QuickAccessView(
+            image: NSImage(size: NSSize(width: 400, height: 300)),
+            imagePointSize: pointSize,
+            cardSize: card,
+            onCopy: {}, onSave: {}, onAnnotate: {}, onPin: {}, onClose: {},
+            onHoverChange: { _ in }, dragProvider: { NSItemProvider() }
+        )
+        #expect(view.imageDisplaySize == card)
+    }
+
     @Test("最小尺寸的卡片上，五个图标互不重叠、都在卡片里")
     func minimumCardStillFitsControls() {
         let card = Theme.Size.quickAccessCardMin

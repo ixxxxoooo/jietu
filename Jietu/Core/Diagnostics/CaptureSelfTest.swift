@@ -540,7 +540,13 @@ enum CaptureSelfTest {
                 budgets.append(("卡片本体单击", tapMs, 250))
 
                 // 7. 极端宽高比：卡片按最小尺寸兜底，图标不能互相压住（并留一张截图给人看）。
-                for size in [CGSize(width: 700, height: 2800), CGSize(width: 4000, height: 100)] {
+                // 第三张是「很小的图」：不该被放大（用户报过小图被撑大）。
+                let extremes = [
+                    CGSize(width: 700, height: 2800),
+                    CGSize(width: 4000, height: 100),
+                    CGSize(width: 40, height: 24),
+                ]
+                for size in extremes {
                     guard let extreme = try? makeTestImage(width: Int(size.width), height: Int(size.height))
                     else { continue }
                     let card = QuickAccessView.panelSize(for: size)

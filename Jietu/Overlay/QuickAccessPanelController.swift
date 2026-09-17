@@ -70,18 +70,21 @@ final class QuickAccessPanelController {
 
     func present(image: CGImage, onDisplay displayID: CGDirectDisplayID, saveDirectory: URL) {
         let id = UUID()
-        // 卡片尺寸按截图宽高比算：尺寸不同的截图走同一套交互，只是框大小不同。
-        let panelSize = QuickAccessView.panelSize(
-            for: CGSize(width: image.width, height: image.height)
+        // 卡片尺寸按截图的**自然点尺寸**（像素 ÷ 屏幕缩放）算，与它在屏幕上占多大一致：
+        // 尺寸不同的截图走同一套交互，只是框大小不同；小图不会被放大。
+        let screen = NSScreen.screens.first { $0.jietu_displayID == displayID } ?? NSScreen.main
+        let backingScale = max(1, screen?.backingScaleFactor ?? 2)
+        let pointSize = CGSize(
+            width: CGFloat(image.width) / backingScale,
+            height: CGFloat(image.height) / backingScale
         )
-        let nsImage = NSImage(
-            cgImage: image,
-            size: NSSize(width: image.width, height: image.height)
-        )
+        let panelSize = QuickAccessView.panelSize(for: pointSize)
+        let nsImage = NSImage(cgImage: image, size: NSSize(width: pointSize.width, height: pointSize.height))
         let dragURL = Self.writeDragFile(image)
 
         let root = QuickAccessView(
             image: nsImage,
+            imagePointSize: pointSize,
             cardSize: panelSize,
             onCopy: { [weak self] in
                 self?.onCopy?(image)
@@ -130,7 +133,6 @@ final class QuickAccessPanelController {
         panel.isReleasedWhenClosed = false
         panel.contentView = hosting
 
-        let screen = NSScreen.screens.first { $0.jietu_displayID == displayID } ?? NSScreen.main
         let target = frameFor(index: entries.count, size: panelSize, screen: screen)
         panel.setFrame(offscreenFrame(from: target, screen: screen), display: false)
         panel.alphaValue = 0
