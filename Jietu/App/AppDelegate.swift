@@ -42,7 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 本次滚动长图的选区（含三套换算好的坐标）：用户中途改选区时跟着更新。
     private var scrollingTarget: CaptureRegionTarget?
     /// 会话内的截图历史（新截的即时可见，不必先保存）。
-    private var sessionHistory: [HistoryItem] = []
     private var annotationEditors: [AnnotationEditorWindowController] = []
     /// 动作 → Carbon 热键引用 id。
     private var hotkeyIDs: [HotkeyAction: UInt32] = [:]
@@ -138,6 +137,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         recentMenuReport.append("最近截图菜单项数=\(historyItems().count)")
 
+        // 1.5 走**真实那条路**（deliver）截一张：菜单项只能多一条，不能重复。
+        if let image {
+            let before = historyItems().count
+            deliver(image, onDisplay: CGMainDisplayID())
+            let after = historyItems().count
+            recentMenuReport.append(
+                "真实截一张：菜单项 \(before) → \(after)（多了 \(after - before) 条，"
+                    + "重复=\(after - before > 1 ? "**是**" : "否")）"
+            )
+            // deliver 会弹浮窗：收掉，别干扰后面。
+            quickAccess.dismiss()
+        }
+
         // 2. 空历史：该是一条原生灰字「暂无最近截图」。
         menuBar.historyItemsProvider = { [] }
         menuBar.menuNeedsUpdate(menuBar.recentMenuForTesting)
@@ -158,8 +170,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         popAndShootRecentMenu(menuBar.recentMenuForTesting, name: "data")
 
-        recentMenuReport.append("RESULT: \(survived ? "PASS" : "FAIL")")
-        CaptureSelfTest.finish(recentMenuReport, code: survived ? 0 : 1)
+        let noDuplicates = !recentMenuReport.contains { $0.contains("重复=**是**") }
+        let passed = survived && noDuplicates
+        recentMenuReport.append("RESULT: \(passed ? "PASS" : "FAIL")")
+        CaptureSelfTest.finish(recentMenuReport, code: passed ? 0 : 1)
     }
 
     /// 弹出「最近截图」子菜单一秒，拍一张系统截图再收掉。
@@ -1971,16 +1985,7 @@ struct CaptureRegionTarget {
 
     /// 落盘后的统一收尾：记入最近截图 + 图标闪烁 + 通知。
     private func didSave(to url: URL) {
-        if let first = sessionHistory.first, first.url == nil {
-            sessionHistory[0] = HistoryItem(
-                id: url.path,
-                date: first.date,
-                image: first.image,
-                url: url,
-                cgImage: first.cgImage
-            )
-        }
-        // 历史那条也记上「用户的文件在哪」：打开 / 在访达中显示都该落到它上面。
+        // 历史那条记上「用户的文件在哪」：打开 / 在访达中显示都该落到它上面。
         HistoryStore.shared.attachSavedFile(url, to: HistoryStore.shared.latestID)
         settings.recordCapture(url)
         logger.notice("saved capture to \(url.path, privacy: .public)")
@@ -2005,7 +2010,6 @@ struct CaptureRegionTarget {
     /// 清空所有历史与最近记录。
     private func clearAllHistory() {
         settings.clearRecentCaptures()
-        sessionHistory.removeAll()
         HistoryStore.shared.removeAll()
         HistoryThumbnailCache.shared.clear()
     }
@@ -2028,15 +2032,7 @@ struct CaptureRegionTarget {
         var seenURLs = Set<URL>()
         var result: [HistoryItem] = []
 
-        // 会话内那份带位图（复制走内存，快）。
-        for item in sessionHistory {
-            if let url = item.url {
-                seenURLs.insert(url)
-            }
-            result.append(item)
-        }
-
-        // 落盘历史：**重启后全靠它**（截图默认不入磁盘，会话那份一关就没了）。
+        // 落盘历史：唯一的那份（重启后全靠它）。
         for entry in HistoryStore.shared.entries {
             let url = entry.displayURL
             guard !seenURLs.contains(url) else { continue }
@@ -2073,21 +2069,12 @@ struct CaptureRegionTarget {
             .map { $0 }
     }
 
-    /// 记录一次截图到会话历史。
+    /// 记录一次截图到「最近截图」历史。
     ///
-    /// **同时落一份到 `HistoryStore`**：截图默认只进剪贴板，「最近截图」要是只认磁盘上的文件，
-    /// 重启后必然空（用户报的就是这个）。会话内那份还留着位图，复制走内存更快。
+    /// **只有这一份**（`HistoryStore`）：以前这里还另存一份内存里的会话历史，于是同一次截图
+    /// 会在菜单里出现两次（未保存的那份没有 url，按 url 去重根本抓不住它）。
     private func recordHistory(_ image: CGImage) {
         HistoryStore.shared.record(image)
-        let item = HistoryItem(
-            id: UUID().uuidString,
-            date: Date(),
-            image: NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height)),
-            url: nil,
-            cgImage: image
-        )
-        sessionHistory.insert(item, at: 0)
-        if sessionHistory.count > 40 { sessionHistory.removeLast(sessionHistory.count - 40) }
     }
 
     /// 打开截图保存目录（不存在则先创建）。
