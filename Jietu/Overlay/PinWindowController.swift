@@ -72,8 +72,8 @@ final class PinWindowController: NSObject {
         window.backgroundColor = .clear
         window.hasShadow = true
         window.level = .floating
-        // 交给系统做「拖动窗口」，我们只额外处理边缘缩放。
-        window.isMovableByWindowBackground = true
+        // 禁用系统自动拖动，由 PinContentView 自行区分边缘调整与内容拖拽。
+        window.isMovableByWindowBackground = false
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         window.hidesOnDeactivate = false
         window.animationBehavior = .none
@@ -116,14 +116,10 @@ final class PinPanel: NSPanel {
 ///
 /// @author ixxxxoooo
 final class PinContentView: NSView {
-    private enum Edge {
-        case left, right, top, bottom
-        case topLeft, topRight, bottomLeft, bottomRight
-    }
-
     let cgImage: CGImage
     private let nsImage: NSImage
-    private var activeEdge: Edge?
+    private var activeHandle: SelectionHandle?
+    private var isDraggingWindow = false
     private var startMouse = NSPoint.zero
     private var startFrame = NSRect.zero
     private var trackingArea: NSTrackingArea?
@@ -135,8 +131,6 @@ final class PinContentView: NSView {
     private let liveTextButton = NSButton()
     private var isLiveTextOn = false
 
-    private let edgeTolerance: CGFloat = 7
-
     init(frame: NSRect, image: CGImage) {
         self.cgImage = image
         self.nsImage = NSImage(cgImage: image, size: frame.size)
@@ -144,6 +138,7 @@ final class PinContentView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 10
         layer?.masksToBounds = true
+        layerContentsRedrawPolicy = .duringViewResize
         configureLiveTextButton()
 
         let doubleClick = NSClickGestureRecognizer(
@@ -163,27 +158,51 @@ final class PinContentView: NSView {
         fatalError("init(coder:) is not supported")
     }
 
+    override var mouseDownCanMoveWindow: Bool { false }
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    /// ⌘W 关掉这张钉图（和普通窗口一致）。
-    ///
-    /// 用 `performKeyEquivalent` 而不是全局监视器：它只在**钉图是 key window** 时被派发，
-    /// 所以不会把设置窗口 / 编辑器窗口的 ⌘W 抢走。
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard bounds.contains(point) else { return nil }
+        // 边缘手柄检测区优先由 PinContentView 响应，避免被全屏覆盖的实况文本视图拦截
+        if PinGeometry.handle(at: point, in: bounds) != nil {
+            return self
+        }
+        return super.hitTest(point)
+    }
+
+    /// 键盘快捷键响应：⌘W 关闭、⌘C 复制、⌘0 恢复实际大小
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if flags == .command, event.charactersIgnoringModifiers?.lowercased() == "w" {
-            onRequestClose?()
-            return true
+        if flags == .command {
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "w":
+                onRequestClose?()
+                return true
+            case "c":
+                handleCopy()
+                return true
+            case "0":
+                handleActualSize()
+                return true
+            default:
+                break
+            }
         }
         return super.performKeyEquivalent(with: event)
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        NSGraphicsContext.current?.imageInterpolation = .high
         nsImage.draw(in: bounds)
     }
 
-    // MARK: - Tracking / cursors
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        window?.invalidateCursorRects(for: self)
+    }
+
+    // MARK: - Tracking & Cursors
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -200,6 +219,217 @@ final class PinContentView: NSView {
         )
         addTrackingArea(area)
         trackingArea = area
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        discardCursorRects()
+        let tolerance = PinGeometry.defaultEdgeTolerance
+        let corner = PinGeometry.defaultCornerTolerance
+        let w = bounds.width
+        let h = bounds.height
+        guard w > corner * 2, h > corner * 2 else { return }
+
+        // 4 角
+        addCursorRect(CGRect(x: 0, y: h - corner, width: corner, height: corner), cursor: SelectionCursor.cursor(for: .topLeft))
+        addCursorRect(CGRect(x: w - corner, y: h - corner, width: corner, height: corner), cursor: SelectionCursor.cursor(for: .topRight))
+        addCursorRect(CGRect(x: 0, y: 0, width: corner, height: corner), cursor: SelectionCursor.cursor(for: .bottomLeft))
+        addCursorRect(CGRect(x: w - corner, y: 0, width: corner, height: corner), cursor: SelectionCursor.cursor(for: .bottomRight))
+
+        // 4 边
+        addCursorRect(CGRect(x: corner, y: h - tolerance, width: w - corner * 2, height: tolerance), cursor: SelectionCursor.cursor(for: .top))
+        addCursorRect(CGRect(x: corner, y: 0, width: w - corner * 2, height: tolerance), cursor: SelectionCursor.cursor(for: .bottom))
+        addCursorRect(CGRect(x: 0, y: corner, width: tolerance, height: h - corner * 2), cursor: SelectionCursor.cursor(for: .left))
+        addCursorRect(CGRect(x: w - tolerance, y: corner, width: tolerance, height: h - corner * 2), cursor: SelectionCursor.cursor(for: .right))
+    }
+
+    private func updateCursor(at point: CGPoint) {
+        if let handle = activeHandle {
+            SelectionCursor.cursor(for: handle).set()
+        } else if let handle = PinGeometry.handle(at: point, in: bounds) {
+            SelectionCursor.cursor(for: handle).set()
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        updateCursor(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        updateCursor(at: convert(event.locationInWindow, from: nil))
+    }
+
+    // MARK: - Mouse Dragging & Resizing
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeKey()
+        guard let window else {
+            super.mouseDown(with: event)
+            return
+        }
+
+        let point = convert(event.locationInWindow, from: nil)
+        if let handle = PinGeometry.handle(at: point, in: bounds) {
+            activeHandle = handle
+            isDraggingWindow = false
+            startFrame = window.frame
+            startMouse = NSEvent.mouseLocation
+            SelectionCursor.cursor(for: handle).set()
+        } else {
+            activeHandle = nil
+            isDraggingWindow = true
+            startFrame = window.frame
+            startMouse = NSEvent.mouseLocation
+            NSCursor.arrow.set()
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let window else { return }
+
+        let currentMouse = NSEvent.mouseLocation
+        if let handle = activeHandle {
+            let aspectRatio = CGFloat(cgImage.width) / CGFloat(cgImage.height)
+            let newFrame = PinGeometry.resizedFrame(
+                startFrame: startFrame,
+                handle: handle,
+                startMouse: startMouse,
+                currentMouse: currentMouse,
+                aspectRatio: aspectRatio
+            )
+            window.setFrame(newFrame, display: true, animate: false)
+            window.invalidateShadow()
+            window.invalidateCursorRects(for: self)
+            SelectionCursor.cursor(for: handle).set()
+        } else if isDraggingWindow {
+            let dx = currentMouse.x - startMouse.x
+            let dy = currentMouse.y - startMouse.y
+            let newOrigin = CGPoint(x: startFrame.origin.x + dx, y: startFrame.origin.y + dy)
+            window.setFrameOrigin(newOrigin)
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        activeHandle = nil
+        isDraggingWindow = false
+        window?.invalidateShadow()
+        window?.invalidateCursorRects(for: self)
+        updateCursor(at: convert(event.locationInWindow, from: nil))
+    }
+
+    // MARK: - Mouse Zoom (Wheel & Pinch)
+
+    override func scrollWheel(with event: NSEvent) {
+        guard let window else {
+            super.scrollWheel(with: event)
+            return
+        }
+
+        let delta: CGFloat
+        if event.hasPreciseScrollingDeltas {
+            delta = event.scrollingDeltaY * 0.005
+        } else {
+            delta = event.deltaY * 0.05
+        }
+
+        guard abs(delta) > 0.0001 else { return }
+
+        let factor = max(0.2, min(5.0, 1.0 + delta))
+        zoom(by: factor, mouseInWindow: event.locationInWindow)
+    }
+
+    override func magnify(with event: NSEvent) {
+        guard let window else {
+            super.magnify(with: event)
+            return
+        }
+
+        let factor = 1.0 + event.magnification
+        guard factor > 0.01 else { return }
+        zoom(by: factor, mouseInWindow: event.locationInWindow)
+    }
+
+    private func zoom(by factor: CGFloat, mouseInWindow: CGPoint) {
+        guard let window else { return }
+        let visible = (window.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 2560, height: 1600)
+        let maxSize = CGSize(width: visible.width * 3, height: visible.height * 3)
+
+        let newFrame = PinGeometry.zoomedFrame(
+            currentFrame: window.frame,
+            factor: factor,
+            mouseLocationInWindow: mouseInWindow,
+            aspectRatio: CGFloat(cgImage.width) / CGFloat(cgImage.height),
+            maxSize: maxSize
+        )
+
+        window.setFrame(newFrame, display: true, animate: false)
+        window.invalidateShadow()
+        window.invalidateCursorRects(for: self)
+    }
+
+    // MARK: - Context Menu
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu(title: "PinMenu")
+
+        let copyItem = NSMenuItem(
+            title: "复制图像",
+            action: #selector(handleCopy),
+            keyEquivalent: "c"
+        )
+        copyItem.target = self
+        menu.addItem(copyItem)
+
+        let actualSizeItem = NSMenuItem(
+            title: "实际大小 (100%)",
+            action: #selector(handleActualSize),
+            keyEquivalent: "0"
+        )
+        actualSizeItem.target = self
+        menu.addItem(actualSizeItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let liveTextTitle = isLiveTextOn ? "退出实况文本" : "实况文本"
+        let liveTextItem = NSMenuItem(
+            title: liveTextTitle,
+            action: #selector(toggleLiveText),
+            keyEquivalent: ""
+        )
+        liveTextItem.target = self
+        menu.addItem(liveTextItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let closeItem = NSMenuItem(
+            title: "关闭",
+            action: #selector(handleClose),
+            keyEquivalent: "w"
+        )
+        closeItem.target = self
+        menu.addItem(closeItem)
+
+        return menu
+    }
+
+    @objc private func handleActualSize() {
+        guard let window else { return }
+        let scale = window.backingScaleFactor > 0 ? window.backingScaleFactor : 2
+        let naturalSize = CGSize(
+            width: CGFloat(cgImage.width) / scale,
+            height: CGFloat(cgImage.height) / scale
+        )
+        let currentFrame = window.frame
+        let origin = CGPoint(
+            x: currentFrame.midX - naturalSize.width / 2,
+            y: currentFrame.midY - naturalSize.height / 2
+        )
+        window.setFrame(NSRect(origin: origin, size: naturalSize), display: true, animate: true)
+        window.invalidateShadow()
+        window.invalidateCursorRects(for: self)
     }
 
     // MARK: - Live Text
@@ -239,6 +469,7 @@ final class PinContentView: NSView {
 
     override func mouseExited(with event: NSEvent) {
         liveTextButton.isHidden = true
+        NSCursor.arrow.set()
     }
 
     /// 点击才进入实况文本；默认拖动是移动窗口。
