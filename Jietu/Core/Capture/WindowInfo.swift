@@ -7,6 +7,8 @@ struct WindowInfo {
     let ownerPID: pid_t
     let ownerName: String
     let title: String
+    /// 窗口层级（`kCGWindowLayer`，普通窗口是 0）。窗口排序要先对齐层级才生效。
+    let layer: Int
     /// cg 全局坐标（原点主屏左上，单位 point）。
     let frameInCGPoints: CGRect
 
@@ -51,6 +53,7 @@ enum WindowHitTester {
                 ownerPID: ownerPID,
                 ownerName: entry[kCGWindowOwnerName as String] as? String ?? "",
                 title: entry[kCGWindowName as String] as? String ?? "",
+                layer: layer,
                 frameInCGPoints: frame
             )
         }

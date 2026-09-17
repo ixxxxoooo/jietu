@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 拖拽授权面板：浮在系统设置下方，里面是一张可以拖进列表的 App 卡片。
+/// 拖拽授权面板：贴在系统设置窗口下面，并跟它**同一层级**，里面是一张可以拖进列表的 App 卡片。
 ///
 /// 不抢焦点（`nonactivatingPanel` 且不成为 key），拖拽开始时切成鼠标穿透，
 /// drop 才能落到下面系统设置的那一栏里。
@@ -13,6 +13,8 @@ final class PermissionDragPanel: NSPanel {
     private let sizingView: NSHostingView<AnyView>
     private let minimumHeight: CGFloat = 118
     private let screenInset: CGFloat = 12
+    /// 当前贴着的系统设置窗口，排序以它为基准（`snap(to:)` 时更新）。
+    private var settingsWindowNumber: CGWindowID?
 
     init(content: some View) {
         let view = AnyView(content)
@@ -25,7 +27,9 @@ final class PermissionDragPanel: NSPanel {
             defer: false
         )
 
-        level = .floating
+        // `NSPanel` 默认是 `.floating`，那会浮在**所有**普通窗口之上——
+        // 别的窗口盖住系统设置时，面板还杵在最前面。层级交给 `snap(to:)` 跟系统设置对齐。
+        level = .normal
         isReleasedWhenClosed = false
         isOpaque = false
         backgroundColor = .clear
@@ -49,17 +53,23 @@ final class PermissionDragPanel: NSPanel {
     func setDraggingPassthrough(_ dragging: Bool) {
         ignoresMouseEvents = dragging
         alphaValue = dragging ? 0.72 : 1
-        if dragging {
-            orderBack(nil)
-        } else {
-            orderFrontRegardless()
+        // 拖动时沉到系统设置窗口下面（仍与它同层），拖完浮回它正上方。
+        guard let number = settingsWindowNumber else {
+            dragging ? orderBack(nil) : orderFrontRegardless()
+            return
         }
+        order(dragging ? .below : .above, relativeTo: Int(number))
     }
 
-    /// 贴到系统设置窗口下方：对齐右侧内容区，并夹在当前屏幕的可见范围内。
-    func snap(to settingsFrame: CGRect) {
-        setFrame(targetFrame(for: settingsFrame), display: false)
-        orderFrontRegardless()
+    /// 贴到系统设置窗口下方：对齐右侧内容区，夹进当前屏幕可见范围，并排到该窗口正上方。
+    ///
+    /// 层级跟着系统设置走、排序以它的 windowNumber 为基准，所以**盖上系统设置的窗口
+    /// 也会盖住本面板**（不会像 `.floating` 那样浮在最前面）。
+    func snap(to target: SystemSettingsWindow.Target) {
+        level = NSWindow.Level(rawValue: target.level)
+        settingsWindowNumber = target.windowNumber
+        setFrame(targetFrame(for: target.appKitFrame), display: false)
+        order(.above, relativeTo: Int(target.windowNumber))
     }
 
     private func targetFrame(for settingsFrame: CGRect) -> CGRect {
@@ -175,13 +185,13 @@ final class PermissionDragController {
     }
 
     private func tick() {
-        guard let frame = SystemSettingsWindow.frameInCGPoints() else {
+        guard let target = SystemSettingsWindow.target() else {
             misses += 1
             if misses >= missLimit { close() }
             return
         }
         misses = 0
-        panel?.snap(to: SystemSettingsWindow.appKitFrame(fromCG: frame))
+        panel?.snap(to: target)
 
         // 兜底：拖拽回调万一没回来（拖到别的 App 上被打断），面板不能卡在鼠标穿透上，
         // 否则里面的按钮全都点不动。
