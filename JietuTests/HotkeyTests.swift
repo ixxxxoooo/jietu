@@ -60,6 +60,28 @@ struct HotkeyTests {
         #expect(hotkey.cocoaModifiers == [.command, .shift])
     }
 
+    @Test("老热键（没有存下字符）也能推出菜单要显示的那个键")
+    func menuKeyFallsBackToKeyCode() {
+        // 用户机器上那条真实数据：keyCode 0 = A、⌘⇧（没有 menuKeyEquivalent 字段）。
+        let legacy = Hotkey(keyCode: UInt32(kVK_ANSI_A), carbonModifiers: UInt32(cmdKey | shiftKey))
+        #expect(legacy.menuKey == "a")
+        #expect(legacy.cocoaModifiers == [.command, .shift])
+
+        // 数字 / 标点 / 功能键 / 方向键也能推。
+        #expect(Hotkey(keyCode: UInt32(kVK_ANSI_3), carbonModifiers: UInt32(cmdKey)).menuKey == "3")
+        #expect(Hotkey(keyCode: UInt32(kVK_ANSI_Slash), carbonModifiers: UInt32(cmdKey)).menuKey == "/")
+        let f1 = Hotkey(keyCode: UInt32(kVK_F1), carbonModifiers: UInt32(cmdKey)).menuKey
+        #expect(f1 == String(Character(UnicodeScalar(0xF704)!)), "F1 用 AppKit 那个私有区字符")
+        let up = Hotkey(keyCode: UInt32(kVK_UpArrow), carbonModifiers: UInt32(cmdKey)).menuKey
+        #expect(up == String(Character(UnicodeScalar(0xF700)!)))
+
+        // 录制时存下的字符优先（非美式键盘上它才准）。
+        let typed = Hotkey(
+            keyCode: UInt32(kVK_ANSI_A), carbonModifiers: UInt32(cmdKey), menuKeyEquivalent: "q"
+        )
+        #expect(typed.menuKey == "q")
+    }
+
     @Test("老数据（没有 menuKeyEquivalent 字段）照样能解码")
     func decodesLegacyHotkeyWithoutMenuKey() throws {
         let json = #"{"keyCode":15,"carbonModifiers":\#(UInt32(cmdKey | shiftKey))}"#

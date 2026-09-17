@@ -85,10 +85,11 @@ struct MenuBarTests {
     func menuShowsConfiguredHotkeysOnly() {
         let menuBar = MenuBarController()
         // 只给「区域截图」配一个 ⌘⇧1，别的都不配。
+        // 故意不传 menuKeyEquivalent：老数据就是这样（这个字段之前录的热键没有），
+        // 菜单得靠键码把「1」推出来——用户报的正是这条。
         let configured = Hotkey(
             keyCode: UInt32(kVK_ANSI_1),
-            carbonModifiers: UInt32(cmdKey | shiftKey),
-            menuKeyEquivalent: "1"
+            carbonModifiers: UInt32(cmdKey | shiftKey)
         )
         menuBar.hotkeyProvider = { action in action == .areaCapture ? configured : nil }
         menuBar.refresh()

@@ -137,6 +137,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         recentMenuReport.append("最近截图菜单项数=\(historyItems().count)")
 
+        // 菜单上的快捷键：拿**当前真实设置**刷一遍，看每一项显示成什么。
+        menuBar.refresh()
+        func shortcut(_ title: String) -> String {
+            guard let item = menuBar.menuForTesting.items.first(where: { $0.title == title }),
+                !item.keyEquivalent.isEmpty
+            else { return "—" }
+            var flags = ""
+            if item.keyEquivalentModifierMask.contains(.control) { flags += "⌃" }
+            if item.keyEquivalentModifierMask.contains(.option) { flags += "⌥" }
+            if item.keyEquivalentModifierMask.contains(.shift) { flags += "⇧" }
+            if item.keyEquivalentModifierMask.contains(.command) { flags += "⌘" }
+            return flags + item.keyEquivalent.uppercased()
+        }
+        recentMenuReport.append(
+            "菜单快捷键："
+                + ["区域截图", "窗口截图", "全屏截图", "滚动长图…", "区域录制", "窗口录制", "全屏录制"]
+                .map { "\($0)=\(shortcut($0))" }
+                .joined(separator: "，")
+        )
+
         // 1.5 走**真实那条路**（deliver）截一张：菜单项只能多一条，不能重复。
         //    临时关掉「保存到磁盘」：这一步只是验历史记录，别往用户的截图文件夹里塞测试图。
         if let image {
@@ -174,6 +194,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 + "，是卡片视图=\(menuBar.recentMenuForTesting.items.first?.view != nil)"
         )
         popAndShootRecentMenu(menuBar.recentMenuForTesting, name: "data")
+
+        // 4. 顶层菜单也弹出来拍一张：快捷键显示 + 截图/录制之间的分隔线一起看。
+        popAndShootRecentMenu(menuBar.menuForTesting, name: "main")
 
         let noDuplicates = !recentMenuReport.contains { $0.contains("重复=**是**") }
         let passed = survived && noDuplicates

@@ -55,6 +55,49 @@ extension Hotkey {
         )
     }
 
+    /// 菜单项要用的那个字符：**录制时存下的优先**（非美式键盘上它才准——同一个键码在不同布局上
+    /// 打出来的是不同的字），老数据（这个字段之前录的）没有就按键码推。
+    var menuKey: String? {
+        if let menuKeyEquivalent, !menuKeyEquivalent.isEmpty { return menuKeyEquivalent }
+        return Self.menuKey(forKeyCode: keyCode)
+    }
+
+    /// 键码 → 菜单 `keyEquivalent` 用的字符。
+    ///
+    /// - 字母 / 数字 / 标点：`keyNames` 里那份（显示用是大写，菜单用小写，AppKit 会按 Shift 自动大写）；
+    /// - 功能键 / 方向键：AppKit 那套 `NSxxxFunctionKey`（0xF700 起）——它们本来就是一个个字符。
+    static func menuKey(forKeyCode keyCode: UInt32) -> String? {
+        if let special = specialKeyCharacters[Int(keyCode)] { return special }
+        guard let name = keyNames[Int(keyCode)], name.count == 1 else { return nil }
+        return name.lowercased()
+    }
+
+    private static let specialKeyCharacters: [Int: String] = [
+        kVK_Return: "\r",
+        kVK_Tab: "\t",
+        kVK_Space: " ",
+        kVK_Delete: "\u{8}",
+        kVK_Escape: "\u{1B}",
+        kVK_ForwardDelete: scalar(0xF728),
+        kVK_LeftArrow: scalar(0xF702),
+        kVK_RightArrow: scalar(0xF703),
+        kVK_UpArrow: scalar(0xF700),
+        kVK_DownArrow: scalar(0xF701),
+        kVK_Home: scalar(0xF729),
+        kVK_End: scalar(0xF72B),
+        kVK_PageUp: scalar(0xF72C),
+        kVK_PageDown: scalar(0xF72D),
+        kVK_F1: scalar(0xF704), kVK_F2: scalar(0xF705), kVK_F3: scalar(0xF706),
+        kVK_F4: scalar(0xF707), kVK_F5: scalar(0xF708), kVK_F6: scalar(0xF709),
+        kVK_F7: scalar(0xF70A), kVK_F8: scalar(0xF70B), kVK_F9: scalar(0xF70C),
+        kVK_F10: scalar(0xF70D), kVK_F11: scalar(0xF70E), kVK_F12: scalar(0xF70F),
+    ]
+
+    private static func scalar(_ value: UInt32) -> String {
+        guard let scalar = UnicodeScalar(value) else { return "" }
+        return String(Character(scalar))
+    }
+
     /// 菜单项要用的修饰键掩码（Carbon → Cocoa）。
     var cocoaModifiers: NSEvent.ModifierFlags {
         var flags: NSEvent.ModifierFlags = []

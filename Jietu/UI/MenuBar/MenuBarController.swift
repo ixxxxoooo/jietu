@@ -101,7 +101,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 .fullScreenCapture, "全屏截图", #selector(handleCaptureFullScreen), "rectangle.fill"
             )
         )
-        menu.addItem(timedCaptureItem())
+        menu.addItem(timedCaptureItem())  // 自带子菜单，下一行补上快捷键显示
         menu.addItem(
             hotkeyItem(.scrollingCapture, "滚动长图…", #selector(handleCaptureScrolling), "scroll")
         )
@@ -188,7 +188,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func apply(hotkey: Hotkey?, to item: NSMenuItem) {
-        guard let hotkey, let key = hotkey.menuKeyEquivalent, !key.isEmpty else {
+        guard let hotkey, let key = hotkey.menuKey, !key.isEmpty else {
             item.keyEquivalent = ""
             item.keyEquivalentModifierMask = []
             return
@@ -207,6 +207,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func timedCaptureItem() -> NSMenuItem {
         let parent = NSMenuItem(title: "定时截图", action: nil, keyEquivalent: "")
         parent.image = NSImage(systemSymbolName: "timer", accessibilityDescription: nil)
+        // 配了「定时截图」热键也显示出来（它触发的是默认那档 3 秒）。
+        hotkeyItems.append((.timedCapture, parent))
+        apply(hotkey: hotkeyProvider?(.timedCapture), to: parent)
         let submenu = NSMenu()
         for seconds in [3.0, 5.0, 10.0] {
             let entry = NSMenuItem(
