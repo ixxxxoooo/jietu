@@ -42,7 +42,7 @@ struct MenuBarTests {
         #expect(callbackCalled == true)
     }
 
-    @Test("菜单里有区域 / 窗口 / 全屏三个录制入口，各自走各自的回调")
+    @Test("区域 / 窗口 / 全屏三个录制入口平铺在顶层（与截图同一列，中间一条分隔线），各走各的回调")
     @MainActor
     func recordingMenuItemsAreDistinct() {
         let menuBar = MenuBarController()
@@ -52,20 +52,23 @@ struct MenuBarTests {
         menuBar.onRecordFullScreen = { fired.append("fullScreen") }
 
         let menu = menuBar.menuForTesting
-        // 截图与录制分居两个子菜单：先确认结构，再逐条点。
-        let capture = menu.items.first { $0.title == "截图" }?.submenu
-        let recording = menu.items.first { $0.title == "录制" }?.submenu
-        #expect(capture != nil, "菜单里没有「截图 ▸」")
-        #expect(recording != nil, "菜单里没有「录制 ▸」")
-        #expect(!menu.items.contains { $0.title == "区域截图" }, "截图的动作不该再平铺在顶层")
-        #expect(!menu.items.contains { $0.title == "区域录制" }, "录制的动作不该再平铺在顶层")
-        #expect(capture?.items.map(\.title) == ["区域截图", "窗口截图", "全屏截图", "定时截图", "滚动长图…"])
-        #expect(recording?.items.map(\.title) == ["区域录制", "窗口录制", "全屏录制"])
+        // 两家族都平铺在顶层，中间**只用一条分隔线**隔开（不收起子菜单）。
+        #expect(!menu.items.contains { $0.title == "截图" && $0.submenu != nil })
+        #expect(!menu.items.contains { $0.title == "录制" && $0.submenu != nil })
+        let head = menu.items.prefix(9).map { $0.isSeparatorItem ? "———" : $0.title }
+        #expect(
+            Array(head) == [
+                "区域截图", "窗口截图", "全屏截图", "定时截图", "滚动长图…",
+                "———",
+                "区域录制", "窗口录制", "全屏录制",
+            ],
+            "截图与录制该是相邻两组，中间一条分隔线"
+        )
 
         let want = ["区域录制", "窗口录制", "全屏录制"]
         for title in want {
-            guard let item = recording?.items.first(where: { $0.title == title }) else {
-                Issue.record("「录制 ▸」里没有「\(title)」")
+            guard let item = menu.items.first(where: { $0.title == title }) else {
+                Issue.record("菜单里没有「\(title)」")
                 continue
             }
             #expect(item.target != nil)
