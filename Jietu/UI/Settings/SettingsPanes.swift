@@ -411,13 +411,12 @@ struct PermissionSettingsPane: View {
                 }
 
                 LabeledContent {
-                    HStack(spacing: Theme.Spacing.md) {
-                        Button("拖拽授权…") {
-                            PermissionDragController.shared.present(pane: .accessibility)
-                            refresh()
-                        }
-                        Button("打开系统设置") { AccessibilityPermission.openSystemSettings() }
+                    // 与「屏幕录制」保持一致：只留拖拽授权这一个出口，系统设置由面板自己打开。
+                    Button("拖拽授权…") {
+                        PermissionDragController.shared.present(pane: .accessibility)
+                        refresh()
                     }
+                    .help("打开系统设置并浮出面板，把本 App 的卡片拖进列表")
                 } label: {
                     Text("授权操作")
                 }
