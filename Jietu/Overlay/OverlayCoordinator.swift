@@ -38,8 +38,11 @@ final class OverlayCoordinator {
 
     /// 遮罩这一次要干什么（截图 / 只要一个矩形）。**用完即复位**，见 `finish()`。
     var purpose: Purpose = .screenshot
-    /// `purpose == .regionPick` 时，选区确定后回调（参数是选区所在显示器与 local 矩形）。
-    var onRegionPicked: ((DisplaySnapshot, CGRect) -> Void)?
+    /// `purpose == .regionPick` 时：鼠标在选区上停住（或松手）→ 选区 local 矩形。
+    /// 外面据此把「手动 / 自动」浮到选框下方。
+    var onSelectionPaused: ((DisplaySnapshot, CGRect) -> Void)?
+    /// `purpose == .regionPick` 时：选区被拖 / 缩放 / 清空（nil）→ 控制条跟着走。
+    var onSelectionChanged: ((DisplaySnapshot, CGRect?) -> Void)?
 
     /// 滚动长图期间遮罩**不关**：只留压暗 + 绿框当取景框（鼠标穿透）。
     private var isHoldingForScrollCapture = false
@@ -81,6 +84,14 @@ final class OverlayCoordinator {
             )
             controller.onCancel = { [weak self] in
                 self?.finish(.cancelled, reason: "canvas:cancel")
+            }
+            // 滚动长图起步：选区不急着交付，鼠标停住就交给外面的控制条。
+            controller.isRegionPickMode = (purpose == .regionPick)
+            controller.onSelectionPaused = { [weak self] localRect in
+                self?.onSelectionPaused?(snapshot, localRect)
+            }
+            controller.onSelectionChanged = { [weak self] localRect in
+                self?.onSelectionChanged?(snapshot, localRect)
             }
             controller.onCommit = { [weak self] localRect in
                 self?.commit(snapshot: snapshot, localRect: localRect)
@@ -143,16 +154,6 @@ final class OverlayCoordinator {
     }
 
     private func commit(snapshot: DisplaySnapshot, localRect: CGRect) {
-        // 只要选区（滚动长图）：把矩形交回去，**但遮罩留着当取景框**——
-        // 用户要能看着下面的页面滚，右侧还有实时预览。
-        if purpose == .regionPick {
-            logger.notice("region picked: holding overlay as scroll-capture chrome")
-            purpose = .screenshot
-            holdForScrollCapture()
-            onRegionPicked?(snapshot, localRect)
-            return
-        }
-
         guard let image = CaptureOutput.crop(snapshot, toLocalRect: localRect) else {
             logger.error("crop produced empty image")
             finish(.cancelled, reason: "crop-failed")
@@ -191,6 +192,13 @@ final class OverlayCoordinator {
             DisplayGeometry.appKitPoint(fromLocal: localRect.origin, screen: $0)
         } ?? localRect.origin
         return CGRect(origin: origin, size: localRect.size)
+    }
+
+    /// 滚动长图取景：遮罩留着、切成取景框外观、鼠标穿透，并把前台还给用户原来的 App。
+    ///
+    /// 由外部在用户**真的选了「手动 / 自动」之后**调用——在那之前用户还能继续调选区。
+    func beginScrollCaptureChrome() {
+        holdForScrollCapture()
     }
 
     /// 滚动长图取景：遮罩留着、切成取景框外观、鼠标穿透，并把前台还给用户原来的 App。

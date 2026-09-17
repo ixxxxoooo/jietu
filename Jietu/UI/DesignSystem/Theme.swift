@@ -187,6 +187,10 @@ enum Theme {
 
         /// 滚动长图控制条（高度按「一行状态 + 最多两行提示 + 一行按钮」算出来，不裁剪）。
         static let scrollingPanel = CGSize(width: 330, height: 136)
+        /// 滚动长图的「手动 / 自动」模式条：贴在选框下方的一条窄条（先选谁来滚）。
+        static let scrollingModeBar = CGSize(width: 252, height: 46)
+        /// 模式条上的关闭圆钮。
+        static let scrollingModeBarClose: CGFloat = 22
         /// 历史面板。
         static let historyPanel = CGSize(width: 340, height: 560)
         /// 权限引导窗口。

@@ -21,8 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isScrollingCancelled = false
     /// 滚动长图的右侧实时预览。
     private var scrollingPreview: ScrollingPreviewPanel?
-    /// 本次滚动长图的选区（AppKit 全局坐标）：控制条与预览都贴它定位。
-    private var scrollingSelectionRect: CGRect?
+    /// 本次滚动长图的选区（含三套换算好的坐标）：用户中途改选区时跟着更新。
+    private var scrollingTarget: ScrollingTarget?
     /// 会话内的截图历史（新截的即时可见，不必先保存）。
     private var sessionHistory: [HistoryItem] = []
     private var annotationEditors: [AnnotationEditorWindowController] = []
@@ -216,8 +216,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlays.onAnnotationDefaultsChange = { [weak self] updated in
             self?.settings.annotationDefaults = updated
         }
-        overlays.onRegionPicked = { [weak self] snapshot, localRect in
-            self?.startScrollingCapture(snapshot: snapshot, localRect: localRect)
+        // 滚动长图起步：选区不急着交付 —— 鼠标一停住（或一松手）就把
+        // 「手动 / 自动」浮到选框下方；在那之前用户还能继续调选区。
+        overlays.onSelectionPaused = { [weak self] snapshot, localRect in
+            self?.presentScrollingModeBar(snapshot: snapshot, localRect: localRect)
+        }
+        overlays.onSelectionChanged = { [weak self] snapshot, localRect in
+            self?.updateScrollingSelection(snapshot: snapshot, localRect: localRect)
         }
     }
 
@@ -341,14 +346,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Scrolling capture
 
-    /// 滚动长图：先用遮罩取一块选区；框选完成后由控制条上的按钮决定怎么滚。
+    /// 滚动长图：先用遮罩取一块选区；鼠标一停住就把「手动 / 自动」浮到选框下方，
+    /// 用户点哪一个才开跑。
     private func handleScrollingCapture() {
-        // 上一次可能停在「待开始」的控制条上（用户没点开始也没取消）：先收干净，
+        // 上一次可能停在那条模式条上（用户没点开始也没取消）：先收干净，
         // 否则新面板会把它盖住、旧的那条一直留在屏幕上。
-        if let panel = scrollingPanel, scrollingSession == nil {
+        if scrollingPanel != nil, scrollingSession == nil {
             logger.notice("dismissing leftover scrolling panel")
-            panel.close()
-            scrollingPanel = nil
+            dismissScrollingPanel()
         }
         guard !overlays.isPresenting else {
             logger.notice("scrolling capture ignored: overlay is presenting")
@@ -399,10 +404,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .manual
     }
 
-    /// 选区确定后**先不采样**：控制条浮在选区下方，等用户点「自动截图 / 开始截图」。
-    private func startScrollingCapture(snapshot: DisplaySnapshot, localRect: CGRect) {
-        overlays.purpose = .screenshot
+    // MARK: - Scrolling capture: selection
 
+    /// 滚动长图选区：三套坐标一次算好，用户中途改选区时跟着更新。
+    private struct ScrollingTarget {
+        let snapshot: DisplaySnapshot
+        /// SCK 的 `sourceRect`（本显示器内、原点左上）。
+        let region: CGRect
+        /// 全局 cg 坐标（自动滚动的合成滚轮事件发到这里）。
+        let globalRect: CGRect
+        /// 选区在 AppKit 全局坐标里的矩形（控制条与预览都贴它定位）。
+        let selectionRect: CGRect
+    }
+
+    private func makeScrollingTarget(
+        snapshot: DisplaySnapshot,
+        localRect: CGRect
+    ) -> ScrollingTarget? {
         let screenFrame = snapshot.screenFrameInPoints
         // local（原点左下）→ 显示器坐标（原点左上），SCK 的 sourceRect 用后者。
         let region = CGRect(
@@ -411,10 +429,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             width: localRect.width,
             height: localRect.height
         )
-        guard region.width >= 8, region.height >= 8 else {
-            presentCaptureFailure(CaptureError.emptyRegion)
-            return
-        }
+        guard region.width >= 8, region.height >= 8 else { return nil }
 
         // 自动滚动要往「全局 cg 坐标」发事件（原点主屏左上），这里换算一次。
         let screen = NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID }
@@ -425,50 +440,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             size: localRect.size
         )
 
-        let panel = ScrollingCapturePanelController()
-        scrollingPanel = panel
-        isScrollingCancelled = false
-
-        panel.onStartManual = { [weak self] in
-            self?.beginScrollingSession(
-                mode: .manual, snapshot: snapshot, region: region, globalRect: globalRect)
-        }
-        panel.onStartAuto = { [weak self] in
-            self?.beginScrollingSession(
-                mode: .automatic, snapshot: snapshot, region: region, globalRect: globalRect)
-        }
-        panel.onFinish = { [weak self] in self?.scrollingSession?.stop() }
-        panel.onCancel = { [weak self] in self?.cancelScrollingCapture() }
-
         let selectionRect = CGRect(
             x: screenFrame.minX + localRect.minX,
             y: screenFrame.minY + localRect.minY,
             width: localRect.width,
             height: localRect.height
         )
-        scrollingSelectionRect = selectionRect
-        panel.present(near: selectionRect)
+        return ScrollingTarget(
+            snapshot: snapshot,
+            region: region,
+            globalRect: globalRect,
+            selectionRect: selectionRect
+        )
+    }
+
+    /// 鼠标在选区上停住（或松手）：把紧凑的「手动 / 自动」条浮到选框下方。
+    private func presentScrollingModeBar(snapshot: DisplaySnapshot, localRect: CGRect) {
+        guard overlays.purpose == .regionPick, scrollingSession == nil else { return }
+        guard let target = makeScrollingTarget(snapshot: snapshot, localRect: localRect) else {
+            return
+        }
+        scrollingTarget = target
+
+        // 已经浮着就只挪位置（用户还在调选区）。
+        if let panel = scrollingPanel {
+            panel.move(near: target.selectionRect)
+            return
+        }
+
+        let panel = ScrollingCapturePanelController()
+        scrollingPanel = panel
+        isScrollingCancelled = false
+
+        panel.onStartManual = { [weak self] in self?.beginScrollingSession(mode: .manual) }
+        panel.onStartAuto = { [weak self] in self?.beginScrollingSession(mode: .automatic) }
+        panel.onFinish = { [weak self] in self?.scrollingSession?.stop() }
+        panel.onCancel = { [weak self] in self?.cancelScrollingCapture() }
+
+        panel.present(near: target.selectionRect)
         registerScrollingEscapeMonitor()
     }
 
-    /// 用户点了「开始截图 / 自动截图」：建会话、开跑。
-    private func beginScrollingSession(
-        mode: ScrollingCaptureSession.Mode,
-        snapshot: DisplaySnapshot,
-        region: CGRect,
-        globalRect: CGRect
-    ) {
-        guard scrollingSession == nil, let panel = scrollingPanel else { return }
+    /// 选区被拖动 / 缩放 / 清空：模式条一路贴着选框走；选区没了就把它收掉。
+    private func updateScrollingSelection(snapshot: DisplaySnapshot, localRect: CGRect?) {
+        guard overlays.purpose == .regionPick, scrollingSession == nil else { return }
+        guard let localRect,
+            let target = makeScrollingTarget(snapshot: snapshot, localRect: localRect)
+        else {
+            dismissScrollingPanel()
+            return
+        }
+        scrollingTarget = target
+        scrollingPanel?.move(near: target.selectionRect)
+    }
+
+    /// 只收控制条（不动遮罩）：用户改了选区 / 重开一次滚动长图时用。
+    private func dismissScrollingPanel() {
+        removeScrollingEscapeMonitor()
+        scrollingPanel?.close()
+        scrollingPanel = nil
+        scrollingTarget = nil
+    }
+
+    // MARK: - Scrolling capture: session
+
+    /// 用户点了「手动 / 自动」：这时候才把遮罩切成取景框，然后开跑。
+    private func beginScrollingSession(mode: ScrollingCaptureSession.Mode) {
+        guard scrollingSession == nil, let panel = scrollingPanel,
+            let target = scrollingTarget
+        else { return }
 
         // 自动滚动要合成滚轮事件，没授权就先申请并给用户选择。
         let effective = mode == .automatic ? resolveScrollingMode(.automatic) : .manual
 
+        // 遮罩切成取景框（鼠标穿透、前台还给用户）：页面要能滚起来。
+        overlays.beginScrollCaptureChrome()
+
         let session = ScrollingCaptureSession(
             engine: capture,
             target: ScrollingCaptureSession.Target(
-                displayID: snapshot.displayID,
-                regionInPoints: region,
-                regionInGlobalCGPoints: globalRect
+                displayID: target.snapshot.displayID,
+                regionInPoints: target.region,
+                regionInGlobalCGPoints: target.globalRect
             )
         )
         session.mode = effective
@@ -480,9 +533,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 右侧实时预览：贴在选区右边（放不下会自己翻到左边）。
         let preview = ScrollingPreviewPanel()
-        if let selectionRect = scrollingSelectionRect {
-            preview.present(near: selectionRect)
-        }
+        preview.present(near: target.selectionRect)
         session.onPreview = { [weak preview] image in
             preview?.update(image: image)
         }
@@ -493,11 +544,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Task { @MainActor in
             let image = await session.run()
-            finishScrollingCapture(image: image, displayID: snapshot.displayID)
+            finishScrollingCapture(image: image, displayID: target.snapshot.displayID)
         }
     }
 
-    /// 待开始状态下的「取消」：没有会话在跑，直接把控制条收掉。
+    /// 还没开跑就「取消」：把控制条与遮罩一起收掉。
     private func cancelScrollingCapture() {
         isScrollingCancelled = true
         if let session = scrollingSession {
@@ -512,7 +563,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         removeScrollingEscapeMonitor()
         scrollingEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.keyCode == 53, let self, self.scrollingPanel != nil else { return event }
-            // 运行中就停会话；还停在「待开始」就直接收掉控制条。
+            // 运行中就停会话；还停在模式条上就连遮罩一起收掉。
             if self.scrollingSession != nil {
                 self.scrollingSession?.stop()
             } else {
@@ -536,9 +587,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scrollingSession = nil
         scrollingPreview?.close()
         scrollingPreview = nil
-        scrollingSelectionRect = nil
-        // 遮罩在滚动期间留着当取景框，这时候才真正关掉它。
+        scrollingTarget = nil
+        // 遮罩在滚动期间留着当取景框；停在模式条上时也还开着 —— 两条路都关掉。
         overlays.releaseScrollChrome()
+        overlays.cancel()
 
         let cancelled = isScrollingCancelled
         isScrollingCancelled = false
@@ -578,7 +630,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleOverlayOutcome(_ outcome: OverlayCoordinator.Outcome) {
         switch outcome {
         case .cancelled:
-            break
+            // 遮罩被取消（Esc / 右键）：滚动长图还停在「选模式」这一步时，
+            // 挂在选框下面的那条模式条也得一起收掉。
+            if scrollingSession == nil { dismissScrollingPanel() }
         case .captured(let image, let displayID, let screenRect, let annotated):
             if annotated {
                 // 已在遮罩里原地标注完成，直接走交付流程。

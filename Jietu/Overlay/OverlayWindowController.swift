@@ -21,6 +21,24 @@ final class OverlayWindowController {
         set { canvas.onCommitAnnotated = newValue }
     }
 
+    /// 滚动长图起步：选区不急着交付，鼠标停住就回报（由控制条接手）。
+    var isRegionPickMode: Bool {
+        get { canvas.isRegionPickMode }
+        set { canvas.isRegionPickMode = newValue }
+    }
+
+    /// 鼠标在选区上停住（或松手）→ 选区 local 矩形。
+    var onSelectionPaused: ((CGRect) -> Void)? {
+        get { canvas.onSelectionPaused }
+        set { canvas.onSelectionPaused = newValue }
+    }
+
+    /// 选区被拖 / 缩放 / 清空（nil）。
+    var onSelectionChanged: ((CGRect?) -> Void)? {
+        get { canvas.onSelectionChanged }
+        set { canvas.onSelectionChanged = newValue }
+    }
+
     /// 是否正在原地标注（Esc 归属判断）。
     var isInlineEditing: Bool { canvas.isAnnotationPhase }
 

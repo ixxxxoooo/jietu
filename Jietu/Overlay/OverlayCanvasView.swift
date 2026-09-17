@@ -26,6 +26,20 @@ final class OverlayCanvasView: NSView {
     /// 而多屏时 key window 只会是最后创建的那个，所以焦点要跟着鼠标走。
     var onFocusRequest: (() -> Void)?
 
+    // MARK: - Region pick（滚动长图起步：只要一块选区）
+
+    /// 滚动长图模式：选区**不急着自己交付**——鼠标停住（或松开）就回报，
+    /// 由外面的控制条贴着选框下方浮出「手动 / 自动」。
+    var isRegionPickMode = false
+    /// 鼠标在选区上停住（或一松手）→ 选区 local 矩形。
+    var onSelectionPaused: ((CGRect) -> Void)?
+    /// 选区被拖动 / 缩放 / 清空（nil）→ 让控制条跟着选框走。
+    var onSelectionChanged: ((CGRect?) -> Void)?
+
+    /// 拖动中判定「停住」的时长；停住就浮出工具栏，不必等用户松手。
+    private static let regionPickPauseDelay: TimeInterval = 0.35
+    private var pauseWorkItem: DispatchWorkItem?
+
     // MARK: - State
 
     private enum Interaction {
@@ -194,6 +208,47 @@ final class OverlayCanvasView: NSView {
     /// 自检用：当前选区（本显示器 local 坐标）。
     var debugSelection: CGRect? { selection }
     #endif
+
+    // MARK: - Region pick 回报
+
+    /// 选区成型且「像样」才值得浮出工具栏（太小的一块按不出来）。
+    private var isSelectionUsable: Bool {
+        guard let selection else { return false }
+        return selection.width >= Theme.minimumSelectionSize
+            && selection.height >= Theme.minimumSelectionSize
+    }
+
+    /// 拖动中重新计时：停住 `regionPickPauseDelay` 就回报「可以出工具栏了」。
+    private func schedulePauseSignal() {
+        guard isRegionPickMode else { return }
+        pauseWorkItem?.cancel()
+        pauseWorkItem = nil
+        guard isSelectionUsable else { return }
+        let item = DispatchWorkItem { [weak self] in
+            guard let self, self.isRegionPickMode, let rect = self.selection else { return }
+            self.onSelectionPaused?(rect)
+        }
+        pauseWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.regionPickPauseDelay, execute: item)
+    }
+
+    /// 立刻回报（松手 / ↵）：不等那 0.35 秒。
+    private func firePauseSignal() {
+        guard isRegionPickMode, let selection else { return }
+        cancelPauseSignal()
+        onSelectionPaused?(selection)
+    }
+
+    private func cancelPauseSignal() {
+        pauseWorkItem?.cancel()
+        pauseWorkItem = nil
+    }
+
+    /// 选区变了（拖动 / 缩放 / 清空）→ 控制条贴着新选框走。
+    private func notifySelectionChanged() {
+        guard isRegionPickMode else { return }
+        onSelectionChanged?(selection)
+    }
 
     // MARK: - Layer setup
 
@@ -533,9 +588,15 @@ final class OverlayCanvasView: NSView {
             size.height,
             snapshot.effectiveScale
         )
-        text += selection == nil
-            ? "  ·  拖拽框选 / 点窗口选整窗  ·  Esc 取消"
-            : "  ·  ↵ 完成, ⇥ 上次选区, ⇧ 正方形  ·  Esc 取消"
+        if isRegionPickMode {
+            text += selection == nil
+                ? "  ·  拖拽框选（鼠标停住出「手动 / 自动」）  ·  Esc 取消"
+                : "  ·  鼠标停住出「手动 / 自动」，选区还能接着调  ·  Esc 取消"
+        } else {
+            text += selection == nil
+                ? "  ·  拖拽框选 / 点窗口选整窗  ·  Esc 取消"
+                : "  ·  ↵ 完成, ⇥ 上次选区, ⇧ 正方形  ·  Esc 取消"
+        }
         let width = min(bounds.width - 40, max(420, CGFloat(text.count) * 7.4))
         hintLayer.string = text
         hintLayer.frame = CGRect(
@@ -654,7 +715,11 @@ final class OverlayCanvasView: NSView {
             }
             if selection.contains(point) {
                 if event.clickCount >= 2 {
-                    commit()
+                    if isRegionPickMode {
+                        firePauseSignal()
+                    } else {
+                        commit()
+                    }
                     return
                 }
                 interaction = .moving(
@@ -669,6 +734,7 @@ final class OverlayCanvasView: NSView {
             // 在选区外按下：清掉旧选区，开始框新的。
             self.selection = nil
             updateAllLayers()
+            notifySelectionChanged()
         }
 
         interaction = .pressing(anchor: point)
@@ -738,6 +804,11 @@ final class OverlayCanvasView: NSView {
         updateSelectionLayers()
         updateCrosshair()
         updateHint()
+
+        if isRegionPickMode {
+            notifySelectionChanged()
+            schedulePauseSignal()
+        }
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -765,7 +836,15 @@ final class OverlayCanvasView: NSView {
                 // 先把选区视觉画出来再交付：滚动长图会把遮罩留着当取景框，
                 // 少了这一步绿框就不会出现。
                 updateAllLayers()
-                commit()
+                if isRegionPickMode {
+                    // 遮罩不关：状态得真的落到「已定」，否则下一次拖拽会从这个锚点重新开始。
+                    interaction = .settled
+                    Self.rememberedSelection[snapshot.displayID] = selection
+                    notifySelectionChanged()
+                    firePauseSignal()
+                } else {
+                    commit()
+                }
                 return
             }
             interaction = .idle
@@ -788,6 +867,23 @@ final class OverlayCanvasView: NSView {
         // 原地模式：鼠标一松开（拖拽结束）就弹出标注工具栏。
         if inlineMode, isSettled, phase == .selecting, selection != nil {
             enterAnnotating()
+            return
+        }
+
+        // 滚动长图：松手也立刻把「手动 / 自动」浮出来（不用等鼠标停住，
+        // 更不用按 ↵）；在点模式之前选区还能继续拖 / 缩放。
+        if isRegionPickMode {
+            if isSettled, let selection {
+                Self.rememberedSelection[snapshot.displayID] = selection
+                notifySelectionChanged()
+                firePauseSignal()
+            } else {
+                cancelPauseSignal()
+                notifySelectionChanged()
+            }
+            updateAllLayers()
+            updateHoveredWindow(at: point)
+            updateWindowHighlight()
             return
         }
 
@@ -823,7 +919,12 @@ final class OverlayCanvasView: NSView {
         case 53: // kVK_Escape
             onCancel?()
         case 36, 76: // Return / keypad Enter
-            commit()
+            // 滚动长图：↵ 只当「我选好了」，浮出模式条；真正的开始交给手动 / 自动。
+            if isRegionPickMode {
+                firePauseSignal()
+            } else {
+                commit()
+            }
         case 48: // Tab
             restoreRememberedSelection()
         case 123, 124, 125, 126: // 方向键
@@ -1758,6 +1859,10 @@ final class OverlayCanvasView: NSView {
         updateAllLayers()
         updateHoveredWindow(at: cursorPoint ?? .zero)
         updateWindowHighlight()
+        if isRegionPickMode {
+            notifySelectionChanged()
+            firePauseSignal()
+        }
     }
 
     private func nudge(keyCode: UInt16, large: Bool) {
@@ -1777,5 +1882,9 @@ final class OverlayCanvasView: NSView {
             clampTo: canvasBounds
         )
         updateAllLayers()
+        if isRegionPickMode {
+            notifySelectionChanged()
+            schedulePauseSignal()
+        }
     }
 }
