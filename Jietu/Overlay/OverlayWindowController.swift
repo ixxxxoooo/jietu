@@ -105,6 +105,9 @@ final class OverlayWindowController {
     @discardableResult
     func debugOpenScrollOptions() -> Bool { canvas.debugOpenScrollOptions() }
 
+    /// 自检用：等价于点一下工具栏的「录屏」。
+    func debugTriggerRecord() -> Bool { canvas.debugTriggerRecord() }
+
     @discardableResult
     func debugTriggerScrollCapture(_ mode: ScrollingCaptureSession.Mode) -> Bool {
         canvas.debugTriggerScrollCapture(mode)

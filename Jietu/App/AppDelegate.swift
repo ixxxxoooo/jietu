@@ -589,6 +589,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     report.append("窗口录制：屏幕上找不到够大的窗口，跳过")
                 }
 
+                // 7. 截图时那条就地工具栏上的「录屏」：拿当前选区直接进待开始（走的是同一条交接）。
+                overlays.purpose = .screenshot
+                overlays.present(
+                    session: CaptureSession(
+                        snapshots: try await capture.captureAllDisplays(),
+                        windows: WindowHitTester.onScreenWindows(excludingPID: getpid())
+                    ),
+                    inlineMode: true
+                )
+                try? await Task.sleep(for: .milliseconds(700))
+                let dragStart = CGPoint(x: 360, y: 300)
+                let dragEnd = CGPoint(x: 900, y: 700)
+                post(.mouseMoved, at: CGPoint(x: 200, y: 160))
+                try? await Task.sleep(for: .milliseconds(150))
+                post(.mouseMoved, at: dragStart)
+                try? await Task.sleep(for: .milliseconds(120))
+                post(.leftMouseDown, at: dragStart)
+                for step in 1...6 {
+                    let t = CGFloat(step) / 6
+                    post(
+                        .leftMouseDragged,
+                        at: CGPoint(
+                            x: dragStart.x + (dragEnd.x - dragStart.x) * t,
+                            y: dragStart.y + (dragEnd.y - dragStart.y) * t
+                        )
+                    )
+                    try? await Task.sleep(for: .milliseconds(30))
+                }
+                post(.leftMouseUp, at: dragEnd)
+                try? await Task.sleep(for: .milliseconds(1000))
+
+                // 拍一张就地工具栏（选中状态的按钮排布）。
+                if let shots = try? await capture.captureAllDisplays(excludingOwnApplication: false),
+                    let shot = shots.first(where: { $0.displayID == NSScreen.main?.jietu_displayID })
+                        ?? shots.first
+                {
+                    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+                        .appendingPathComponent("jietu-inline-toolbar.png")
+                    try? CaptureSelfTest.writePNG(shot.image, to: url)
+                    report.append("就地工具栏截图 -> \(url.path)")
+                }
+
+                let toolbarRecord = overlays.debugTriggerRecord(displayID: NSScreen.main?.jietu_displayID ?? 0)
+                try? await Task.sleep(for: .milliseconds(800))
+                let fromToolbar = pendingRecording != nil && recordingEngine == nil
+                    && !overlays.isPresenting
+                let toolbarRegion = pendingRecording?.region.size ?? .zero
+                report.append(
+                    "工具栏「录屏」：触发=\(toolbarRecord ? "是" : "**否**")"
+                        + "，待开始=\(fromToolbar ? "是" : "**否**")"
+                        + "，遮罩=\(overlays.isPresenting ? "**还在**" : "已收")"
+                        + "，选框 \(Int(toolbarRegion.width))×\(Int(toolbarRegion.height))"
+                )
+                budgets.append(("工具栏「录屏」直接进待开始", fromToolbar ? 0 : nil, 0))
+                cancelRecording()
+                if overlays.isPresenting { overlays.cancel() }
+                try? await Task.sleep(for: .milliseconds(300))
+
                 report.append("延迟预算：")
                 var failed = 0
                 for budget in budgets {

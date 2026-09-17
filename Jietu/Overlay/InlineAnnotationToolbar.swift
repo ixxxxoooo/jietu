@@ -31,6 +31,8 @@ final class InlineToolbarModel {
     var onPin: (() -> Void)?
     /// 选了「手动 / 自动滚动」：把当前选区接着往下滚成一张长图。
     var onScrollCapture: ((ScrollingCaptureSession.Mode) -> Void)?
+    /// 点了「录屏」：拿当前选区去录（选区交给外面，遮罩收掉、上红框与控制条）。
+    var onRecord: (() -> Void)?
     var onConfirm: (() -> Void)?
     var onCancel: (() -> Void)?
 }
@@ -113,6 +115,12 @@ struct InlineMainToolbar: View {
             .modifier(
                 OptionsAnchorReporter(
                     isExpanded: model.showScroll, space: Self.space, model: model))
+
+            // 录屏：拿当前这块选区去录（点了收掉遮罩、上红框与「准备录制」控制条）。
+            BarIconButton(title: "录屏", systemImage: "record.circle") {
+                model.onRecord?()
+            }
+            .help("录这块区域：收掉遮罩、上红框，点「开始」才真开录")
 
             BarIconButton(title: "保存", systemImage: "square.and.arrow.down") {
                 model.onSave?()

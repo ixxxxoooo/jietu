@@ -1907,6 +1907,12 @@ final class OverlayCanvasView: NSView {
             self.onPinImage?(image, self.selection ?? .zero)
         }
         model.onScrollCapture = { [weak self] mode in self?.beginScrollCapture(mode: mode) }
+        // 工具栏的「录屏」：和「框好一块区域去录屏」走的是同一条交接（`onRecordRegionPicked`），
+        // 区别只是这回选区是用户在就地工具栏前调好的。
+        model.onRecord = { [weak self] in
+            guard let self, let selection = self.selection else { return }
+            self.onRecordRegionPicked?(selection)
+        }
         toolbarModel = model
 
         // 主工具栏：固定尺寸，永不重算 → 展开选项时也不闪烁。
@@ -1965,6 +1971,14 @@ final class OverlayCanvasView: NSView {
     func debugOpenScrollOptions() -> Bool {
         guard toolbarModel != nil, selection != nil else { return false }
         toolbarModel?.showScroll = true
+        return true
+    }
+
+    /// 自检用：等价于点一下工具栏的「录屏」。
+    @discardableResult
+    func debugTriggerRecord() -> Bool {
+        guard toolbarModel != nil, selection != nil else { return false }
+        onRecordRegionPicked?(selection!)
         return true
     }
 

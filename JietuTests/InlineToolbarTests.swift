@@ -42,6 +42,22 @@ struct InlineToolbarTests {
         #expect(optionsSize().width > 0)
     }
 
+    @Test("主工具栏带「录屏」入口：点了就把当前选区交出去")
+    func mainToolbarHasRecordEntry() {
+        let model = InlineToolbarModel()
+        var fired = 0
+        model.onRecord = { fired += 1 }
+
+        let host = NSHostingView(rootView: InlineMainToolbar(model: model))
+        host.layoutSubtreeIfNeeded()
+        #expect(host.fittingSize.width > 0, "加了「录屏」之后主工具栏照样能量出尺寸")
+
+        // 「录屏」不是展开式选项（不像颜色 / 粗细 / 滚动截图），点一下就把选区交出去——
+        // 真实的交接（遮罩收掉 → 红框 + 待开始控制条）由 `--selftest-app-record` 端到端验。
+        model.onRecord?()
+        #expect(fired == 1)
+    }
+
     @Test("主工具栏带「滚动截图」入口，且与颜色 / 粗细同一套展开机制")
     func mainToolbarHasScrollEntry() {
         let model = InlineToolbarModel()

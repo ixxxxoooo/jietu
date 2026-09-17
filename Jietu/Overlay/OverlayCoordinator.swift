@@ -315,6 +315,11 @@ final class OverlayCoordinator {
 
     /// 自检用：等价于点一下就地工具栏的「滚动截图」（只展开选项）。
     @discardableResult
+    /// 自检用：点一下就地工具栏的「录屏」（选区交给 `onRecordRegionPicked`）。
+    func debugTriggerRecord(displayID: CGDirectDisplayID) -> Bool {
+        controllers.first { $0.snapshot.displayID == displayID }?.debugTriggerRecord() ?? false
+    }
+
     func debugOpenScrollOptions(displayID: CGDirectDisplayID) -> Bool {
         controllers.first { $0.snapshot.displayID == displayID }?.debugOpenScrollOptions() ?? false
     }
