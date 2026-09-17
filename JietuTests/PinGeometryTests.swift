@@ -267,68 +267,6 @@ struct PinGeometryTests {
         #expect(abs(zoomed.midY - start.midY) < 0.0001)
     }
 
-    // MARK: - 卡片外框（contentInset）
-
-    @Test("带外框拖动：锁的是截图的比例，外框两边各留一圈")
-    func resizeWithCardInsetKeepsContentRatio() {
-        let inset: CGFloat = 8
-        // 窗口 216×116 = 截图 200×100 + 外框一圈。
-        let start = CGRect(x: 100, y: 100, width: 216, height: 116)
-        let ratio: CGFloat = 2.0
-        let resized = PinGeometry.resizedFrame(
-            startFrame: start,
-            handle: .topRight,
-            startMouse: CGPoint(x: 316, y: 216),
-            currentMouse: CGPoint(x: 356, y: 216), // +40
-            aspectRatio: ratio,
-            contentInset: inset
-        )
-
-        let content = PinGeometry.contentRect(of: resized, inset: inset)
-        #expect(abs(content.width / content.height - ratio) < 0.0001, "截图仍严格保持比例")
-        #expect(abs(content.width - 240) < 0.0001)
-        #expect(abs(content.height - 120) < 0.0001)
-        #expect(abs(resized.width - 256) < 0.0001, "窗口 = 截图 + 两边外框")
-        #expect(abs(resized.height - 136) < 0.0001)
-        // 锚点（左下角）不动
-        #expect(resized.minX == start.minX)
-        #expect(resized.minY == start.minY)
-    }
-
-    @Test("带外框缩放：鼠标焦点下的像素在屏幕上不动")
-    func zoomWithCardInsetPreservesMouseFocusPoint() {
-        let inset: CGFloat = 8
-        let start = CGRect(x: 200, y: 300, width: 416, height: 216) // 截图 400×200
-        let ratio: CGFloat = 2.0
-        let mouseInWindow = CGPoint(x: 108, y: 58) // 换成截图坐标是 (100, 50)
-        let contentBefore = PinGeometry.contentRect(of: start, inset: inset)
-        let unitX = (mouseInWindow.x - inset) / contentBefore.width
-        let unitY = (mouseInWindow.y - inset) / contentBefore.height
-        let screenBefore = CGPoint(
-            x: contentBefore.minX + unitX * contentBefore.width,
-            y: contentBefore.minY + unitY * contentBefore.height
-        )
-
-        let zoomed = PinGeometry.zoomedFrame(
-            currentFrame: start,
-            factor: 1.5,
-            mouseLocationInWindow: mouseInWindow,
-            aspectRatio: ratio,
-            contentInset: inset
-        )
-
-        let contentAfter = PinGeometry.contentRect(of: zoomed, inset: inset)
-        #expect(abs(contentAfter.width - 600) < 0.0001)
-        #expect(abs(contentAfter.height - 300) < 0.0001)
-        #expect(abs(contentAfter.width / contentAfter.height - ratio) < 0.0001)
-        let screenAfter = CGPoint(
-            x: contentAfter.minX + unitX * contentAfter.width,
-            y: contentAfter.minY + unitY * contentAfter.height
-        )
-        #expect(abs(screenAfter.x - screenBefore.x) < 0.0001)
-        #expect(abs(screenAfter.y - screenBefore.y) < 0.0001)
-    }
-
     @Test("缩放系数 1.0 尺寸与原点保持不变")
     func zoomFactorOneLeavesFrameUnchanged() {
         let start = CGRect(x: 150, y: 250, width: 300, height: 150)

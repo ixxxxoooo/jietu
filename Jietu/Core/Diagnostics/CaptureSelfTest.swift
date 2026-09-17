@@ -716,12 +716,10 @@ enum CaptureSelfTest {
                 PinWindowController.pin(image: image, on: screen)
                 try? await Task.sleep(for: .milliseconds(700))
 
-                // 钉图窗口居中、按原始大小显示（和 PinWindowController 的默认摆放一致）：
-                // 窗口 = 截图 + 卡片外框一圈（`PreviewCard.inset`）。
-                let contentSize = CGSize(
+                // 钉图窗口居中、按原始大小显示（和 PinWindowController 的默认摆放一致）。
+                let size = CGSize(
                     width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale
                 )
-                let size = PreviewCard.cardSize(forContent: contentSize)
                 let frame = NSRect(
                     x: visible.midX - size.width / 2,
                     y: visible.midY - size.height / 2,
@@ -729,7 +727,7 @@ enum CaptureSelfTest {
                     height: size.height
                 ).integral
                 report.append(
-                    "pin frame=\(describe(frame))（白底图 \(image.width)x\(image.height)px + 外框 \(PreviewCard.inset)）"
+                    "pin frame=\(describe(frame)) (白底图 \(image.width)x\(image.height)px)"
                 )
 
                 // 鼠标挪进钉图窗口，浮动按钮才会出现（用户可能同时在动鼠标，多试两次）。
@@ -873,10 +871,9 @@ enum CaptureSelfTest {
                 let textImage = try makeTextTestImage(width: 520, height: 240)
                 PinWindowController.pin(image: textImage, on: screen)
                 try? await Task.sleep(for: .milliseconds(700))
-                let textContent = CGSize(
+                let textCard = CGSize(
                     width: CGFloat(textImage.width) / scale, height: CGFloat(textImage.height) / scale
                 )
-                let textCard = PreviewCard.cardSize(forContent: textContent)
                 let textFrame = NSRect(
                     x: visible.midX - textCard.width / 2,
                     y: visible.midY - textCard.height / 2,

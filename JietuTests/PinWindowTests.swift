@@ -79,20 +79,6 @@ struct PinWindowTests {
         #expect(button.renderedSymbolName == "text.viewfinder")
     }
 
-    @Test("预览卡片外框：截图不贴边，四面各留一圈 inset")
-    func pinContentIsInsetByCardFrame() {
-        let view = PinContentView(frame: NSRect(x: 0, y: 0, width: 200, height: 150), image: createTestImage())
-        view.layout()
-        #expect(
-            view.contentRectForTesting
-                == NSRect(
-                    x: PreviewCard.inset, y: PreviewCard.inset,
-                    width: 200 - PreviewCard.inset * 2,
-                    height: 150 - PreviewCard.inset * 2
-                )
-        )
-    }
-
     @Test("左下角「翻译」按钮：悬停出现、点击把原文交给 macOS 翻译")
     func translateButtonHandsTextToSystemTranslation() {
         let view = PinContentView(frame: NSRect(x: 0, y: 0, width: 400, height: 300), image: createTestImage())

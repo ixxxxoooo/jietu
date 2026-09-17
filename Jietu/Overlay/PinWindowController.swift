@@ -4,9 +4,6 @@ import VisionKit
 
 /// 「钉图」：把截图钉在屏幕上，作为一个可拖动、可缩放的浮动窗口。
 ///
-/// 外观是 macOS 自己那个截图预览窗口的样子（见 `PreviewCard`）：截图不贴边，
-/// 外面留一圈大圆角玻璃外框；四个角上悬停浮出玻璃按钮。
-///
 /// 支持：
 /// - 拖动任意位置移动
 /// - 拖动边缘 / 角改变大小（保持宽高比）
@@ -46,12 +43,10 @@ final class PinWindowController: NSObject {
         let target = screen ?? NSScreen.main
         let visible = target?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
 
-        // 卡片外框那一圈不算截图：所有尺寸都先按内容算，再包上 `PreviewCard.inset`。
-        let inset = PreviewCard.inset
         let frame: NSRect
         if let targetFrame, targetFrame.width > 1, targetFrame.height > 1 {
-            // 原地钉图：给的是截图该占的位置与大小，外框往外扩一圈（图不挪地方）。
-            frame = targetFrame.insetBy(dx: -inset, dy: -inset)
+            // 原地钉图：直接使用编辑器里图片所在的位置与大小。
+            frame = targetFrame
         } else {
             // 默认按**原始大小**显示：像素尺寸除以屏幕缩放。超过屏幕 90% 才等比缩小。
             let backingScale = target?.backingScaleFactor ?? 2
@@ -59,20 +54,12 @@ final class PinWindowController: NSObject {
                 width: CGFloat(image.width) / backingScale,
                 height: CGFloat(image.height) / backingScale
             )
-            let maxSize = CGSize(
-                width: visible.width * 0.9 - inset * 2,
-                height: visible.height * 0.9 - inset * 2
-            )
+            let maxSize = CGSize(width: visible.width * 0.9, height: visible.height * 0.9)
             let scale = min(
                 1,
                 min(maxSize.width / naturalSize.width, maxSize.height / naturalSize.height)
             )
-            let size = PreviewCard.cardSize(
-                forContent: CGSize(
-                    width: naturalSize.width * scale,
-                    height: naturalSize.height * scale
-                )
-            )
+            let size = CGSize(width: naturalSize.width * scale, height: naturalSize.height * scale)
             // 钉在屏幕正中；每多钉一张向右下错开一点，避免完全重叠。
             let offset = CGFloat(PinWindowController.controllers.count % 6) * 24
             let origin = CGPoint(
@@ -184,7 +171,6 @@ final class PinPanel: NSPanel {
 /// @author ixxxxoooo
 final class PinContentView: NSView {
     let cgImage: CGImage
-    /// 截图本身。尺寸按**内容区**给（窗口比它大一圈外框）。
     private let nsImage: NSImage
     private var activeHandle: SelectionHandle?
     private var isDraggingWindow = false
@@ -196,10 +182,6 @@ final class PinContentView: NSView {
     /// 点了左上角的「编辑」：回到标注编辑器（由 `PinWindowController` 转出去）。
     var onRequestEdit: (() -> Void)?
 
-    /// 卡片外框（截图底下那层玻璃 + 描边）。
-    private let chrome = PreviewCardChrome()
-    /// 截图本身，单独一层视图。
-    private let imageView: PinImageView
     private var editButton: GlassControlButton?
     private var closeButton: GlassControlButton?
     private var liveTextOverlay: ImageAnalysisOverlayView?
@@ -216,22 +198,14 @@ final class PinContentView: NSView {
     /// 识别过的原文（同一张图只用识别一次）。
     private var recognizedText: String?
 
-    /// 截图在窗口里的矩形（原点左下）。
-    private var contentRect: NSRect { PreviewCard.contentRect(in: bounds) }
-
     init(frame: NSRect, image: CGImage) {
         self.cgImage = image
-        let contentSize = PreviewCard.contentRect(in: NSRect(origin: .zero, size: frame.size)).size
-        let nsImage = NSImage(cgImage: image, size: contentSize)
-        self.nsImage = nsImage
-        self.imageView = PinImageView(image: nsImage)
+        self.nsImage = NSImage(cgImage: image, size: frame.size)
         super.init(frame: frame)
         wantsLayer = true
+        layer?.cornerRadius = 10
+        layer?.masksToBounds = true
         layerContentsRedrawPolicy = .duringViewResize
-
-        addSubview(chrome)
-        imageView.frame = contentRect
-        addSubview(imageView)
         configureEditButton()
         configureCloseButton()
         configureLiveTextButton()
@@ -303,8 +277,8 @@ final class PinContentView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        // 截图不在这里画：`draw` 落在子视图**下面**，卡片玻璃（子视图）会把它糊掉。
-        // 见 `PinImageView`。
+        NSGraphicsContext.current?.imageInterpolation = .high
+        nsImage.draw(in: bounds)
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -481,8 +455,7 @@ final class PinContentView: NSView {
                 handle: handle,
                 startMouse: startMouse,
                 currentMouse: currentMouse,
-                aspectRatio: aspectRatio,
-                contentInset: PreviewCard.inset
+                aspectRatio: aspectRatio
             )
             window.setFrame(newFrame, display: true, animate: false)
             window.invalidateShadow()
@@ -546,7 +519,6 @@ final class PinContentView: NSView {
             factor: factor,
             mouseLocationInWindow: mouseInWindow,
             aspectRatio: CGFloat(cgImage.width) / CGFloat(cgImage.height),
-            contentInset: PreviewCard.inset,
             maxSize: maxSize
         )
 
@@ -611,11 +583,9 @@ final class PinContentView: NSView {
     @objc private func handleActualSize() {
         guard let window else { return }
         let scale = window.backingScaleFactor > 0 ? window.backingScaleFactor : 2
-        let naturalSize = PreviewCard.cardSize(
-            forContent: CGSize(
-                width: CGFloat(cgImage.width) / scale,
-                height: CGFloat(cgImage.height) / scale
-            )
+        let naturalSize = CGSize(
+            width: CGFloat(cgImage.width) / scale,
+            height: CGFloat(cgImage.height) / scale
         )
         let currentFrame = window.frame
         let origin = CGPoint(
@@ -693,8 +663,6 @@ final class PinContentView: NSView {
 
     override func layout() {
         super.layout()
-        chrome.frame = bounds
-        imageView.frame = contentRect
         let size: CGFloat = 28
         let padding: CGFloat = 8
         // 四角各一个：左上编辑、右上关闭、左下翻译、右下识别文本。
@@ -725,8 +693,7 @@ final class PinContentView: NSView {
                 height: translateSize.height
             )
         }
-        // 识别文本的覆盖层只盖截图那块：卡片外框不是图，别把文字层画到框上去。
-        liveTextOverlay?.frame = contentRect
+        liveTextOverlay?.frame = bounds
         // 翻译面板从「翻译」按钮那块长出来。
         translationPresenter.updateAnchor(translateButton?.frame ?? .zero)
     }
@@ -771,7 +738,7 @@ final class PinContentView: NSView {
 
         let overlay = ImageAnalysisOverlayView(liveTextDelegate)
         overlay.preferredInteractionTypes = .textSelection
-        overlay.frame = contentRect
+        overlay.frame = bounds
         let topView = closeButton ?? liveTextButton
         if let topView {
             addSubview(overlay, positioned: .below, relativeTo: topView)
@@ -882,9 +849,6 @@ final class PinContentView: NSView {
 
     // MARK: - 测试钩子
 
-    /// 测试用：截图在窗口里的矩形（窗口比它大一圈外框）。
-    var contentRectForTesting: NSRect { contentRect }
-
     /// 测试用：左下角「翻译」按钮。
     var translateButtonForTesting: GlassControlButton? { translateButton }
 
@@ -909,51 +873,6 @@ final class PinContentView: NSView {
     var isSystemTranslationPresented: Bool { translationPresenter.isPresented }
 }
 
-
-/// 卡片里那层截图。
-///
-/// 必须是**子视图**：AppKit 里父视图自己的 `draw` 永远落在子视图下面，
-/// 卡片底板（玻璃）也是子视图——截图要是还画在 `PinContentView.draw` 里，
-/// 就会被那层玻璃盖住、整张图被洗成一片模糊的白（自检截图里一眼就看出来了）。
-///
-/// @author ixxxxoooo
-final class PinImageView: NSView {
-    let image: NSImage
-
-    init(image: NSImage) {
-        self.image = image
-        super.init(frame: .zero)
-        wantsLayer = true
-        layerContentsRedrawPolicy = .duringViewResize
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    /// 截图不参与命中：命中一律交给宿主（拖动 / 缩放手柄 / 四角按钮都在那儿判定）。
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard bounds.width > 1, bounds.height > 1 else { return }
-        let path = NSBezierPath(
-            roundedRect: bounds,
-            xRadius: PreviewCard.contentRadius,
-            yRadius: PreviewCard.contentRadius
-        )
-        NSGraphicsContext.saveGraphicsState()
-        path.addClip()
-        NSGraphicsContext.current?.imageInterpolation = .high
-        image.draw(in: bounds)
-        NSGraphicsContext.restoreGraphicsState()
-
-        // 截图自己那圈发丝描边：白图 / 深图都从外框里「浮」出来（macOS 预览窗口同款）。
-        path.lineWidth = Theme.Size.hairline
-        NSColor.jietuCardStroke.setStroke()
-        path.stroke()
-    }
-}
 
 /// 实况文本覆盖层的 contentsRect 提供者（覆盖整张图）。
 ///

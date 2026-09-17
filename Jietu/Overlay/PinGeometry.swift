@@ -3,19 +3,10 @@ import CoreGraphics
 /// 钉图相关的几何与尺寸计算纯函数。
 ///
 /// 保持 AppKit Local 坐标语义（原点在左下，minY 为下，maxY 为上）。
-///
-/// 钉图窗口 = 卡片外框，里面那圈才是截图本身（见 `PreviewCard`）。窗口尺寸与截图尺寸
-/// 差 `contentInset * 2`，所以所有「锁宽高比」的算式都作用在**内容**上，
-/// 由 `contentInset` 在两头换算——不传就是老口径（窗口即截图）。
 enum PinGeometry {
     static let defaultEdgeTolerance: CGFloat = 8
     static let defaultCornerTolerance: CGFloat = 12
     static let defaultMinSide: CGFloat = 60
-
-    /// 截图在窗口里的矩形（原点左下）。`inset` 为 0 时就是窗口本身。
-    static func contentRect(of frame: CGRect, inset: CGFloat) -> CGRect {
-        inset > 0 ? frame.insetBy(dx: inset, dy: inset) : frame
-    }
 
     /// 检测鼠标在视图内命中的调整手柄（8 向）。
     static func handle(
@@ -63,72 +54,61 @@ enum PinGeometry {
         startMouse: CGPoint,
         currentMouse: CGPoint,
         aspectRatio: CGFloat,
-        contentInset: CGFloat = 0,
         minSide: CGFloat = defaultMinSide
     ) -> CGRect {
         let dx = currentMouse.x - startMouse.x
         let dy = currentMouse.y - startMouse.y
         let ratio = max(0.0001, aspectRatio)
-        let padding = contentInset * 2
-
-        /// 窗口尺寸 ↔ 内容尺寸：内容那一圈才是锁比例的那块。
-        func height(forWidth width: CGFloat) -> CGFloat {
-            max(1, width - padding) / ratio + padding
-        }
-        func width(forHeight height: CGFloat) -> CGFloat {
-            max(1, height - padding) * ratio + padding
-        }
-
-        let minW = max(minSide, minSide * ratio) + padding
-        let minH = max(minSide, minSide * ratio) / ratio + padding
+        let minW = max(minSide, minSide * ratio)
+        let minH = minW / ratio
 
         switch handle {
         case .topRight:
             let delta = abs(dx) >= abs(dy) ? dx : (dy * ratio)
             let newW = max(minW, startFrame.width + delta)
-            let newH = height(forWidth: newW)
+            let newH = newW / ratio
             return CGRect(x: startFrame.minX, y: startFrame.minY, width: newW, height: newH)
 
         case .bottomRight:
             let delta = abs(dx) >= abs(dy) ? dx : (-dy * ratio)
             let newW = max(minW, startFrame.width + delta)
-            let newH = height(forWidth: newW)
+            let newH = newW / ratio
             return CGRect(x: startFrame.minX, y: startFrame.maxY - newH, width: newW, height: newH)
 
         case .topLeft:
             let delta = abs(dx) >= abs(dy) ? -dx : (dy * ratio)
             let newW = max(minW, startFrame.width + delta)
-            let newH = height(forWidth: newW)
+            let newH = newW / ratio
             return CGRect(x: startFrame.maxX - newW, y: startFrame.minY, width: newW, height: newH)
 
         case .bottomLeft:
             let delta = abs(dx) >= abs(dy) ? -dx : (-dy * ratio)
             let newW = max(minW, startFrame.width + delta)
-            let newH = height(forWidth: newW)
+            let newH = newW / ratio
             return CGRect(x: startFrame.maxX - newW, y: startFrame.maxY - newH, width: newW, height: newH)
 
         case .right:
             let newW = max(minW, startFrame.width + dx)
-            let newH = height(forWidth: newW)
+            let newH = newW / ratio
             let newY = startFrame.midY - newH / 2
             return CGRect(x: startFrame.minX, y: newY, width: newW, height: newH)
 
         case .left:
             let newW = max(minW, startFrame.width - dx)
-            let newH = height(forWidth: newW)
+            let newH = newW / ratio
             let newX = startFrame.maxX - newW
             let newY = startFrame.midY - newH / 2
             return CGRect(x: newX, y: newY, width: newW, height: newH)
 
         case .top:
             let newH = max(minH, startFrame.height + dy)
-            let newW = width(forHeight: newH)
+            let newW = newH * ratio
             let newX = startFrame.midX - newW / 2
             return CGRect(x: newX, y: startFrame.minY, width: newW, height: newH)
 
         case .bottom:
             let newH = max(minH, startFrame.height - dy)
-            let newW = width(forHeight: newH)
+            let newW = newH * ratio
             let newX = startFrame.midX - newW / 2
             let newY = startFrame.maxY - newH
             return CGRect(x: newX, y: newY, width: newW, height: newH)
@@ -143,41 +123,30 @@ enum PinGeometry {
         factor: CGFloat,
         mouseLocationInWindow: CGPoint,
         aspectRatio: CGFloat,
-        contentInset: CGFloat = 0,
         minSide: CGFloat = defaultMinSide,
         maxSize: CGSize = CGSize(width: 8000, height: 8000)
     ) -> CGRect {
         guard currentFrame.width > 0, currentFrame.height > 0 else { return currentFrame }
         let ratio = max(0.0001, aspectRatio)
-        let padding = contentInset * 2
 
-        // 缩放作用在**截图**上：先换到内容矩形，算完再包回外框。
-        let content = contentRect(of: currentFrame, inset: contentInset)
-        guard content.width > 0, content.height > 0 else { return currentFrame }
-
-        // 归一化焦点比例（0...1，原点左下角）。鼠标压在边框上时夹到边上。
-        let unitX = max(0.0, min(1.0, (mouseLocationInWindow.x - contentInset) / content.width))
-        let unitY = max(0.0, min(1.0, (mouseLocationInWindow.y - contentInset) / content.height))
+        // 归一化焦点比例（0...1，原点左下角）
+        let unitX = max(0.0, min(1.0, mouseLocationInWindow.x / currentFrame.width))
+        let unitY = max(0.0, min(1.0, mouseLocationInWindow.y / currentFrame.height))
 
         // 鼠标在屏幕坐标系中的锚点
-        let mouseScreenX = content.minX + unitX * content.width
-        let mouseScreenY = content.minY + unitY * content.height
+        let mouseScreenX = currentFrame.minX + unitX * currentFrame.width
+        let mouseScreenY = currentFrame.minY + unitY * currentFrame.height
 
         let minW = max(minSide, minSide * ratio)
         let maxW = min(maxSize.width, maxSize.height * ratio)
 
-        let targetWidth = content.width * factor
+        let targetWidth = currentFrame.width * factor
         let clampedWidth = max(minW, min(maxW, targetWidth))
         let clampedHeight = clampedWidth / ratio
 
-        let newOriginX = mouseScreenX - unitX * clampedWidth - contentInset
-        let newOriginY = mouseScreenY - unitY * clampedHeight - contentInset
+        let newOriginX = mouseScreenX - unitX * clampedWidth
+        let newOriginY = mouseScreenY - unitY * clampedHeight
 
-        return CGRect(
-            x: newOriginX,
-            y: newOriginY,
-            width: clampedWidth + padding,
-            height: clampedHeight + padding
-        )
+        return CGRect(x: newOriginX, y: newOriginY, width: clampedWidth, height: clampedHeight)
     }
 }

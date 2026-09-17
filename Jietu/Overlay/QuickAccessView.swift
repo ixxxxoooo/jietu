@@ -5,7 +5,6 @@ import SwiftUI
 ///
 /// 设计取向是「**截图本身是视觉主体**」：
 /// - 卡片尺寸按截图**原始宽高比**等比算出来，只受最大尺寸限制，永不拉伸；
-/// - 截图不贴边：卡片外面留一圈外框（与钉图同款 `PreviewCard`，macOS 预览窗口那个样子）；
 /// - 默认状态只有截图本身，不显示任何操作按钮；
 /// - 悬停时截图轻微模糊，**露出底下的毛玻璃**（而不是压色 / 缩放），操作层浮在截图之上；
 ///   悬停由图标层（AppKit tracking）判定并上报，卡片模糊 / 图标显隐 / 暂停自动关闭同源；
@@ -31,23 +30,12 @@ struct QuickAccessView: View {
     /// 光标是否落在卡片上；由图标层上报（同一份判断驱动模糊与图标显隐）。
     @State private var isHovering = false
 
-    /// 卡片外框圆角：与钉图同一套（`PreviewCard`）。
-    private static let cornerRadius = PreviewCard.cornerRadius
+    private static let cornerRadius = Theme.Radius.menuPanel
 
-    /// 内容区尺寸 = 卡片减掉外框那一圈（截图住在这里面）。
-    var contentAreaSize: CGSize {
-        CGSize(
-            width: max(1, cardSize.width - PreviewCard.inset * 2),
-            height: max(1, cardSize.height - PreviewCard.inset * 2)
-        )
-    }
-
-    /// 图片在卡片里该显示多大：等比放进**内容区**，且**不放大**
-    /// （小图保持原始点尺寸、居中留白）。
+    /// 图片在卡片里该显示多大：等比放进卡片，且**不放大**（小图保持原始点尺寸、居中留白）。
     var imageDisplaySize: CGSize {
-        let area = contentAreaSize
-        let size = imagePointSize.width > 0 && imagePointSize.height > 0 ? imagePointSize : area
-        let fit = min(area.width / size.width, area.height / size.height)
+        let size = imagePointSize.width > 0 && imagePointSize.height > 0 ? imagePointSize : cardSize
+        let fit = min(cardSize.width / size.width, cardSize.height / size.height)
         let scale = min(1, fit)
         return CGSize(
             width: max(1, (size.width * scale).rounded()),
@@ -55,13 +43,14 @@ struct QuickAccessView: View {
         )
     }
 
-    /// 卡片尺寸：截图等比缩放到最大框的**内容区**里，再包上外框、夹进最小框。
+    /// 卡片尺寸：按截图宽高比等比塞进最大框，再夹进**最小框**。
     ///
     /// 只等比缩放 → 不拉伸、不变形；只受上下限约束 → 尺寸不同的截图走同一套交互。
     ///
     /// 最小框是给极端宽高比兜底的：竖长截图（1:4）按比例算出来只有几十点宽，
     /// 四角按钮会互相压住、中央胶囊也放不下；超宽截图则只剩十几点高。
     /// 夹住之后图片按比例居中留白（`.fit`），既不拉伸，按钮也永远有地方站。
+    /// 卡片尺寸：等比缩放到上下限之间，**不放大**。
     ///
     /// - Parameter imagePointSize: 图片的自然点尺寸（不是像素）。
     static func panelSize(for imagePointSize: CGSize) -> CGSize {
@@ -69,46 +58,30 @@ struct QuickAccessView: View {
         let minSize = Theme.Size.quickAccessCardMin
         let imageSize = imagePointSize
         guard imageSize.width > 0, imageSize.height > 0 else { return maxSize }
-        let layout = PreviewCard.inset * 2
-        let maxContent = CGSize(
-            width: max(1, maxSize.width - layout),
-            height: max(1, maxSize.height - layout)
-        )
         // `min(1, ...)`：小图**不放大**（截了 20×10 点的图就按 20×10 显示，
         // 卡片按最小尺寸兜底、图片居中）。以前这里没夹 1，几十像素的小图会被撑到 260 宽。
-        let scale = min(1, min(maxContent.width / imageSize.width, maxContent.height / imageSize.height))
-        let content = CGSize(
-            width: (imageSize.width * scale).rounded(),
-            height: (imageSize.height * scale).rounded()
-        )
+        let scale = min(1, min(maxSize.width / imageSize.width, maxSize.height / imageSize.height))
         return CGSize(
-            width: min(maxSize.width, max(minSize.width, content.width + layout)),
-            height: min(maxSize.height, max(minSize.height, content.height + layout))
+            width: min(maxSize.width, max(minSize.width, (imageSize.width * scale).rounded())),
+            height: min(maxSize.height, max(minSize.height, (imageSize.height * scale).rounded()))
         )
     }
 
     var body: some View {
         ZStack {
-            // 截图不贴边：卡片比它大一圈，那一圈就是预览卡片的外框（与钉图同款）。
+            // 截图就是卡片本身：恰好铺满，不留边、不拉伸。
             Image(nsImage: image)
                 .resizable()
-                // `.fit`：卡片正好是图片的等比尺寸时=铺满内容区；被最小尺寸夹住时=居中留白（不裁切、不拉伸）。
+                // `.fit`：卡片正好是图片的等比尺寸时=铺满；被最小尺寸夹住时=居中留白（不裁切、不拉伸）。
                 .aspectRatio(contentMode: .fit)
                 // 不铺满整张卡片：`imageDisplaySize` 已经保证「放得下且不放大」，
-                // 小图居中、大图正好填满内容区。
+                // 小图居中、大图正好填满卡片。
                 .frame(width: imageDisplaySize.width, height: imageDisplaySize.height)
                 // 悬停时轻微模糊，把底下的毛玻璃透出来；不压色、不缩放，
                 // 按钮自己带玻璃底，不靠压暗截图来凸显。
                 // 模糊半径跟着图片尺寸走：固定 16 会把几十点的小图直接糊没（只剩一块毛玻璃）。
                 .blur(radius: isHovering ? min(16, max(4, imageDisplaySize.width / 8)) : 0)
-                // 截图自己那圈发丝描边：白图 / 深图都从外框里「浮」出来。
-                .clipShape(
-                    RoundedRectangle(cornerRadius: PreviewCard.contentRadius, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: PreviewCard.contentRadius, style: .continuous)
-                        .strokeBorder(Theme.Colors.cardStroke, lineWidth: Theme.Size.hairline)
-                }
+                .clipped()
                 // 热区再撑回**整张卡片**：小图（几十点）在卡片里居中留白，边上也得能点 / 能拖。
                 // 手势只能挂在图片这一层：挂到上面的 ZStack 上，SwiftUI 会把点击装到容器上，
                 // 连 AppKit 那层图标按钮的点击都一起抢走（自检里量到五个图标全点不动）。
@@ -122,9 +95,8 @@ struct QuickAccessView: View {
         }
         .frame(width: cardSize.width, height: cardSize.height)
         // 底色：后方色彩模糊的玻璃（透明 PNG / 悬停模糊时才透出来）。
-        // 与授权面板 / 钉图同款：静态 `.regular` 玻璃 + `PreviewCard` 大圆角 + 发丝描边。
+        // 与拖拽授权面板同款：静态 `.regular` 玻璃 + `Radius.menuPanel`，**不描边**。
         .glassPanel(cornerRadius: Self.cornerRadius)
-        .previewCardBorder(cornerRadius: Self.cornerRadius)
         .help("点击打开标注编辑器，拖拽到其它 App 或文件夹可导出")
         // 克制：只做一次短淡入，缩放 / 位移一概不做。
         .animation(.easeOut(duration: Theme.Duration.hover), value: isHovering)

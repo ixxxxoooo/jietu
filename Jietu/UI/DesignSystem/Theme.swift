@@ -108,10 +108,6 @@ enum Theme {
         static let dialog: CGFloat = 20
         /// 浮动菜单 / 标注工具栏 / QAO 卡片 / 控制条。
         static let menuPanel: CGFloat = 16
-        /// 钉图 / 浮窗的预览卡片外框（macOS 截图预览窗口那种大圆角）。
-        static let previewCard: CGFloat = 18
-        /// 预览卡片里截图自己的圆角，比外框小一档。
-        static let previewContent: CGFloat = 12
         /// 设置卡片 / 普通卡片。
         static let card: CGFloat = 10
         /// 列表行悬停底。
@@ -183,11 +179,8 @@ enum Theme {
         /// 行悬停胶囊的宽度上限。
         static let popoverMenuWidth: CGFloat = 276
 
-        /// 预览卡片（钉图 / 浮窗）里截图与外框之间的留白。
-        static let previewCardInset: CGFloat = 8
-
         /// QAO 卡片的**最大**尺寸：截图按原始宽高比等比缩进来，永不拉伸。
-        /// 阴影由系统窗口阴影负责，不留白（只留 `previewCardInset` 那圈外框）。
+        /// 阴影由系统窗口阴影负责，不留白。
         static let quickAccessCardMax = CGSize(width: 260, height: 180)
         /// QAO 卡片的**最小**尺寸：极端宽高比（竖长截图 / 超宽截图）按原始比例算出来只有几十点宽
         /// （甚至十几点高），按钮就会互相压住、胶囊也放不下。兜一个下限，图片居中留白，不拉伸。
