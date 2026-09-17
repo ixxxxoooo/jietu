@@ -8,9 +8,9 @@ import VisionKit
 /// - 拖动任意位置移动
 /// - 拖动边缘 / 角改变大小（保持宽高比）
 /// - 滚轮 / 触控板捏合缩放
-/// - 右键菜单：OCR 识别文字、复制图像、关闭
+/// - 右键菜单：实况文本（OCR）、复制图像、关闭
 /// - 双击关闭；Esc 关闭；⌘W 快速关闭
-/// - 右上角磨砂玻璃关闭按钮（悬停显示）
+/// - 右上角磨砂玻璃关闭按钮（悬停显示；进入实况文本后常驻）
 ///
 /// @author ixxxxoooo
 final class PinWindowController: NSObject {
@@ -145,21 +145,36 @@ final class PinPanel: NSPanel {
 
 /// 原生 macOS 玻璃质感圆形图标按钮。
 ///
-/// 遵循 macOS 设计规范（Liquid Glass / Vibrancy）：
-/// - 底层使用 `NSVisualEffectView(blendingMode: .withinWindow, material: .hudWindow)` 实时对底图进行原生硬件级毛玻璃模糊；
-/// - 边缘带有极细高光描边（Rim Light），呈现真实玻璃通透折射感；
-/// - 悬停时柔和微光渐变（Theme.Duration.hover），按下时平滑反馈；
-/// - 内部 SF Symbol 图标清晰居中；
+/// 与设计系统的 `GlassCircleButton` 对齐（同款系统自适应 Liquid Glass）：
+/// - 底层 `NSGlassEffectView(.regular)` + `glassFrost` 色调，跟随系统外观；
+/// - 图标走 alpha ramp 的 `textPrimary`（深色白 / 浅色黑），不再固定深色底 + 白图标；
+/// - 悬停时柔和微光渐变（Theme.Duration.hover），按下时缩放 + 变暗反馈；
 /// - 重写 `acceptsFirstMouse`，保证即使在后台/未激活窗口下也是单次点击即刻响应。
 ///
 /// @author ixxxxoooo
+/// 悬停高亮层：用 layer 直接填色。
+///
+/// 不能用 `NSBox` —— 它的 `fillColor` 走的是自己那套绘制，放进
+/// `NSGlassEffectView.contentView` 里**完全不渲染**（悬停看不到任何反馈）。
+private final class HoverTintView: NSView {
+    var tintColor: NSColor = .clear
+    var cornerRadius: CGFloat = 0
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        layer?.backgroundColor = tintColor.cgColor
+        layer?.cornerRadius = cornerRadius
+    }
+}
+
 final class PinGlassCircleButton: NSControl {
     var onClick: (() -> Void)?
 
-    private let effectView = NSVisualEffectView()
-    private let scrimView = NSBox()
+    private let glassView = NSGlassEffectView()
+    private let glassContainer = NSView()
     private let iconView = NSImageView()
-    private let hoverOverlay = NSBox()
+    private let hoverOverlay = HoverTintView()
     private var isHovered = false
     private var isPressed = false
     private var trackingArea: NSTrackingArea?
@@ -173,50 +188,42 @@ final class PinGlassCircleButton: NSControl {
         wantsLayer = true
         toolTip = tooltip
 
-        // 1. 原生毛玻璃背景（Liquid Glass / Vibrancy）
-        // 关键：.withinWindow 会实时采样并模糊该控件正下方窗口内的图像像素（即截图内容）
-        effectView.blendingMode = .withinWindow
-        effectView.material = .hudWindow
-        effectView.state = .active
-        // 按钮浮在**任意**截图上（纯白页面、纯黑终端、彩色图片都会遇到）：
-        // 固定走深色玻璃 + 白色图标。若跟着系统外观走，浅色外观下 .hudWindow 也是浅的，
-        // 白图标贴在白色截图上就「消失」了。
-        effectView.appearance = NSAppearance(named: .darkAqua)
-        effectView.wantsLayer = true
-        effectView.layer?.cornerRadius = diameter / 2
-        effectView.layer?.masksToBounds = true
-        // 极细高光内描边，呈现真实玻璃边缘折射感
-        effectView.layer?.borderWidth = 0.5
-        effectView.layer?.borderColor = NSColor(white: 1.0, alpha: 0.28).cgColor
-        addSubview(effectView)
+        // 1. 系统自适应玻璃：与 `Theme.frosted` 同配方（`.regular` + glassFrost 色调）
+        glassView.style = .regular
+        glassView.cornerRadius = diameter / 2
+        glassView.tintColor = NSColor(name: nil) { $0.isDark
+            ? .srgbInk(1, alpha: 0.05)
+            : .srgbInk(1, alpha: 0.25)
+        }
+        addSubview(glassView)
 
-        // 1.5 压底墨色：玻璃会采样到底图，采样到白色内容时还是偏亮 —— 再压一层深色，
-        // 保证白图标在任何底图上的对比度都够（设计系统里浮动表面也是「磨砂 + scrim」）。
-        scrimView.boxType = .custom
-        scrimView.borderType = .noBorder
-        scrimView.fillColor = NSColor(white: 0, alpha: 0.45)
-        scrimView.cornerRadius = diameter / 2
-        scrimView.isTransparent = false
-        addSubview(scrimView)
+        // `NSGlassEffectView` 只保证 `contentView` 的层级；悬停层与图标必须放进去，
+        // 否则会被玻璃盖住（悬停看不到任何反馈）。
+        glassContainer.wantsLayer = true
+        glassView.contentView = glassContainer
 
-        // 2. 悬停微光高亮层
-        hoverOverlay.boxType = .custom
-        hoverOverlay.borderType = .noBorder
-        hoverOverlay.fillColor = NSColor(white: 1.0, alpha: 0.15)
+        // 2. 悬停微光高亮层（ramp 的 menuHover，与 `GlassCircleButton` 同配方）
+        hoverOverlay.tintColor = NSColor(name: nil) { $0.isDark
+            ? .srgbInk(1, alpha: 0.10)
+            : .srgbInk(0, alpha: 0.09)
+        }
         hoverOverlay.cornerRadius = diameter / 2
         hoverOverlay.alphaValue = 0
-        hoverOverlay.isTransparent = false
-        addSubview(hoverOverlay)
+        hoverOverlay.wantsLayer = true
+        glassContainer.addSubview(hoverOverlay)
 
-        // 3. 图标（SF Symbol）
-        let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+        // 3. 图标（SF Symbol，颜色走 alpha ramp 的 textPrimary）
+        let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
         if let img = NSImage(systemSymbolName: systemSymbolName, accessibilityDescription: tooltip)?.withSymbolConfiguration(config) {
             iconView.image = img
         }
-        iconView.contentTintColor = .white
+        iconView.contentTintColor = NSColor(name: nil) { $0.isDark
+            ? .srgbInk(1, alpha: 1)
+            : .srgbInk(0, alpha: 1)
+        }
         iconView.imageScaling = .scaleProportionallyDown
         iconView.wantsLayer = true
-        addSubview(iconView)
+        glassContainer.addSubview(iconView)
 
         // 4. 原生柔和投影，增强玻璃浮空通透感（白底图上也要能把按钮「托」出来）
         shadow = NSShadow()
@@ -240,17 +247,17 @@ final class PinGlassCircleButton: NSControl {
 
     override func layout() {
         super.layout()
-        effectView.frame = bounds
-        effectView.layer?.cornerRadius = bounds.width / 2
-        scrimView.frame = bounds
-        scrimView.cornerRadius = bounds.width / 2
-        hoverOverlay.frame = bounds
+        glassView.frame = bounds
+        glassView.cornerRadius = bounds.width / 2
+        glassContainer.frame = glassView.bounds
+        hoverOverlay.frame = glassContainer.bounds
         hoverOverlay.cornerRadius = bounds.width / 2
+        hoverOverlay.needsDisplay = true
 
-        let iconSize: CGFloat = 14
+        let iconSize: CGFloat = 16
         iconView.frame = NSRect(
-            x: (bounds.width - iconSize) / 2,
-            y: (bounds.height - iconSize) / 2,
+            x: (glassContainer.bounds.width - iconSize) / 2,
+            y: (glassContainer.bounds.height - iconSize) / 2,
             width: iconSize,
             height: iconSize
         )
@@ -263,12 +270,20 @@ final class PinGlassCircleButton: NSControl {
         }
         let area = NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .activeAlways],
             owner: self,
             userInfo: nil
         )
         addTrackingArea(area)
         trackingArea = area
+    }
+
+    /// 由宿主 `PinContentView` 统一驱动：它的 tracking 已确认可靠（按钮就是靠它唤出的），
+    /// 按钮自己的 tracking area 在隐藏→显示切换后不一定会重建。
+    func setHovering(_ hovering: Bool) {
+        guard isHovered != hovering else { return }
+        isHovered = hovering
+        animateHover(highlighted: hovering)
     }
 
     override func resetCursorRects() {
@@ -277,14 +292,12 @@ final class PinGlassCircleButton: NSControl {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        isHovered = true
-        animateHover(highlighted: true)
+        setHovering(true)
     }
 
     override func mouseExited(with event: NSEvent) {
-        isHovered = false
+        setHovering(false)
         isPressed = false
-        animateHover(highlighted: false)
         animatePress(pressed: false)
     }
 
@@ -317,8 +330,7 @@ final class PinGlassCircleButton: NSControl {
         NSAnimationContext.runAnimationGroup { context in
             context.duration = pressed ? 0.08 : 0.14
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            effectView.animator().alphaValue = pressed ? 0.75 : 1.0
-            scrimView.animator().alphaValue = pressed ? 0.75 : 1.0
+            glassView.animator().alphaValue = pressed ? 0.75 : 1.0
             iconView.animator().alphaValue = pressed ? 0.75 : 1.0
         }
 
@@ -339,11 +351,9 @@ final class PinGlassCircleButton: NSControl {
         layer.add(animation, forKey: "pressScale")
     }
 
-    /// 测试用：按钮底是否**固定**深色。
-    ///
-    /// 白底截图太常见了——底一旦跟着系统外观变浅，白色图标就糊在白底里（用户反馈过）。
-    var backdropIsDark: Bool {
-        effectView.appearance?.name == .darkAqua && scrimView.fillColor.alphaComponent > 0.2
+    /// 测试用：按钮底是否**跟随系统外观**（不再强制深色）。
+    var followsSystemAppearance: Bool {
+        glassView.appearance == nil && glassView.style == .regular
     }
 }
 
@@ -382,10 +392,8 @@ final class PinContentView: NSView {
         configureLiveTextButton()
 
         // 若鼠标当前已落在窗口范围内，初始就展示浮动按钮
-        let currentMouse = NSEvent.mouseLocation
-        if frame.contains(currentMouse) {
-            closeButton?.isHidden = false
-            liveTextButton?.isHidden = false
+        if frame.contains(NSEvent.mouseLocation) {
+            setFloatingButtonsVisible(true)
         }
 
         let doubleClick = NSClickGestureRecognizer(
@@ -525,11 +533,36 @@ final class PinContentView: NSView {
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         let point = convert(event.locationInWindow, from: nil)
-        if bounds.contains(point) && !isLiveTextOn {
-            if closeButton?.isHidden == true { closeButton?.isHidden = false }
-            if liveTextButton?.isHidden == true { liveTextButton?.isHidden = false }
+        if bounds.contains(point) {
+            setFloatingButtonsVisible(true)
         }
+        updateButtonHover(at: point)
         updateCursor(at: point)
+    }
+
+    // MARK: - Floating Buttons
+
+    /// 浮动按钮（右上角「关闭」、右下角「实况文本」）的统一显隐入口。
+    private func setFloatingButtonsVisible(_ visible: Bool) {
+        closeButton?.isHidden = !visible
+        liveTextButton?.isHidden = !visible
+    }
+
+    /// 依鼠标是否落在窗口内刷新浮动按钮；无窗口（构造期 / 测试）时保持原状。
+    private func refreshFloatingButtons() {
+        guard let window else { return }
+        setFloatingButtonsVisible(window.frame.contains(NSEvent.mouseLocation))
+    }
+
+    /// 圆形按钮的悬停态统一在这里算：宿主视图的 tracking 比按钮自己的更可靠
+    /// （按钮自 `isHidden` 切换后不一定重建 tracking area）。
+    private func updateButtonHover(at point: NSPoint) {
+        closeButton?.setHovering(
+            closeButton.map { !$0.isHidden && $0.frame.contains(point) } ?? false
+        )
+        liveTextButton?.setHovering(
+            liveTextButton.map { !$0.isHidden && $0.frame.contains(point) } ?? false
+        )
     }
 
     // MARK: - Mouse Dragging & Resizing
@@ -762,23 +795,22 @@ final class PinContentView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        if !isLiveTextOn {
-            closeButton?.isHidden = false
-            liveTextButton?.isHidden = false
-        }
+        setFloatingButtonsVisible(true)
     }
 
     override func mouseExited(with event: NSEvent) {
         let mouseInView = convert(event.locationInWindow, from: nil)
-        if !bounds.contains(mouseInView) {
-            closeButton?.isHidden = true
-            liveTextButton?.isHidden = true
+        // 实况文本下按钮**常驻**：它是「退出实况文本」与「关闭钉图」的唯一可见入口。
+        if !bounds.contains(mouseInView), !isLiveTextOn {
+            setFloatingButtonsVisible(false)
             NSCursor.arrow.set()
         }
+        closeButton?.setHovering(false)
+        liveTextButton?.setHovering(false)
     }
 
     /// 点击才进入实况文本；默认拖动是移动窗口。
-    @objc private func toggleLiveText() {
+    @objc func toggleLiveText() {
         if isLiveTextOn {
             stopLiveText()
         } else {
@@ -789,8 +821,11 @@ final class PinContentView: NSView {
     private func startLiveText() {
         guard liveTextOverlay == nil else { return }
         isLiveTextOn = true
-        liveTextButton?.isHidden = true
-        closeButton?.isHidden = true
+        // 按钮不隐藏：覆盖层会接走右键菜单，退出的路只剩这两个按钮。
+        // 右上角「关闭」必须一直在（用户明确要求 OCR 时也要能关掉钉图），
+        // 右下角「实况文本」留着点回普通态。
+        setFloatingButtonsVisible(true)
+        liveTextButton?.toolTip = "退出实况文本"
 
         let overlay = ImageAnalysisOverlayView(liveTextDelegate)
         overlay.preferredInteractionTypes = .textSelection

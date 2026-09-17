@@ -58,6 +58,8 @@ struct GlassButton: View {
 
 /// 浮动圆形玻璃图标按钮（QAO 四角）。
 ///
+/// 悬停配方与 `GlassButton` 一致：压一层 `menuHover`，0.12s 淡入淡出。
+///
 /// @author ixxxxoooo
 struct GlassCircleButton: View {
     let title: String
@@ -66,6 +68,8 @@ struct GlassCircleButton: View {
     var tint: Color = Theme.Colors.textPrimary
     let action: () -> Void
 
+    @State private var hovered = false
+
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
@@ -73,8 +77,11 @@ struct GlassCircleButton: View {
                 .foregroundStyle(tint)
                 .frame(width: diameter, height: diameter)
                 .contentShape(Circle())
+                .background(Circle().fill(hovered ? Theme.Colors.menuHover : .clear))
         }
         .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .animation(.easeOut(duration: Theme.Duration.hover), value: hovered)
         .frosted(in: Circle())
         .help(title)
     }

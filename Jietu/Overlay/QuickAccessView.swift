@@ -7,7 +7,7 @@ import SwiftUI
 /// - 卡片尺寸按截图**原始宽高比**等比算出来，只受最大尺寸限制，永不拉伸；
 /// - 默认状态只有截图本身，不显示任何操作按钮；
 /// - 悬停时截图轻微模糊，**露出底下的毛玻璃**（而不是压色 / 缩放），操作层浮在截图之上；
-/// - 表面是浮动面板玻璃（后方色彩模糊）+ 极细内描边 + 顶部微光，
+/// - 表面是浮动面板玻璃（后方色彩模糊）、不描边，与拖拽授权面板同款配方；
 ///   大圆角用 `.continuous`（squircle）；阴影交给系统窗口阴影（多层弥散、随外观自适应）。
 ///
 /// @author ixxxxoooo
@@ -61,9 +61,8 @@ struct QuickAccessView: View {
         }
         .frame(width: cardSize.width, height: cardSize.height)
         // 底色：后方色彩模糊的玻璃（透明 PNG / 悬停模糊时才透出来）。
+        // 与拖拽授权面板同款：静态 `.regular` 玻璃 + `Radius.menuPanel`，**不描边**。
         .glassPanel(cornerRadius: Self.cornerRadius)
-        // 极细内描边 + 顶部微光：任何壁纸上都有一条能认出来的边。
-        .overlay(rim)
         .help("点击打开标注编辑器，拖拽到其它 App 或文件夹可导出")
         // 克制：只做一次短淡入，缩放 / 位移一概不做。
         .animation(.easeOut(duration: Theme.Duration.hover), value: isHovering)
@@ -71,24 +70,6 @@ struct QuickAccessView: View {
             isHovering = hovering
             onHoverChange(hovering)
         }
-    }
-
-    /// 极细内描边：顶部略亮、往下淡出，就是那层「轻量微光」。
-    ///
-    /// 刻意做得**淡而细**（半个点 + 低透明度），只在需要时给出一条边，
-    /// 不喧宾夺主地框住截图。
-    private var rim: some View {
-        let base = isHovering
-            ? Theme.Colors.border.opacity(0.55) : Theme.Colors.cardStroke.opacity(0.45)
-        return RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-            .strokeBorder(
-                LinearGradient(
-                    colors: [base, base.opacity(0.3)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: Theme.Size.hairline / 2
-            )
     }
 
     /// 四角圆形图标 + 中间保存按钮；它们自己带玻璃底，不靠压暗截图来凸显。
