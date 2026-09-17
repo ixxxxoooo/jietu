@@ -278,6 +278,21 @@ final class OverlayCoordinator {
             .debugSetSelection(localRect)
     }
 
+    /// 自检用：给某块屏的遮罩直接送一对「按下 / 抬起」（AppKit 全局坐标，不经注入管线）。
+    ///
+    /// 注入管线对「同一位置的按下 → 抬起」很挑（实测抬起要等下一次移动才被投递），
+    /// 而「按下不拖动 = 截一个窗口」验的是按下路径本身，用合成事件才不会假失败。
+    @discardableResult
+    func debugClick(atAppKitPoint point: CGPoint, displayID: CGDirectDisplayID) -> Bool {
+        controllers.first { $0.snapshot.displayID == displayID }?
+            .debugClick(atAppKitPoint: point) ?? false
+    }
+
+    /// 自检用：吸附预览（窗口描边 + 标签）是否画着。
+    func debugWindowHighlightVisible(displayID: CGDirectDisplayID) -> Bool? {
+        controllers.first { $0.snapshot.displayID == displayID }?.debugWindowHighlightVisible
+    }
+
     /// 自检用：指定屏上放大镜的模型 / 呈现 frame。
     func debugLoupePresentation(
         displayID: CGDirectDisplayID

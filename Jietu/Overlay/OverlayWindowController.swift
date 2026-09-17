@@ -80,6 +80,34 @@ final class OverlayWindowController {
 
     #if DEBUG
     var debugSelection: CGRect? { canvas.debugSelection }
+
+    /// 自检用：吸附预览（窗口描边 + 标签）是否画着。
+    var debugWindowHighlightVisible: Bool { canvas.debugWindowHighlightVisible }
+
+    /// 自检用：直接送一对合成事件进遮罩（不经注入管线，见 `OverlayCoordinator.debugClick`）。
+    ///
+    /// - Parameter appKitPoint: AppKit 全局坐标。
+    @discardableResult
+    func debugClick(atAppKitPoint appKitPoint: CGPoint) -> Bool {
+        let inWindow = window.convertFromScreen(
+            NSRect(origin: appKitPoint, size: .zero)
+        ).origin
+        guard
+            let down = NSEvent.mouseEvent(
+                with: .leftMouseDown, location: inWindow, modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1,
+                pressure: 1
+            ),
+            let up = NSEvent.mouseEvent(
+                with: .leftMouseUp, location: inWindow, modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 2, clickCount: 1,
+                pressure: 0
+            )
+        else { return false }
+        canvas.mouseDown(with: down)
+        canvas.mouseUp(with: up)
+        return true
+    }
     #endif
 
     init(

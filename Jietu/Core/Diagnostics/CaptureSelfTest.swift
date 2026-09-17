@@ -20,6 +20,8 @@ import UniformTypeIdentifiers
 ///                                           逐拍 dump 帧 + 平均差 / Vision 位移 / 拼接判定
 ///   Jietu --selftest-scrollprobe x,y,w,h    几种合成滚轮写法哪个能真的推动目标窗口
 ///   Jietu --selftest-quickaccess <输出目录> 浮窗图标：逐个注入点击，量响应速度（含截图）
+///   Jietu --selftest-overlay-press <输出目录>
+///                                           吸附预览：量「按下 → 窗口描边消失」，拖动中不许回来
 enum CaptureSelfTest {
     @MainActor
     static func handleCommandLineIfNeeded() -> Bool {
@@ -91,6 +93,16 @@ enum CaptureSelfTest {
             runSessionTest(
                 spec: value ?? "400,400,700,500",
                 outputDirectory: outputDirectory(arguments, after: flagIndex)
+            )
+            return true
+
+        case "--selftest-overlay-press":
+            // 吸附预览「按下即收」：鼠标所在窗口的描边，在按下的那一刻就该消失。
+            runOverlayPressTest(
+                outputDirectory: URL(
+                    fileURLWithPath: value ?? NSTemporaryDirectory(),
+                    isDirectory: true
+                )
             )
             return true
 
@@ -755,6 +767,222 @@ enum CaptureSelfTest {
     /// 放大镜自检：弹遮罩 → 自动挑一块**有细节**的屏幕区域 → 合成鼠标移动/拖拽。
     ///
     /// 参数 `x,y` 可指定「候选靶心」的搜索起点（像素、原点左上），省略就全屏找。
+    /// 吸附预览「按下即收」自检。
+    ///
+    /// 用户报的现象：鼠标停在一个窗口上，那圈绿色吸附描边好好的；**一按下准备框选**，
+    /// 描边却还赖在窗口上不动（一直拖到选区成型才不见）。视觉焦点应该当场跟到
+    /// 鼠标开始操作的地方去。
+    ///
+    /// 这条自检把四段都量一遍：悬停出现 → 按下消失（毫秒）→ 拖动全程不回来 → 松手后该回来就回来。
+    private static func runOverlayPressTest(outputDirectory: URL) {
+        Task { @MainActor in
+            var report: [String] = []
+            var budgets: [(label: String, milliseconds: Double?, limit: Double)] = []
+            do {
+                let engine = CaptureEngine()
+                let snapshots = try await engine.captureAllDisplays()
+                guard let snapshot = snapshots.first else { throw CaptureError.noDisplays }
+                let screen = NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID }
+                    ?? NSScreen.main ?? NSScreen.screens[0]
+                let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
+                try FileManager.default.createDirectory(
+                    at: outputDirectory, withIntermediateDirectories: true
+                )
+
+                let coordinator = OverlayCoordinator()
+                retainedCoordinator = coordinator
+                coordinator.purpose = .screenshot
+                coordinator.present(
+                    session: CaptureSession(snapshots: snapshots, windows: windows),
+                    inlineMode: false
+                )
+                try? await Task.sleep(for: .milliseconds(700))
+
+                @MainActor func waitUntil(
+                    _ since: CFAbsoluteTime, timeout: TimeInterval = 1.5,
+                    until condition: () -> Bool
+                ) async -> Double? {
+                    while CFAbsoluteTimeGetCurrent() - since < timeout {
+                        if condition() { return (CFAbsoluteTimeGetCurrent() - since) * 1000 }
+                        try? await Task.sleep(for: .milliseconds(4))
+                    }
+                    return nil
+                }
+
+                @MainActor func highlightVisible() -> Bool? {
+                    coordinator.debugWindowHighlightVisible(displayID: snapshot.displayID)
+                }
+
+                /// 找一个「鼠标放上去必定命中某个窗口」的点：取各窗口中心，
+                /// 用 App 自己那套命中测试确认它确实是该窗口的最前面。
+                @MainActor func probePoint() -> (point: CGPoint, window: WindowInfo)? {
+                    for window in windows {
+                        let cg = CGPoint(
+                            x: window.frameInCGPoints.midX, y: window.frameInCGPoints.midY
+                        )
+                        let appKit = CGPoint(x: cg.x, y: DisplayGeometry.referenceHeight - cg.y)
+                        guard screen.frame.contains(appKit) else { continue }
+                        guard WindowHitTester.frontmost(atCGPoint: cg, in: windows)?.windowID
+                            == window.windowID
+                        else { continue }
+                        return (appKit, window)
+                    }
+                    return nil
+                }
+
+                guard let probe = probePoint() else {
+                    report.append("error: 屏幕上找不到可命中的窗口，无法测吸附预览")
+                    report.append("RESULT: FAIL")
+                    finish(report, code: 1)
+                    return
+                }
+                let start = CGPoint(
+                    x: probe.point.x, y: DisplayGeometry.referenceHeight - probe.point.y
+                )
+                report.append(
+                    "探针窗口=\(probe.window.displayName) \(describe(probe.window.frameInCGPoints))"
+                        + " 注入点=(\(Int(start.x)),\(Int(start.y)))"
+                )
+
+                // 1. 悬停（前置条件）：探针窗口的描边必须已经画着——
+                //    否则「按下后隐藏」是白拿的，这条自检等于没测。
+                postMouse(.mouseMoved, at: CGPoint(x: start.x - 300, y: start.y - 200))
+                try? await Task.sleep(for: .milliseconds(150))
+                let hoverAt = CFAbsoluteTimeGetCurrent()
+                postMouse(.mouseMoved, at: start)
+                let appearMs = await waitUntil(hoverAt, timeout: 1.0) { highlightVisible() == true }
+                guard appearMs != nil else {
+                    report.append("error: 探针点没有出现吸附描边，测不了「按下即收」")
+                    report.append("RESULT: FAIL")
+                    finish(report, code: 1)
+                    return
+                }
+                report.append(
+                    String(format: "悬停 → 描边出现 %@（前置条件成立）", describe(milliseconds: appearMs))
+                )
+
+                // 2. 按下：描边**当场**消失。
+                let pressAt = CFAbsoluteTimeGetCurrent()
+                postMouse(.leftMouseDown, at: start)
+                let goneMs = await waitUntil(pressAt, timeout: 0.6) { highlightVisible() == false }
+                report.append(
+                    String(format: "按下 → 描边消失 %@（按住不放）", describe(milliseconds: goneMs))
+                )
+                budgets.append(("按下 → 描边消失", goneMs, 60))
+
+                // 3. 拖动全程都不许回来；顺便截一张拖动中的图给人看。
+                var stillHidden = true
+                var dragReport: [String] = []
+                for step in 1...4 {
+                    let point = CGPoint(
+                        x: start.x + CGFloat(step) * 18, y: start.y + CGFloat(step) * 12
+                    )
+                    postMouse(.leftMouseDragged, at: point)
+                    try? await Task.sleep(for: .milliseconds(60))
+                    let visible = highlightVisible() ?? true
+                    if visible { stillHidden = false }
+                    dragReport.append("第 \(step) 步 \(visible ? "**又出现了**" : "仍收起")")
+                }
+                let draggingShots = try await engine.captureAllDisplays(
+                    excludingOwnApplication: false
+                )
+                if let shot = draggingShots.first(where: { $0.displayID == snapshot.displayID })
+                    ?? draggingShots.first
+                {
+                    let url = outputDirectory.appendingPathComponent("overlay-press-dragging.png")
+                    try writePNG(shot.image, to: url)
+                    report.append("拖动中截图 -> \(url.path)")
+                }
+                report.append("拖动中描边状态：" + dragReport.joined(separator: "，"))
+                budgets.append(("拖动中不再出现描边", stillHidden ? 0 : nil, 0))
+
+                // 4. 松手 → 选区成型（描边不该回来）；再按一次拖一点点松手（选区被丢弃）→ 描边该回来。
+                postMouse(.leftMouseUp, at: CGPoint(x: start.x + 72, y: start.y + 48))
+                try? await Task.sleep(for: .milliseconds(250))
+                let settledRect = coordinator.debugSelections
+                    .first { $0.displayID == snapshot.displayID }?.localRect
+                let settledVisible = (highlightVisible() ?? false) ? "还在（不应出现）" : "收起"
+                report.append(
+                    "松手 → 选区=\(settledRect.map(describe) ?? "无")，描边=\(settledVisible)"
+                )
+
+                // 远离刚成型的选区（贴上去会按到它的控制点，变成「调整选区」而不是「框新的」）。
+                let away = CGPoint(x: start.x - 300, y: start.y - 200)
+                postMouse(.leftMouseDown, at: away)
+                try? await Task.sleep(for: .milliseconds(40))
+                // 拖过 3pt 阈值但不到最小选区（6pt）：松手时选区被丢弃，回到「还没选区」。
+                postMouse(.leftMouseDragged, at: CGPoint(x: away.x + 4, y: away.y + 1))
+                try? await Task.sleep(for: .milliseconds(40))
+                postMouse(.leftMouseUp, at: CGPoint(x: away.x + 4, y: away.y + 1))
+                let backAt = CFAbsoluteTimeGetCurrent()
+                let backMs = await waitUntil(backAt, timeout: 1.5) { highlightVisible() == true }
+                let clearedRect = coordinator.debugSelections
+                    .first { $0.displayID == snapshot.displayID }?.localRect
+                report.append(
+                    String(
+                        format: "松手（没形成选区，选区=%@）→ 描边回来 %@",
+                        clearedRect.map(describe) ?? "无",
+                        describe(milliseconds: backMs)
+                    )
+                )
+                budgets.append(("取消框选后描边回来", backMs, 200))
+
+                // 5. 按下不拖动 = 截图那个窗口：按下路径上最容易被「收预览」改坏的就是它，
+                //    必须确认还在（收的是画面，`hoveredWindow` 状态不能被连带动到）。
+                var capturedWindow: WindowInfo?
+                coordinator.onFinish = { outcome in
+                    if case .windowCaptured(let window, _) = outcome { capturedWindow = window }
+                }
+                // 光标先真的挪过去（hoveredWindow 要落在探针窗口上），
+                // 再用**合成事件**直接送进遮罩点击——注入管线对「同一位置的按下 → 抬起」
+                // 很挑（实测抬起要等下一次移动才被投递），这里验的是按下路径本身。
+                postMouse(.mouseMoved, at: probe.point)
+                try? await Task.sleep(for: .milliseconds(250))
+                // 注意：本节的计时一律用 `CFAbsoluteTimeGetCurrent()`（与上面的 `waitUntil` 同源）。
+                // 它和 `CACurrentMediaTime()` 是两套基准（实测差 8 亿秒），混用会算出「几十年前」。
+                let clickPressAt = CFAbsoluteTimeGetCurrent()
+                let sent = coordinator.debugClick(
+                    atAppKitPoint: probe.point, displayID: snapshot.displayID
+                )
+                let capturedMs = await waitUntil(clickPressAt, timeout: 1) { capturedWindow != nil }
+                if !sent {
+                    report.append("error: 没找到遮罩，合成点击没送出去")
+                }
+                report.append(
+                    String(
+                        format: "单击窗口（不拖动）→ %@ %@",
+                        capturedWindow.map { "截取「\($0.displayName)」" } ?? "**没截到窗口**",
+                        describe(milliseconds: capturedMs)
+                    )
+                )
+                budgets.append(("单击窗口 → 截取", sent ? capturedMs : nil, 100))
+
+                coordinator.cancel()
+                report.append("延迟预算：")
+                var failed = 0
+                for budget in budgets {
+                    let ok = budget.milliseconds != nil && budget.milliseconds! <= budget.limit
+                    if !ok { failed += 1 }
+                    report.append(
+                        String(
+                            format: "    %@ %@ / 预算 %.0f ms  %@",
+                            ok ? "✅" : "❌",
+                            describe(milliseconds: budget.milliseconds),
+                            budget.limit,
+                            budget.label
+                        )
+                    )
+                }
+                report.append("RESULT: \(failed == 0 ? "PASS" : "FAIL（\(failed) 项超预算）")")
+                finish(report, code: failed == 0 ? 0 : 1)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
+    }
+
     private static func runLoupeTest(spec: String, outputDirectory: URL) {
         Task { @MainActor in
             var report: [String] = []

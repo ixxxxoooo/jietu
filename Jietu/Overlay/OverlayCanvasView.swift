@@ -302,6 +302,11 @@ final class OverlayCanvasView: NSView {
         guard let state = loupeDebugState else { return nil }
         return state
     }
+
+    /// 自检用：吸附预览（窗口描边 + 窗口标签）当前是不是真的画着。
+    var debugWindowHighlightVisible: Bool {
+        !windowHighlightLayer.isHidden || !windowLabelLayer.isHidden
+    }
     #endif
 
     // MARK: - Region pick 回报
@@ -711,6 +716,29 @@ final class OverlayCanvasView: NSView {
         return clipped.isEmpty ? nil : clipped
     }
 
+    /// 鼠标按下之后的这段时间，吸附预览（描边 + 窗口标签）要**当场收掉**。
+    ///
+    /// 用户按下就是要开始操作了，视觉焦点得跟到鼠标开始操作的地方去；
+    /// 不然拖框拖到一半，那个绿圈还赖在原来的窗口上（用户报的就是这个）。
+    /// 只收**画面**：`hoveredWindow` 状态留着，单击命中窗口那条路还要用它。
+    private var isPressPreviewSuppressed: Bool {
+        switch interaction {
+        case .idle, .settled:
+            return false
+        case .pressing, .selecting, .resizing, .moving:
+            return true
+        }
+    }
+
+    /// 吸附预览该画的窗口矩形。
+    ///
+    /// 与 `hoveredWindowLocalRect` 的区别只有一条：按下之后收起。
+    /// 压暗层的洞口（`updateDimPath`）仍然按 `hoveredWindowLocalRect` 算——
+    /// 按下瞬间就把窗口重新压暗会闪一下，那一片该一直亮到选区接管为止。
+    private var hoveredWindowPreviewRect: CGRect? {
+        isPressPreviewSuppressed ? nil : hoveredWindowLocalRect
+    }
+
     private func updateSelectionLayers() {
         guard let selection else {
             selectionBorderOuterLayer.isHidden = true
@@ -995,7 +1023,7 @@ final class OverlayCanvasView: NSView {
         // 压暗层也要跟着重算（洞口就是被吸附的窗口）。
         updateDimPath()
 
-        guard let window = hoveredWindow, let clipped = hoveredWindowLocalRect else {
+        guard let window = hoveredWindow, let clipped = hoveredWindowPreviewRect else {
             windowHighlightLayer.isHidden = true
             windowLabelLayer.isHidden = true
             return
@@ -1173,6 +1201,8 @@ final class OverlayCanvasView: NSView {
 
         if isWindowOnlyMode {
             interaction = .pressing(anchor: point)
+            // 按下的瞬间收起吸附描边（单击命中窗口靠的是 `hoveredWindow` 状态，不影响）。
+            updateWindowHighlight()
             return
         }
 
@@ -1210,6 +1240,9 @@ final class OverlayCanvasView: NSView {
         }
 
         interaction = .pressing(anchor: point)
+        // 按下的那一刻就收掉吸附描边与窗口标签：视觉焦点交给鼠标开始操作的地方。
+        // 只收画面、不动 `hoveredWindow`——单击（没拖过阈值）要按它截图整个窗口。
+        updateWindowHighlight()
     }
 
     override func mouseDragged(with event: NSEvent) {
