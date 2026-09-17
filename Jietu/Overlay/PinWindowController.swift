@@ -315,11 +315,28 @@ final class PinGlassCircleButton: NSControl {
 
     private func animatePress(pressed: Bool) {
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.08
+            context.duration = pressed ? 0.08 : 0.14
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             effectView.animator().alphaValue = pressed ? 0.75 : 1.0
             scrimView.animator().alphaValue = pressed ? 0.75 : 1.0
             iconView.animator().alphaValue = pressed ? 0.75 : 1.0
         }
+
+        guard let layer else { return }
+        let from = layer.presentation()?.transform ?? layer.transform
+        let to = pressed
+            ? CATransform3DMakeScale(0.85, 0.85, 1)
+            : CATransform3DIdentity
+        layer.transform = to
+
+        let animation = CABasicAnimation(keyPath: "transform")
+        animation.fromValue = from
+        animation.toValue = to
+        animation.duration = pressed ? 0.08 : 0.18
+        animation.timingFunction = CAMediaTimingFunction(
+            name: pressed ? .easeOut : .easeInEaseOut
+        )
+        layer.add(animation, forKey: "pressScale")
     }
 
     /// 测试用：按钮底是否**固定**深色。
