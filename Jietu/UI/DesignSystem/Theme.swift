@@ -182,6 +182,9 @@ enum Theme {
         /// QAO 卡片的**最大**尺寸：截图按原始宽高比等比缩进来，永不拉伸。
         /// 阴影由系统窗口阴影负责，不留白。
         static let quickAccessCardMax = CGSize(width: 260, height: 180)
+        /// QAO 卡片的**最小**尺寸：极端宽高比（竖长截图 / 超宽截图）按原始比例算出来只有几十点宽
+        /// （甚至十几点高），按钮就会互相压住、胶囊也放不下。兜一个下限，图片居中留白，不拉伸。
+        static let quickAccessCardMin = CGSize(width: 96, height: 112)
         /// QAO 距屏幕边缘。
         static let quickAccessInset: CGFloat = 20
 

@@ -30,16 +30,21 @@ struct QuickAccessView: View {
 
     private static let cornerRadius = Theme.Radius.menuPanel
 
-    /// 卡片尺寸：按截图宽高比等比塞进最大框。
+    /// 卡片尺寸：按截图宽高比等比塞进最大框，再夹进**最小框**。
     ///
-    /// 只等比缩放 → 不拉伸、不变形；只受上限约束 → 尺寸不同的截图走同一套交互。
+    /// 只等比缩放 → 不拉伸、不变形；只受上下限约束 → 尺寸不同的截图走同一套交互。
+    ///
+    /// 最小框是给极端宽高比兜底的：竖长截图（1:4）按比例算出来只有几十点宽，
+    /// 四角按钮会互相压住、中央胶囊也放不下；超宽截图则只剩十几点高。
+    /// 夹住之后图片按比例居中留白（`.fit`），既不拉伸，按钮也永远有地方站。
     static func panelSize(for imageSize: CGSize) -> CGSize {
         let maxSize = Theme.Size.quickAccessCardMax
+        let minSize = Theme.Size.quickAccessCardMin
         guard imageSize.width > 0, imageSize.height > 0 else { return maxSize }
         let scale = min(maxSize.width / imageSize.width, maxSize.height / imageSize.height)
         return CGSize(
-            width: max(1, (imageSize.width * scale).rounded()),
-            height: max(1, (imageSize.height * scale).rounded())
+            width: min(maxSize.width, max(minSize.width, (imageSize.width * scale).rounded())),
+            height: min(maxSize.height, max(minSize.height, (imageSize.height * scale).rounded()))
         )
     }
 
@@ -48,7 +53,8 @@ struct QuickAccessView: View {
             // 截图就是卡片本身：恰好铺满，不留边、不拉伸。
             Image(nsImage: image)
                 .resizable()
-                .aspectRatio(contentMode: .fill)
+                // `.fit`：卡片正好是图片的等比尺寸时=铺满；被最小尺寸夹住时=居中留白（不裁切、不拉伸）。
+                .aspectRatio(contentMode: .fit)
                 .frame(width: cardSize.width, height: cardSize.height)
                 // 悬停时轻微模糊，把底下的毛玻璃透出来；不压色、不缩放，
                 // 按钮自己带玻璃底，不靠压暗截图来凸显。

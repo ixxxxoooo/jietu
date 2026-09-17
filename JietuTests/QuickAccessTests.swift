@@ -48,6 +48,44 @@ struct QuickAccessTests {
         }
     }
 
+    @Test("卡片尺寸：极端宽高比被最小尺寸夹住，比例正常的原样算")
+    func panelSizeClampsToMinimum() {
+        // 正常比例：只受上限约束（800×600 按 0.3 缩到 240×180）。
+        #expect(QuickAccessView.panelSize(for: CGSize(width: 800, height: 600))
+            == CGSize(width: 240, height: 180))
+        #expect(QuickAccessView.panelSize(for: CGSize(width: 1000, height: 800))
+            == CGSize(width: 225, height: 180))
+
+        // 竖长截图（600×1200）：按比例只有 90 宽 → 夹到最小宽度，图片居中留白。
+        let tall = QuickAccessView.panelSize(for: CGSize(width: 600, height: 1200))
+        #expect(tall.width == Theme.Size.quickAccessCardMin.width)
+        #expect(tall.height == 180)
+
+        // 超宽截图（1600×600）：按比例只有 98 高 → 夹到最小高度。
+        let wide = QuickAccessView.panelSize(for: CGSize(width: 1600, height: 600))
+        #expect(wide.width == 260)
+        #expect(wide.height == Theme.Size.quickAccessCardMin.height)
+
+        // 极端（4000×100）：两个方向都被夹住。
+        let extreme = QuickAccessView.panelSize(for: CGSize(width: 4000, height: 100))
+        #expect(extreme == CGSize(width: 260, height: Theme.Size.quickAccessCardMin.height))
+    }
+
+    @Test("最小尺寸的卡片上，五个图标互不重叠、都在卡片里")
+    func minimumCardStillFitsControls() {
+        let card = Theme.Size.quickAccessCardMin
+        let frames: [(String, NSRect)] = QuickAccessAction.allCases.map {
+            ($0.title, QuickAccessControlsView.frame(of: $0, in: card))
+        }
+        for (index, first) in frames.enumerated() {
+            for second in frames[(index + 1)...] {
+                #expect(!first.1.intersects(second.1), "\(first.0) 与 \(second.0) 在最小卡片上重叠")
+            }
+            #expect(first.1.minX >= 0 && first.1.maxX <= card.width)
+            #expect(first.1.minY >= 0 && first.1.maxY <= card.height)
+        }
+    }
+
     @Test("各种真实卡片尺寸下，按钮都留在卡片里")
     func controlsStayInsideRealisticCards() {
         // 240×180 = 4:3、90×180 = 600×1200 的竖图、260×98 = 1600×600 的宽图。

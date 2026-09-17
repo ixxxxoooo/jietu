@@ -539,6 +539,62 @@ enum CaptureSelfTest {
                 )
                 budgets.append(("卡片本体单击", tapMs, 250))
 
+                // 7. 极端宽高比：卡片按最小尺寸兜底，图标不能互相压住（并留一张截图给人看）。
+                for size in [CGSize(width: 700, height: 2800), CGSize(width: 4000, height: 100)] {
+                    guard let extreme = try? makeTestImage(width: Int(size.width), height: Int(size.height))
+                    else { continue }
+                    let card = QuickAccessView.panelSize(for: size)
+                    controller.present(
+                        image: extreme, onDisplay: displayID, saveDirectory: outputDirectory
+                    )
+                    try? await Task.sleep(for: .milliseconds(700))
+                    guard let panel = controller.panelsForTesting.last else { continue }
+
+                    let frames = QuickAccessAction.allCases.map {
+                        ($0.title, QuickAccessControlsView.frame(of: $0, in: card))
+                    }
+                    var overlapped: [String] = []
+                    for (index, first) in frames.enumerated() {
+                        for second in frames[(index + 1)...] where first.1.intersects(second.1) {
+                            overlapped.append("\(first.0)×\(second.0)")
+                        }
+                    }
+                    let outside = frames.filter {
+                        $0.1.minX < -0.001 || $0.1.minY < -0.001
+                            || $0.1.maxX > card.width + 0.001 || $0.1.maxY > card.height + 0.001
+                    }.map(\.0)
+
+                    // 悬停点要按**这张卡**的尺寸算（外层那个 `bodyPoint` 用的是标准卡的尺寸，
+                    // 在 96 宽的卡上会落到卡片外面）。并且要「先出去再进来」：卡片刚弹出时
+                    // 光标可能本来就在卡片里，那样不产生 mouseEntered，按钮不会浮出来。
+                    let extremeBody = cgPoint(
+                        local: CGPoint(x: card.width / 2, y: card.height * 0.26), of: panel
+                    )
+                    _ = await hover(extremeBody, of: panel)
+                    report.append(
+                        "极端 \(Int(size.width))×\(Int(size.height))px → 卡片 "
+                            + "\(Int(card.width))×\(Int(card.height))：图标重叠="
+                            + (overlapped.isEmpty ? "无" : "**\(overlapped.joined(separator: "、"))**")
+                            + "，越界=" + (outside.isEmpty ? "无" : "**\(outside.joined(separator: "、"))**")
+                    )
+                    budgets.append(("极端比例卡片：图标不重叠 / 不越界",
+                                    (overlapped.isEmpty && outside.isEmpty) ? 0 : nil, 0))
+
+                    let extremeShots = try await CaptureEngine().captureAllDisplays(
+                        excludingOwnApplication: false
+                    )
+                    if let shot = extremeShots.first(where: { $0.displayID == displayID })
+                        ?? extremeShots.first
+                    {
+                        let url = outputDirectory
+                            .appendingPathComponent("quickaccess-extreme-\(Int(card.width))x\(Int(card.height)).png")
+                        try writePNG(shot.image, to: url)
+                        report.append("    截图 -> \(url.path)")
+                    }
+                    controller.dismiss()
+                    try? await Task.sleep(for: .milliseconds(300))
+                }
+
                 // 7. 控件自己记的点按延迟（按下 → 反馈 / 动作）。
                 report.append("控件内部点按延迟（DEBUG 量测）：")
                 report.append(contentsOf: InteractionMetrics.report())
