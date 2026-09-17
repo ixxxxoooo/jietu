@@ -105,7 +105,7 @@ struct QuickAccessTests {
     @Test("最小尺寸的卡片上，五个图标互不重叠、都在卡片里")
     func minimumCardStillFitsControls() {
         let card = Theme.Size.quickAccessCardMin
-        let frames: [(String, NSRect)] = QuickAccessAction.allCases.map {
+        let frames: [(String, NSRect)] = QuickAccessAction.imageCard.map {
             ($0.title, QuickAccessControlsView.frame(of: $0, in: card))
         }
         for (index, first) in frames.enumerated() {
@@ -122,7 +122,7 @@ struct QuickAccessTests {
         // 240×180 = 4:3、90×180 = 600×1200 的竖图、260×98 = 1600×600 的宽图。
         for card in [CGSize(width: 240, height: 180), CGSize(width: 90, height: 180),
                      CGSize(width: 260, height: 98)] {
-            for action in QuickAccessAction.allCases {
+            for action in QuickAccessAction.imageCard {
                 let frame = QuickAccessControlsView.frame(of: action, in: card)
                 #expect(frame.minX >= -0.001, "\(action) 越出卡片左边界（卡片 \(card)）")
                 #expect(frame.maxX <= card.width + 0.001, "\(action) 越出卡片右边界（卡片 \(card)）")
@@ -136,10 +136,82 @@ struct QuickAccessTests {
     func controlsCenterOnDegenerateCard() {
         // 2000×100 的截图换算出来只有十几点高，装不下 28pt 的圆盘。
         let tiny = CGSize(width: 260, height: 13)
-        for action in QuickAccessAction.allCases {
+        for action in QuickAccessAction.imageCard {
             let frame = QuickAccessControlsView.frame(of: action, in: tiny)
             #expect(abs(frame.midY - tiny.height / 2) <= 0.5)
         }
+    }
+
+    @Test("视频卡（录屏收工）：四角各一个圆盘，没有中央胶囊")
+    func videoCardHasFourCornerDiscs() {
+        let card = CGSize(width: 260, height: 146)
+        let frames: [(String, NSRect)] = QuickAccessAction.videoCard.map {
+            ($0.title, QuickAccessControlsView.frame(of: $0, in: card))
+        }
+        #expect(frames.count == 4, "视频卡是四角四个动作")
+        #expect(!QuickAccessAction.videoCard.contains(.save), "文件已经落盘了，没有「保存」")
+        for (title, frame) in frames {
+            #expect(frame.width == QuickAccessControlsView.diameter, "\(title) 是圆盘")
+            #expect(frame.height == QuickAccessControlsView.diameter)
+            #expect(frame.minX >= 0 && frame.maxX <= card.width, "\(title) 越界")
+            #expect(frame.minY >= 0 && frame.maxY <= card.height, "\(title) 越界")
+        }
+        for (index, first) in frames.enumerated() {
+            for second in frames[(index + 1)...] {
+                #expect(!first.1.intersects(second.1), "\(first.0) 与 \(second.0) 重叠")
+            }
+        }
+
+        // 位子：左上是「复制文件」、右上是「关闭」、左下是「播放」、右下是「在访达中显示」。
+        let copyFile = QuickAccessControlsView.frame(of: .copyFile, in: card)
+        let close = QuickAccessControlsView.frame(of: .close, in: card)
+        let play = QuickAccessControlsView.frame(of: .play, in: card)
+        let reveal = QuickAccessControlsView.frame(of: .reveal, in: card)
+        #expect(copyFile.minX < card.width / 2 && copyFile.minY > card.height / 2)
+        #expect(close.minX > card.width / 2 && close.minY > card.height / 2)
+        #expect(play.minX < card.width / 2 && play.minY < card.height / 2)
+        #expect(reveal.minX > card.width / 2 && reveal.minY < card.height / 2)
+    }
+
+    @Test("视频卡时长文本：m:ss，超过一小时才带小时位")
+    func videoCardDurationText() {
+        #expect(QuickAccessVideoView.durationText(0) == "0:00")
+        #expect(QuickAccessVideoView.durationText(12) == "0:12")
+        #expect(QuickAccessVideoView.durationText(65.9) == "1:05")
+        #expect(QuickAccessVideoView.durationText(600) == "10:00")
+        #expect(QuickAccessVideoView.durationText(3661) == "1:01:01")
+        // 时长读不出来（0 / NaN）时不能显示 "-1:59" 这种怪东西。
+        #expect(QuickAccessVideoView.durationText(-3) == "0:00")
+    }
+
+    @Test("视频卡的封面按同一套规则排尺寸：等比、不放大")
+    func videoCardUsesTheSameSizingRules() {
+        // 1120×720 像素的录屏在 2x 屏上是 560×360 点 → 夹进最大框 260×180。
+        let point = CGSize(width: 560, height: 360)
+        let card = QuickAccessView.panelSize(for: point)
+        let view = QuickAccessVideoView(
+            thumbnail: NSImage(size: NSSize(width: 560, height: 360)),
+            thumbnailPointSize: point,
+            duration: 12,
+            cardSize: card,
+            onPlay: {}, onReveal: {}, onCopyFile: {}, onClose: {},
+            onHoverChange: { _ in }, dragProvider: { NSItemProvider() }
+        )
+        #expect(card == CGSize(width: 260, height: 167))
+        #expect(view.thumbnailDisplaySize == card, "大封面正好铺满卡片")
+
+        // 小录屏（300×200 像素 → 150×100 点）不放大。
+        let small = CGSize(width: 150, height: 100)
+        let smallCard = QuickAccessView.panelSize(for: small)
+        let smallView = QuickAccessVideoView(
+            thumbnail: NSImage(size: NSSize(width: 150, height: 100)),
+            thumbnailPointSize: small,
+            duration: 3,
+            cardSize: smallCard,
+            onPlay: {}, onReveal: {}, onCopyFile: {}, onClose: {},
+            onHoverChange: { _ in }, dragProvider: { NSItemProvider() }
+        )
+        #expect(smallView.thumbnailDisplaySize == small)
     }
 
     @Test("按钮的 hitTest 收父视图坐标系的点（不靠原点的按钮也得命中）")

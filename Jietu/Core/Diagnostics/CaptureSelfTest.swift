@@ -343,13 +343,13 @@ enum CaptureSelfTest {
 
                 @MainActor func alphas(of panel: NSPanel) -> [CGFloat] {
                     guard let controls = controlsOf(panel) else { return [] }
-                    return QuickAccessAction.allCases.map { controls.button(for: $0)?.alphaValue ?? -1 }
+                    return QuickAccessAction.imageCard.map { controls.button(for: $0)?.alphaValue ?? -1 }
                 }
 
                 /// 图标**真正画出来**的透明度（含 0.12s 淡入动画，不是模型值）。
                 @MainActor func presentationAlphas(of panel: NSPanel) -> [CGFloat] {
                     guard let controls = controlsOf(panel) else { return [] }
-                    return QuickAccessAction.allCases.map { action in
+                    return QuickAccessAction.imageCard.map { action in
                         let button = controls.button(for: action)
                         let presented = button?.layer?.presentation()?.opacity
                         return CGFloat(presented ?? Float(button?.alphaValue ?? -1))
@@ -426,7 +426,7 @@ enum CaptureSelfTest {
                     )
                     try? await Task.sleep(for: .milliseconds(700))
                     guard let panel = controller.panelsForTesting.last else { return nil }
-                    for action in QuickAccessAction.allCases {
+                    for action in QuickAccessAction.imageCard {
                         moveMouse(to: iconPoint(action, of: panel))
                         try? await Task.sleep(for: .milliseconds(50))
                     }
@@ -582,7 +582,7 @@ enum CaptureSelfTest {
                     try? await Task.sleep(for: .milliseconds(700))
                     guard let panel = controller.panelsForTesting.last else { continue }
 
-                    let frames = QuickAccessAction.allCases.map {
+                    let frames = QuickAccessAction.imageCard.map {
                         ($0.title, QuickAccessControlsView.frame(of: $0, in: card))
                     }
                     var overlapped: [String] = []
@@ -671,6 +671,8 @@ enum CaptureSelfTest {
         case .pin: "钉图窗口出现"
         case .annotate: "编辑器出现"
         case .close: "浮窗消失"
+        // 视频卡（录屏收工）那几个走 app 级自检，不在浮窗图标层这条量测里。
+        case .play, .reveal, .copyFile: action.title
         }
     }
 
@@ -683,6 +685,7 @@ enum CaptureSelfTest {
         case .pin: 300
         case .annotate: 500
         case .close: 600
+        case .play, .reveal, .copyFile: 600
         }
     }
 

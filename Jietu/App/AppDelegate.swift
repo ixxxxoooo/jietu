@@ -27,6 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingKeyMonitors: [Any] = []
     /// 已录时长（秒，暂停不计）：收工时的通知里要写。
     private var recordingElapsed: TimeInterval = 0
+    /// 录的是哪块屏：收工后的浮窗要落回同一块屏（和截图一个规矩）。
+    private var recordingDisplayID: CGDirectDisplayID?
 
     /// 滚动长图的右侧实时预览。
     private var scrollingPreview: ScrollingPreviewPanel?
@@ -210,6 +212,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 budgets.append(("成片有内容（时长 > 0.2s）", duration > 0.2 ? 0 : nil, 0))
                 budgets.append(("收工后控制条收掉", recordingHUD == nil ? 0 : nil, 0))
                 report.append(String(format: "「完成」→ 收工耗时 %.0f ms", elapsed))
+
+                // 4. 收工后浮窗里该出现一张**视频卡**（封面帧 + 时长）——截图看一眼，也验它真在。
+                var cardUp = false
+                var cardSize = CGSize.zero
+                let cardScreen = NSScreen.main?.visibleFrame ?? .zero
+                for _ in 0..<40 {  // 最多等 4s：封面要解码，卡片还有 0.26s 侧滑进场
+                    if let panel = quickAccess.panelsForTesting.last {
+                        cardSize = panel.frame.size
+                        // 「出现」= 真的停在屏幕上了：进场是从屏幕外滑进来的，
+                        // 一插入就算数的话会拍到一张还在屏幕外、alpha 还是 0 的空镜。
+                        cardUp = quickAccess.isVisible
+                            && panel.alphaValue >= 0.99
+                            && panel.frame.minX >= cardScreen.minX
+                            && panel.frame.maxX <= cardScreen.maxX
+                        if cardUp { break }
+                    }
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                report.append(
+                    "收工后的浮窗：\(cardUp ? "出现" : "**没出现**")"
+                        + "，卡片 \(Int(cardSize.width))×\(Int(cardSize.height))"
+                )
+                budgets.append(("收工后浮窗出现视频卡", cardUp ? 0 : nil, 0))
+                if cardUp,
+                    let shots = try? await capture.captureAllDisplays(excludingOwnApplication: false),
+                    let shot = shots.first(where: { $0.displayID == NSScreen.main?.jietu_displayID })
+                        ?? shots.first
+                {
+                    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+                        .appendingPathComponent("jietu-recording-card.png")
+                    try? CaptureSelfTest.writePNG(shot.image, to: url)
+                    report.append("视频卡截图 -> \(url.path)")
+                }
+                quickAccess.dismiss()
 
                 report.append("延迟预算：")
                 var failed = 0
@@ -631,6 +667,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickAccess.onPin = { image in
             PinWindowController.pin(image: image, on: NSScreen.main)
         }
+        // 录屏收工的那张卡：文件已经落盘了，能做的就是「拿去看 / 拿去找 / 拿去用」。
+        quickAccess.onPlayVideo = { url in
+            NSWorkspace.shared.open(url)
+        }
+        quickAccess.onRevealVideo = { url in
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+        quickAccess.onCopyVideoFile = { url in
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.writeObjects([url as NSURL])
+        }
         overlays.onFinish = { [weak self] outcome in
             guard let self else { return }
             // 遮罩只服务一次：**无论结果如何**都把用途复位。
@@ -860,6 +908,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engine.onFail = { [weak self] error in self?.failRecording(error) }
         recordingEngine = engine
         recordingElapsed = 0
+        recordingDisplayID = snapshot.displayID
 
         hud.onTogglePause = { [weak self] in self?.toggleRecordingPause() }
         hud.onStop = { [weak self] in
@@ -907,9 +956,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stopRecordingUI()
     }
 
-    /// 录屏收工：把临时 mp4 搬进保存目录（命名模板 + 同名序号），再给一条通知。
+    /// 录屏收工：把临时 mp4 搬进保存目录（命名模板 + 同名序号），
+    /// 再给一张**浮窗视频卡**（看得见、拿得走）+ 一条通知。
     private func finishRecording(temporaryURL: URL) {
         let elapsed = recordingElapsed
+        let displayID = recordingDisplayID ?? NSScreen.main?.jietu_displayID
         stopRecordingUI()
         do {
             let url = try CaptureOutput.moveFile(
@@ -922,9 +973,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if settings.showSaveNotification {
                 notifier.notifyRecordingSaved(fileURL: url, duration: elapsed)
             }
+            Task { @MainActor [weak self] in
+                await self?.presentRecordingCard(
+                    url: url, elapsed: elapsed, displayID: displayID
+                )
+            }
         } catch {
             presentRecordingFailure(error)
         }
+    }
+
+    /// 收工后的浮窗视频卡：从成片里取一帧当封面 + 读真实时长。
+    ///
+    /// 封面取不出来（编码没写完整 / 文件被挪走）就只留通知——收工流程不该被一张封面卡住。
+    private func presentRecordingCard(
+        url: URL,
+        elapsed: TimeInterval,
+        displayID: CGDirectDisplayID?
+    ) async {
+        guard let card = await VideoThumbnail.make(for: url) else {
+            logger.notice("recording card skipped: no thumbnail for \(url.lastPathComponent)")
+            return
+        }
+        let screen = NSScreen.screens.first { $0.jietu_displayID == displayID } ?? NSScreen.main
+        let backingScale = max(1, screen?.backingScaleFactor ?? 2)
+        // 封面是按**像素**解出来的（解码时已收到 520 以内），换成点才是它在屏幕上该占多大。
+        let pointSize = CGSize(
+            width: CGFloat(card.image.width) / backingScale,
+            height: CGFloat(card.image.height) / backingScale
+        )
+        quickAccess.presentVideo(
+            url: url,
+            thumbnail: card.image,
+            thumbnailPointSize: pointSize,
+            duration: card.duration > 0 ? card.duration : elapsed,
+            onDisplay: displayID ?? screen?.jietu_displayID ?? CGMainDisplayID()
+        )
     }
 
     private func failRecording(_ error: Error) {

@@ -109,6 +109,7 @@ struct QuickAccessView: View {
     /// 图标显隐都跟着同一个来源，不会出现「按钮已经浮出来了、卡片还是静的」。
     private var controls: some View {
         QuickAccessControlLayer(
+            actions: QuickAccessAction.imageCard,
             onAction: { action in
                 switch action {
                 case .close: onClose()
@@ -116,6 +117,7 @@ struct QuickAccessView: View {
                 case .annotate: onAnnotate()
                 case .copy: onCopy()
                 case .save: onSave()
+                default: break
                 }
             },
             onHoverChange: { hovering in

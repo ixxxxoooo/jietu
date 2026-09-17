@@ -1,19 +1,48 @@
 import AppKit
 import SwiftUI
 
-/// 浮窗上的 5 个动作。
+/// 浮窗上的动作。
+///
+/// 两种卡片各用一套，位子是固定的（见 `slot`）：
+/// - **图片卡**：四角 + 中央「保存」胶囊（截图还没落盘，「保存」是主操作）；
+/// - **视频卡**：只有四角（录屏一收工文件就已经在保存目录里了，没有「保存」这回事）。
 ///
 /// @author ixxxxoooo
 enum QuickAccessAction: String, CaseIterable {
+    // 图片卡
     case close, pin, annotate, copy, save
+    // 视频卡（录屏收工）
+    case play, reveal, copyFile
+
+    /// 图片卡的动作与摆位：左上复制 / 右上关闭 / 左下标注 / 右下钉图 / 中央保存。
+    static let imageCard: [QuickAccessAction] = [.copy, .close, .annotate, .pin, .save]
+    /// 视频卡的动作与摆位：左上复制文件 / 右上关闭 / 左下播放 / 右下在访达中显示。
+    static let videoCard: [QuickAccessAction] = [.copyFile, .close, .play, .reveal]
+
+    /// 控件在卡片里的位子。写死在这里，`frame(of:in:)` 与自检都按它算注入点。
+    enum Slot {
+        case topLeft, topRight, bottomLeft, bottomRight, center
+    }
+
+    var slot: Slot {
+        switch self {
+        case .copy, .copyFile: .topLeft
+        case .close: .topRight
+        case .annotate, .play: .bottomLeft
+        case .pin, .reveal: .bottomRight
+        case .save: .center
+        }
+    }
 
     var symbol: String {
         switch self {
         case .close: "xmark"
         case .pin: "pin"
         case .annotate: "pencil.tip.crop.circle"
-        case .copy: "doc.on.doc"
+        case .copy, .copyFile: "doc.on.doc"
         case .save: "square.and.arrow.down"
+        case .play: "play.fill"
+        case .reveal: "folder"
         }
     }
 
@@ -24,6 +53,9 @@ enum QuickAccessAction: String, CaseIterable {
         case .annotate: "标注"
         case .copy: "复制"
         case .save: "保存"
+        case .play: "播放"
+        case .reveal: "在访达中显示"
+        case .copyFile: "复制文件"
         }
     }
 
@@ -68,16 +100,16 @@ final class QuickAccessControlsView: NSView {
         let radius = diameter / 2
         let inset = edgeInset
         let nominal: CGPoint
-        switch action {
-        case .close:
+        switch action.slot {
+        case .topRight:
             nominal = CGPoint(x: cardSize.width - inset - radius, y: cardSize.height - inset - radius)
-        case .pin:
+        case .bottomRight:
             nominal = CGPoint(x: cardSize.width - inset - radius, y: inset + radius)
-        case .annotate:
+        case .bottomLeft:
             nominal = CGPoint(x: inset + radius, y: inset + radius)
-        case .copy:
+        case .topLeft:
             nominal = CGPoint(x: inset + radius, y: cardSize.height - inset - radius)
-        case .save:
+        case .center:
             nominal = CGPoint(x: cardSize.width / 2, y: cardSize.height / 2)
         }
 
@@ -96,10 +128,11 @@ final class QuickAccessControlsView: NSView {
         )
     }
 
-    init() {
+    /// - Parameter actions: 这张卡片要摆哪些动作（默认图片卡那五个）。
+    init(actions: [QuickAccessAction] = QuickAccessAction.imageCard) {
         super.init(frame: .zero)
         wantsLayer = true
-        for action in QuickAccessAction.allCases {
+        for action in actions {
             let button = GlassControlButton(
                 symbol: action.symbol,
                 labelText: action.isCircle ? nil : action.title,
@@ -205,11 +238,12 @@ final class QuickAccessControlsView: NSView {
 ///
 /// @author ixxxxoooo
 struct QuickAccessControlLayer: NSViewRepresentable {
+    var actions: [QuickAccessAction] = QuickAccessAction.imageCard
     var onAction: (QuickAccessAction) -> Void
     var onHoverChange: (Bool) -> Void
 
     func makeNSView(context: Context) -> QuickAccessControlsView {
-        let view = QuickAccessControlsView()
+        let view = QuickAccessControlsView(actions: actions)
         view.onAction = onAction
         view.onHoverChange = onHoverChange
         return view

@@ -3,40 +3,42 @@ import SwiftUI
 
 /// Quick Access 浮窗的**队列**管理器。
 ///
-/// 每张截图是一个独立浮窗，从屏幕下缘的同一侧堆叠：
+/// 每张卡片是一个独立浮窗，从屏幕下缘的同一侧堆叠：
 /// **最新的一张在最上面，早的依次在下面**。每张各自计时，到点后向屏幕边缘侧滑并淡出，
-/// 其余浮窗自动补位。全部尺寸一致，只显示图片预览本身。
+/// 其余浮窗自动补位。全部尺寸一致，只显示预览本身。
+///
+/// 卡片有两种，表面与交互同一套、动作各一套：
+/// - **图片卡**（`QuickAccessView`）：截图，四角 + 中央「保存」；
+/// - **视频卡**（`QuickAccessVideoView`）：录屏收工的 mp4，四角播放 / 在访达中显示 / 复制文件 / 关闭。
 ///
 /// @author ixxxxoooo
 final class QuickAccessPanelController {
     private final class Entry {
         let id: UUID
         let panel: NSPanel
-        let image: CGImage
-        /// 这张卡片的尺寸（按截图宽高比算出来的，叠放时按它占位）。
+        /// 这张卡片的尺寸（按预览的宽高比算出来的，叠放时按它占位）。
         let size: CGSize
         let displayID: CGDirectDisplayID
-        let saveDirectory: URL
         let dragURL: URL?
+        /// 关掉卡片时要不要顺手删掉 `dragURL`：图片卡那个是临时文件，视频卡的是用户的成片。
+        let removesDragFile: Bool
         var deadline: Date?
         var isHovering = false
 
         init(
             id: UUID,
             panel: NSPanel,
-            image: CGImage,
             size: CGSize,
             displayID: CGDirectDisplayID,
-            saveDirectory: URL,
-            dragURL: URL?
+            dragURL: URL?,
+            removesDragFile: Bool
         ) {
             self.id = id
             self.panel = panel
-            self.image = image
             self.size = size
             self.displayID = displayID
-            self.saveDirectory = saveDirectory
             self.dragURL = dragURL
+            self.removesDragFile = removesDragFile
         }
     }
 
@@ -57,6 +59,12 @@ final class QuickAccessPanelController {
     var onSave: ((CGImage) -> Void)?
     var onAnnotate: ((CGImage) -> Void)?
     var onPin: ((CGImage) -> Void)?
+    /// 视频卡：播放（用默认播放器打开成片）。
+    var onPlayVideo: ((URL) -> Void)?
+    /// 视频卡：在访达中显示。
+    var onRevealVideo: ((URL) -> Void)?
+    /// 视频卡：把文件本身放进剪贴板（粘到聊天窗口 / 访达里就是那个 mp4）。
+    var onCopyVideoFile: ((URL) -> Void)?
     var onDismiss: (() -> Void)?
     /// 浮窗出现 / 全部消失。
     var onVisibilityChanged: ((Bool) -> Void)?
@@ -68,6 +76,7 @@ final class QuickAccessPanelController {
 
     // MARK: - Present
 
+    /// 截图的浮窗（图片卡）。
     func present(image: CGImage, onDisplay displayID: CGDirectDisplayID, saveDirectory: URL) {
         let id = UUID()
         // 卡片尺寸按截图的**自然点尺寸**（像素 ÷ 屏幕缩放）算，与它在屏幕上占多大一致：
@@ -111,6 +120,69 @@ final class QuickAccessPanelController {
             }
         )
 
+        insert(
+            id: id,
+            root: root,
+            panelSize: panelSize,
+            displayID: displayID,
+            dragURL: dragURL,
+            removesDragFile: true
+        )
+    }
+
+    /// 录屏收工的浮窗（视频卡）。
+    ///
+    /// 与图片卡同一套尺寸规则（`QuickAccessView.panelSize`）：封面等比缩放、小图不放大，
+    /// 叠放时按同一套槽位排队。拖出去的就是磁盘上那个 mp4（不是临时文件，关卡片不删）。
+    func presentVideo(
+        url: URL,
+        thumbnail: CGImage,
+        thumbnailPointSize: CGSize,
+        duration: TimeInterval,
+        onDisplay displayID: CGDirectDisplayID
+    ) {
+        let id = UUID()
+        let panelSize = QuickAccessView.panelSize(for: thumbnailPointSize)
+        let nsImage = NSImage(
+            cgImage: thumbnail,
+            size: NSSize(width: thumbnailPointSize.width, height: thumbnailPointSize.height)
+        )
+
+        let root = QuickAccessVideoView(
+            thumbnail: nsImage,
+            thumbnailPointSize: thumbnailPointSize,
+            duration: duration,
+            cardSize: panelSize,
+            onPlay: { [weak self] in self?.onPlayVideo?(url) },
+            onReveal: { [weak self] in self?.onRevealVideo?(url) },
+            onCopyFile: { [weak self] in self?.onCopyVideoFile?(url) },
+            onClose: { [weak self] in self?.dismissEntry(id, animated: true) },
+            onHoverChange: { [weak self] hovering in self?.setHover(id, hovering) },
+            dragProvider: {
+                NSItemProvider(contentsOf: url) ?? NSItemProvider(object: nsImage)
+            }
+        )
+
+        insert(
+            id: id,
+            root: root,
+            panelSize: panelSize,
+            displayID: displayID,
+            dragURL: url,
+            removesDragFile: false
+        )
+    }
+
+    /// 两种卡片共用的落地流程：建面板 → 摆到队列里 → 起计时。
+    private func insert(
+        id: UUID,
+        root: some View,
+        panelSize: CGSize,
+        displayID: CGDirectDisplayID,
+        dragURL: URL?,
+        removesDragFile: Bool
+    ) {
+        let screen = NSScreen.screens.first { $0.jietu_displayID == displayID } ?? NSScreen.main
         let hosting = NSHostingView(rootView: root)
         hosting.frame = NSRect(origin: .zero, size: panelSize)
 
@@ -141,11 +213,10 @@ final class QuickAccessPanelController {
         let entry = Entry(
             id: id,
             panel: panel,
-            image: image,
             size: panelSize,
             displayID: displayID,
-            saveDirectory: saveDirectory,
-            dragURL: dragURL
+            dragURL: dragURL,
+            removesDragFile: removesDragFile
         )
         entry.deadline = nextDeadline()
         let wasEmpty = entries.isEmpty
@@ -337,8 +408,9 @@ final class QuickAccessPanelController {
         }
     }
 
+    /// 清掉**我们自己造的**临时导出文件。视频卡的 `dragURL` 是用户的成片，绝不能删。
     private func removeDragFile(_ entry: Entry) {
-        guard let url = entry.dragURL else { return }
+        guard entry.removesDragFile, let url = entry.dragURL else { return }
         try? FileManager.default.removeItem(at: url)
     }
 }
