@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import VisionKit
 
 /// 「钉图」：把截图钉在屏幕上，作为一个可拖动、可缩放的浮动窗口。
@@ -8,7 +9,8 @@ import VisionKit
 /// - 拖动边缘 / 角改变大小（保持宽高比）
 /// - 滚轮 / 触控板捏合缩放
 /// - 右键菜单：OCR 识别文字、复制图像、关闭
-/// - 双击关闭；Esc 关闭
+/// - 双击关闭；Esc 关闭；⌘W 快速关闭
+/// - 右上角磨砂玻璃关闭按钮（悬停显示）
 ///
 /// @author ixxxxoooo
 final class PinWindowController: NSObject {
@@ -25,7 +27,8 @@ final class PinWindowController: NSObject {
     static func pin(image: CGImage, on screen: NSScreen?, targetFrame: CGRect? = nil) {
         let controller = PinWindowController(image: image, screen: screen, targetFrame: targetFrame)
         controllers.append(controller)
-        controller.window.orderFrontRegardless()
+        controller.window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private init(image: CGImage, screen: NSScreen?, targetFrame: CGRect?) {
@@ -61,13 +64,14 @@ final class PinWindowController: NSObject {
         content = PinContentView(frame: NSRect(origin: .zero, size: frame.size), image: image)
         window = PinPanel(
             contentRect: frame,
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
         super.init()
 
         window.contentView = content
+        window.initialFirstResponder = content
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = true
@@ -82,11 +86,19 @@ final class PinWindowController: NSObject {
 
         content.onRequestClose = { [weak self] in self?.close() }
 
-        // Esc 关闭最近钉的一张，方便键盘用户。
+        // Esc / ⌘W 快捷关闭当前 key 钉图浮窗
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 53 else { return event }
-            self?.close()
-            return nil
+            guard let self, self.window.isKeyWindow else { return event }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if event.keyCode == 53 {
+                self.close()
+                return nil
+            }
+            if flags == .command, event.charactersIgnoringModifiers?.lowercased() == "w" {
+                self.close()
+                return nil
+            }
+            return event
         }
     }
 
@@ -97,6 +109,8 @@ final class PinWindowController: NSObject {
         }
         window.orderOut(nil)
         PinWindowController.controllers.removeAll { $0 === self }
+        // 若还有剩余钉图，激活上一张为 key window
+        PinWindowController.controllers.last?.window.makeKeyAndOrderFront(nil)
     }
 
 }
@@ -107,6 +121,26 @@ final class PinWindowController: NSObject {
 final class PinPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if super.performKeyEquivalent(with: event) {
+            return true
+        }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags == .command, event.charactersIgnoringModifiers?.lowercased() == "w" {
+            performClose(nil)
+            return true
+        }
+        return false
+    }
+
+    override func performClose(_ sender: Any?) {
+        (contentView as? PinContentView)?.onRequestClose?()
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        (contentView as? PinContentView)?.onRequestClose?()
+    }
 }
 
 /// 钉图的绘制与交互载体。
@@ -126,6 +160,7 @@ final class PinContentView: NSView {
 
     var onRequestClose: (() -> Void)?
 
+    private var closeButtonHost: NSHostingView<GlassCircleButton>?
     private var liveTextOverlay: ImageAnalysisOverlayView?
     private let liveTextDelegate = PinLiveTextDelegate()
     private let liveTextButton = NSButton()
@@ -139,7 +174,15 @@ final class PinContentView: NSView {
         layer?.cornerRadius = 10
         layer?.masksToBounds = true
         layerContentsRedrawPolicy = .duringViewResize
+        configureCloseButton()
         configureLiveTextButton()
+
+        // 若鼠标当前已落在窗口范围内，初始就展示浮动按钮
+        let currentMouse = NSEvent.mouseLocation
+        if frame.contains(currentMouse) {
+            closeButtonHost?.isHidden = false
+            liveTextButton.isHidden = false
+        }
 
         let doubleClick = NSClickGestureRecognizer(
             target: self,
@@ -164,6 +207,14 @@ final class PinContentView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard bounds.contains(point) else { return nil }
+        if let closeButtonHost, !closeButtonHost.isHidden, closeButtonHost.frame.contains(point) {
+            let localPoint = convert(point, to: closeButtonHost)
+            return closeButtonHost.hitTest(localPoint) ?? closeButtonHost
+        }
+        if !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
+            let localPoint = convert(point, to: liveTextButton)
+            return liveTextButton.hitTest(localPoint) ?? liveTextButton
+        }
         // 边缘手柄检测区优先由 PinContentView 响应，避免被全屏覆盖的实况文本视图拦截
         if PinGeometry.handle(at: point, in: bounds) != nil {
             return self
@@ -190,6 +241,14 @@ final class PinContentView: NSView {
             }
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 { // Esc
+            onRequestClose?()
+            return
+        }
+        super.keyDown(with: event)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -244,7 +303,11 @@ final class PinContentView: NSView {
     }
 
     private func updateCursor(at point: CGPoint) {
-        if let handle = activeHandle {
+        if let closeButtonHost, !closeButtonHost.isHidden, closeButtonHost.frame.contains(point) {
+            NSCursor.arrow.set()
+        } else if !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
+            NSCursor.arrow.set()
+        } else if let handle = activeHandle {
             SelectionCursor.cursor(for: handle).set()
         } else if let handle = PinGeometry.handle(at: point, in: bounds) {
             SelectionCursor.cursor(for: handle).set()
@@ -259,13 +322,20 @@ final class PinContentView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
-        updateCursor(at: convert(event.locationInWindow, from: nil))
+        let point = convert(event.locationInWindow, from: nil)
+        if bounds.contains(point) && !isLiveTextOn {
+            if closeButtonHost?.isHidden == true { closeButtonHost?.isHidden = false }
+            if liveTextButton.isHidden { liveTextButton.isHidden = false }
+        }
+        updateCursor(at: point)
     }
 
     // MARK: - Mouse Dragging & Resizing
 
     override func mouseDown(with event: NSEvent) {
-        window?.makeKey()
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        window?.makeFirstResponder(self)
         guard let window else {
             super.mouseDown(with: event)
             return
@@ -432,7 +502,25 @@ final class PinContentView: NSView {
         window.invalidateCursorRects(for: self)
     }
 
-    // MARK: - Live Text
+    // MARK: - Close & Live Text Buttons
+
+    private func configureCloseButton() {
+        let button = GlassCircleButton(
+            title: "关闭 (⌘W)",
+            systemImage: "xmark",
+            diameter: 28,
+            tint: Theme.Colors.textPrimary,
+            action: { [weak self] in
+                self?.onRequestClose?()
+            }
+        )
+        let host = NSHostingView(rootView: button)
+        host.wantsLayer = true
+        host.layer?.backgroundColor = NSColor.clear.cgColor
+        host.isHidden = true
+        addSubview(host)
+        self.closeButtonHost = host
+    }
 
     private func configureLiveTextButton() {
         liveTextButton.isBordered = false
@@ -455,21 +543,35 @@ final class PinContentView: NSView {
     override func layout() {
         super.layout()
         let size: CGFloat = 28
+        let padding: CGFloat = 8
+        closeButtonHost?.frame = CGRect(
+            x: bounds.maxX - size - padding,
+            y: bounds.maxY - size - padding,
+            width: size,
+            height: size
+        )
         liveTextButton.frame = CGRect(
-            x: bounds.maxX - size - 10,
-            y: bounds.minY + 10,
+            x: bounds.maxX - size - padding,
+            y: bounds.minY + padding,
             width: size,
             height: size
         )
     }
 
     override func mouseEntered(with event: NSEvent) {
-        if !isLiveTextOn { liveTextButton.isHidden = false }
+        if !isLiveTextOn {
+            closeButtonHost?.isHidden = false
+            liveTextButton.isHidden = false
+        }
     }
 
     override func mouseExited(with event: NSEvent) {
-        liveTextButton.isHidden = true
-        NSCursor.arrow.set()
+        let mouseInView = convert(event.locationInWindow, from: nil)
+        if !bounds.contains(mouseInView) {
+            closeButtonHost?.isHidden = true
+            liveTextButton.isHidden = true
+            NSCursor.arrow.set()
+        }
     }
 
     /// 点击才进入实况文本；默认拖动是移动窗口。
@@ -485,12 +587,14 @@ final class PinContentView: NSView {
         guard liveTextOverlay == nil else { return }
         isLiveTextOn = true
         liveTextButton.isHidden = true
+        closeButtonHost?.isHidden = true
 
         let overlay = ImageAnalysisOverlayView(liveTextDelegate)
         overlay.preferredInteractionTypes = .textSelection
         overlay.frame = bounds
         overlay.autoresizingMask = [.width, .height]
-        addSubview(overlay, positioned: .below, relativeTo: liveTextButton)
+        let topView = closeButtonHost ?? liveTextButton
+        addSubview(overlay, positioned: .below, relativeTo: topView)
         liveTextOverlay = overlay
 
         Task { @MainActor in
@@ -512,6 +616,7 @@ final class PinContentView: NSView {
         liveTextOverlay = nil
         isLiveTextOn = false
         liveTextButton.isHidden = true
+        closeButtonHost?.isHidden = true
     }
 
     @objc private func handleExitLiveText() {
