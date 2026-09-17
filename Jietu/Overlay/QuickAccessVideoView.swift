@@ -4,10 +4,12 @@ import SwiftUI
 /// 录屏收工后的浮窗卡片（Quick Access Overlay 的视频版）。
 ///
 /// 与图片卡（`QuickAccessView`）同一套表面与交互：卡片尺寸按封面等比算、悬停模糊露出毛玻璃、
-/// 四角浮出同一套 `GlassControlButton`、拖出去就是那个文件。差别只在**内容与动作**：
-/// - 录屏一收工文件就已经落盘了，所以没有「保存」，四角换成
-///   **播放 / 在访达中显示 / 复制文件 / 关闭**；
-/// - 封面正中挂一枚「▶ 0:12」胶囊：一眼看出这是段视频、多长（悬停时也不收，中央没有别的按钮）。
+/// 浮出同一套 `GlassControlButton`、拖出去就是那个文件。动作与图片卡同构：
+/// - 四角：**复制文件 / 关闭 / 播放 / 在访达中显示**；
+/// - 中央胶囊：**保存**（成片已经在保存目录里了，这里是把**另存一份**到用户挑的地方）。
+///
+/// 封面正中挂一枚「▶ 0:12」胶囊：一眼看出这是段视频、多长；悬停时它淡出，
+/// 把中央让给「保存」。
 ///
 /// @author ixxxxoooo
 struct QuickAccessVideoView: View {
@@ -22,6 +24,8 @@ struct QuickAccessVideoView: View {
     var onPlay: () -> Void
     var onReveal: () -> Void
     var onCopyFile: () -> Void
+    /// 中央「保存」：把成片另存一份到用户挑的地方（原片留在保存目录）。
+    var onSave: () -> Void
     var onClose: () -> Void
     var onHoverChange: (Bool) -> Void
     /// 拖拽导出：直接给磁盘上那个 mp4（不是临时文件）。
@@ -70,6 +74,8 @@ struct QuickAccessVideoView: View {
     ///
     /// 用黑底白字的胶囊而不是玻璃：封面可能是任何画面（亮的、花的），
     /// 这枚胶囊必须一眼看得见——视频缩略图那套老规矩最好用。
+    ///
+    /// 悬停时淡出：中央那个位子要让给「保存」（与图片卡同构，主操作都在中央）。
     private var durationBadge: some View {
         HStack(spacing: Theme.Spacing.sm) {
             Image(systemName: "play.fill")
@@ -81,6 +87,7 @@ struct QuickAccessVideoView: View {
         .padding(.horizontal, Theme.Spacing.lg)
         .frame(height: 26)
         .background(Capsule().fill(.black.opacity(0.55)))
+        .opacity(isHovering ? 0 : 1)
     }
 
     /// 时长文本：`m:ss`，超过一小时才带上小时位（`h:mm:ss`）。
@@ -97,7 +104,8 @@ struct QuickAccessVideoView: View {
         return String(format: "%d:%02d", minutes, secs)
     }
 
-    /// 四角圆盘：播放 / 在访达中显示 / 复制文件 / 关闭（与图片卡共用同一套玻璃按钮）。
+    /// 四角圆盘（播放 / 在访达中显示 / 复制文件 / 关闭）+ 中央「保存」胶囊，
+    /// 与图片卡共用同一套玻璃按钮与同一套摆位。
     private var controls: some View {
         QuickAccessControlLayer(
             actions: QuickAccessAction.videoCard,
@@ -106,6 +114,7 @@ struct QuickAccessVideoView: View {
                 case .play: onPlay()
                 case .reveal: onReveal()
                 case .copyFile: onCopyFile()
+                case .save: onSave()
                 case .close: onClose()
                 default: break
                 }

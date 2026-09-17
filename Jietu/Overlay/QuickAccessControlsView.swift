@@ -16,8 +16,8 @@ enum QuickAccessAction: String, CaseIterable {
 
     /// 图片卡的动作与摆位：左上复制 / 右上关闭 / 左下标注 / 右下钉图 / 中央保存。
     static let imageCard: [QuickAccessAction] = [.copy, .close, .annotate, .pin, .save]
-    /// 视频卡的动作与摆位：左上复制文件 / 右上关闭 / 左下播放 / 右下在访达中显示。
-    static let videoCard: [QuickAccessAction] = [.copyFile, .close, .play, .reveal]
+    /// 视频卡的动作与摆位：左上复制文件 / 右上关闭 / 左下播放 / 右下在访达中显示 / 中央另存为。
+    static let videoCard: [QuickAccessAction] = [.copyFile, .close, .play, .reveal, .save]
 
     /// 控件在卡片里的位子。写死在这里，`frame(of:in:)` 与自检都按它算注入点。
     enum Slot {
@@ -56,6 +56,14 @@ enum QuickAccessAction: String, CaseIterable {
         case .play: "播放"
         case .reveal: "在访达中显示"
         case .copyFile: "复制文件"
+        }
+    }
+
+    /// 悬停时鼠标停在按钮上的说明：视频卡的「保存」是把成片**另存一份**（原片已经在保存目录里了）。
+    var tooltip: String {
+        switch self {
+        case .save: "另存为…"
+        default: title
         }
     }
 
@@ -137,7 +145,7 @@ final class QuickAccessControlsView: NSView {
                 symbol: action.symbol,
                 labelText: action.isCircle ? nil : action.title,
                 diameter: Self.diameter,
-                tooltip: action.title
+                tooltip: action.tooltip
             )
             button.onClick = { [weak self] in self?.onAction?(action) }
             // 静息态不显示（但仍在层级里，命中与否由 `hitTest` 按悬停放行）。

@@ -65,6 +65,8 @@ final class QuickAccessPanelController {
     var onRevealVideo: ((URL) -> Void)?
     /// 视频卡：把文件本身放进剪贴板（粘到聊天窗口 / 访达里就是那个 mp4）。
     var onCopyVideoFile: ((URL) -> Void)?
+    /// 视频卡：保存（把成片另存一份到用户挑的地方）。
+    var onSaveVideo: ((URL) -> Void)?
     var onDismiss: (() -> Void)?
     /// 浮窗出现 / 全部消失。
     var onVisibilityChanged: ((Bool) -> Void)?
@@ -156,6 +158,7 @@ final class QuickAccessPanelController {
             onPlay: { [weak self] in self?.onPlayVideo?(url) },
             onReveal: { [weak self] in self?.onRevealVideo?(url) },
             onCopyFile: { [weak self] in self?.onCopyVideoFile?(url) },
+            onSave: { [weak self] in self?.onSaveVideo?(url) },
             onClose: { [weak self] in self?.dismissEntry(id, animated: true) },
             onHoverChange: { [weak self] hovering in self?.setHover(id, hovering) },
             dragProvider: {

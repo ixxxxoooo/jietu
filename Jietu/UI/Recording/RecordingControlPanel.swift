@@ -1,6 +1,9 @@
 import AppKit
 
-/// 录屏控制条：红点 + 已录时长 + 暂停/继续 + 停止 + 取消，贴着选区下方浮着。
+/// 录屏控制条：**先停在「待开始」**，点「开始」才真开录；录制中红点 + 已录时长 + 暂停/继续 + 完成 + 取消。
+///
+/// 不选完区域就自动开录：录屏是「先把框摆好再决定」，自动开录会把用户还没准备好的那几秒也录进去
+/// （滚动长图那边也是同一套路：先停在待开始态）。
 ///
 /// 为什么是 AppKit 而不是 SwiftUI：这是**非激活面板**（不抢前台，录制时用户还要操作别的 App），
 /// 而 SwiftUI 的 Button 在这种窗口上首击可能被用来激活窗口（要按两下）。
@@ -9,6 +12,15 @@ import AppKit
 /// @author ixxxxoooo
 @MainActor
 final class RecordingControlPanel {
+    /// 控制条的两个阶段。
+    enum Phase {
+        /// 框已选好、还没开录：`[●] 准备录制  [取消] [开始]`。
+        case ready
+        /// 正在录：`[★] 00:12  [取消] [完成] [暂停]`。
+        case recording
+    }
+
+    var onStart: (() -> Void)?
     var onTogglePause: (() -> Void)?
     var onStop: (() -> Void)?
     var onCancel: (() -> Void)?
@@ -20,16 +32,18 @@ final class RecordingControlPanel {
     var windowNumber: Int? { panel.map { $0.windowNumber } }
     var isVisible: Bool { panel?.isVisible ?? false }
 
-    private static let size = CGSize(width: 208, height: 44)
+    private static let size = CGSize(width: 216, height: 44)
 
     /// 贴着选区下方展示（下方放不下就挪到上方）。
-    func present(near selectionRect: CGRect, in screen: NSScreen?) {
+    func present(near selectionRect: CGRect, in screen: NSScreen?, phase: Phase = .ready) {
         close()
 
         let content = RecordingControlContentView(frame: NSRect(origin: .zero, size: Self.size))
+        content.onStart = { [weak self] in self?.onStart?() }
         content.onTogglePause = { [weak self] in self?.onTogglePause?() }
         content.onStop = { [weak self] in self?.onStop?() }
         content.onCancel = { [weak self] in self?.onCancel?() }
+        content.setPhase(phase)
         self.content = content
 
         let panel = NSPanel(
@@ -64,6 +78,27 @@ final class RecordingControlPanel {
         content?.setPaused(paused)
     }
 
+    /// 切阶段（待开始 → 录制中）。
+    func setPhase(_ phase: Phase) {
+        content?.setPhase(phase)
+    }
+
+    /// 自检用：某个按钮在屏幕上的矩形（注入点击要按它算点）。
+    enum TestingButton { case start, pause, stop, cancel }
+
+    func screenFrame(of button: TestingButton) -> CGRect? {
+        guard let content, let panel else { return nil }
+        let local: NSRect?
+        switch button {
+        case .start: local = content.startFrame
+        case .pause: local = content.pauseFrame
+        case .stop: local = content.stopFrame
+        case .cancel: local = content.cancelFrame
+        }
+        guard let local else { return nil }
+        return panel.convertToScreen(content.convert(local, to: nil))
+    }
+
     func close() {
         panel?.orderOut(nil)
         panel = nil
@@ -86,17 +121,22 @@ final class RecordingControlPanel {
     }
 }
 
-/// 控制条的内容视图：玻璃圆角 + 红点 + 时长 + 三个按钮。
+/// 控制条的内容视图：玻璃圆角 + 红点 + （准备录制 / 已录时长）+ 按钮。
 ///
 /// @author ixxxxoooo
 private final class RecordingControlContentView: NSView {
+    var onStart: (() -> Void)?
     var onTogglePause: (() -> Void)?
     var onStop: (() -> Void)?
     var onCancel: (() -> Void)?
 
     private let glass = NSVisualEffectView()
     private let dot = NSView()
-    private let label = NSTextField(labelWithString: "00:00")
+    private let label = NSTextField(labelWithString: "准备录制")
+    /// 「开始」：待开始态的主操作。
+    private let startButton = GlassControlButton(
+        symbol: "record.circle", diameter: 26, tooltip: "开始录制 (⌘⇧S)"
+    )
     private lazy var pauseButton = GlassControlButton(
         symbol: "pause.fill", diameter: 26, tooltip: "暂停 (⌘⇧P)"
     )
@@ -108,6 +148,7 @@ private final class RecordingControlContentView: NSView {
         symbol: "xmark", diameter: 26, tooltip: "取消（不保存）"
     )
     private var isPaused = false
+    private var phase: RecordingControlPanel.Phase = .ready
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -121,7 +162,7 @@ private final class RecordingControlContentView: NSView {
         glass.layer?.masksToBounds = true
         addSubview(glass)
 
-        // 红点：录制中一直亮着，暂停时压暗——一眼能看出状态。
+        // 红点：录制中一直亮着，暂停 / 待开始时压暗——一眼能看出状态。
         dot.wantsLayer = true
         dot.layer?.backgroundColor = NSColor(Theme.Colors.destructive).cgColor
         dot.layer?.cornerRadius = 4
@@ -132,10 +173,11 @@ private final class RecordingControlContentView: NSView {
         label.alignment = .left
         addSubview(label)
 
+        startButton.onClick = { [weak self] in self?.onStart?() }
         pauseButton.onClick = { [weak self] in self?.onTogglePause?() }
         stopButton.onClick = { [weak self] in self?.onStop?() }
         cancelButton.onClick = { [weak self] in self?.onCancel?() }
-        for button in [pauseButton, stopButton, cancelButton] {
+        for button in [startButton, pauseButton, stopButton, cancelButton] {
             addSubview(button)
         }
     }
@@ -153,18 +195,48 @@ private final class RecordingControlContentView: NSView {
         label.sizeToFit()
         label.frame = NSRect(
             x: dot.frame.maxX + 8, y: mid - label.frame.height / 2,
-            width: 46, height: label.frame.height
+            width: 64, height: label.frame.height
         )
+        let visible = visibleButtons
+        for button in [startButton, pauseButton, stopButton, cancelButton] {
+            button.isHidden = !visible.contains(button)
+        }
+        // 从右往左摆：最右边那颗永远是「退出去」（待开始是取消 / 录制中是取消）。
         var x = bounds.maxX - 12 - 26
-        for button in [cancelButton, stopButton, pauseButton] {
+        for button in visible {
             button.frame = NSRect(x: x, y: mid - 13, width: 26, height: 26)
             x -= 26 + 6
         }
     }
 
+    /// 当前阶段真正露出来的按钮，**从右往左**列（layout 按这个顺序摆）。
+    private var visibleButtons: [GlassControlButton] {
+        switch phase {
+        case .ready: [cancelButton, startButton]
+        case .recording: [cancelButton, stopButton, pauseButton]
+        }
+    }
+
+    /// 自检用：按钮在**自己坐标系**里的矩形。
+    var startFrame: NSRect? { startButton.isHidden ? nil : startButton.frame }
+    var pauseFrame: NSRect? { pauseButton.isHidden ? nil : pauseButton.frame }
+    var stopFrame: NSRect? { stopButton.isHidden ? nil : stopButton.frame }
+    var cancelFrame: NSRect? { cancelButton.isHidden ? nil : cancelButton.frame }
+
     func setElapsed(_ elapsed: TimeInterval) {
+        guard phase == .recording else { return }
         let total = max(0, Int(elapsed.rounded(.down)))
         label.stringValue = String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
+    func setPhase(_ phase: RecordingControlPanel.Phase) {
+        guard self.phase != phase else { return }
+        self.phase = phase
+        label.stringValue = phase == .ready ? "准备录制" : "00:00"
+        // 待开始态的红点压暗：框摆好了，但还没在录。
+        dot.layer?.backgroundColor = NSColor(Theme.Colors.destructive)
+            .withAlphaComponent(phase == .ready ? 0.35 : 1).cgColor
+        needsLayout = true
     }
 
     func setPaused(_ paused: Bool) {

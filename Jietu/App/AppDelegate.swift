@@ -29,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingElapsed: TimeInterval = 0
     /// 录的是哪块屏：收工后的浮窗要落回同一块屏（和截图一个规矩）。
     private var recordingDisplayID: CGDirectDisplayID?
+    /// 框选好了、**还没点「开始」**的那一档：红框 + 控制条先停着（`phase = .ready`）。
+    private var pendingRecording: (displayID: CGDirectDisplayID, region: CGRect)?
 
     /// 滚动长图的右侧实时预览。
     private var scrollingPreview: ScrollingPreviewPanel?
@@ -150,19 +152,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 post(.leftMouseUp, at: end)
                 try? await Task.sleep(for: .milliseconds(1200))
 
-                let engineUp = recordingEngine != nil
+                // 2.5 选完区域应当**停在待开始**：红框 + 控制条都在，但还没开录。
+                let waiting = recordingEngine == nil && pendingRecording != nil
                 let hudUp = recordingHUD?.isVisible ?? false
                 let borderUp = recordingBorder?.isVisible ?? false
                 let overlayGone = !overlays.isPresenting
                 report.append(
-                    "选区交出去之后：会话=\(engineUp ? "在录" : "**没起来**")"
+                    "选区交出去之后：会话=\(recordingEngine == nil ? "**还没开录**" : "**已经开录了**")"
+                        + "（待开始=\(waiting ? "是" : "否")）"
                         + "，控制条=\(hudUp ? "可见" : "**不可见**")"
                         + "，红框=\(borderUp ? "可见" : "**不可见**")"
                         + "，遮罩=\(overlayGone ? "已收" : "**还在**")"
                 )
-                budgets.append(("会话起来了", engineUp ? 0 : nil, 0))
+                budgets.append(("选完停在待开始（没自动开录）", waiting ? 0 : nil, 0))
                 budgets.append(("控制条可见", hudUp ? 0 : nil, 0))
                 budgets.append(("红框可见", borderUp ? 0 : nil, 0))
+                // 待开始那条控制条长什么样：截一张（「准备录制」+ 取消 + 开始）。
+                if let shots = try? await capture.captureAllDisplays(excludingOwnApplication: false),
+                    let shot = shots.first(where: { $0.displayID == NSScreen.main?.jietu_displayID })
+                        ?? shots.first
+                {
+                    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+                        .appendingPathComponent("jietu-recording-ready.png")
+                    try? CaptureSelfTest.writePNG(shot.image, to: url)
+                    report.append("待开始截图 -> \(url.path)")
+                }
+
+                // 2.6 点控制条上的「开始」——这才真开录。
+                if let startFrame = recordingHUD?.screenFrame(of: .start) {
+                    // 面板给的是 AppKit 全局坐标（原点左下），注入事件要的是 cg（原点左上）。
+                    let center = CGPoint(
+                        x: startFrame.midX,
+                        y: DisplayGeometry.referenceHeight - startFrame.midY
+                    )
+                    post(.mouseMoved, at: center)
+                    try? await Task.sleep(for: .milliseconds(150))
+                    post(.leftMouseDown, at: center)
+                    try? await Task.sleep(for: .milliseconds(70))
+                    post(.leftMouseUp, at: center)
+                } else {
+                    report.append("控制条上**找不到「开始」按钮**")
+                }
+                try? await Task.sleep(for: .milliseconds(500))
+                let engineUp = recordingEngine != nil
+                report.append("点「开始」之后：会话=\(engineUp ? "在录" : "**没起来**")")
+                budgets.append(("点开始才开录", engineUp ? 0 : nil, 0))
 
                 // 3. 让画面动起来（不动的话 SCK 不出帧，成片可能是空的），再点「完成」。
                 for index in 0..<10 {
@@ -679,6 +713,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pasteboard.clearContents()
             pasteboard.writeObjects([url as NSURL])
         }
+        quickAccess.onSaveVideo = { [weak self] url in
+            self?.saveVideoAs(url)
+        }
         overlays.onFinish = { [weak self] outcome in
             guard let self else { return }
             // 遮罩只服务一次：**无论结果如何**都把用途复位。
@@ -852,10 +889,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Screen recording
 
-    /// 录屏入口：先弹遮罩框一块区域（或点一下某个窗口），松手即开录。
+    /// 录屏入口：先弹遮罩框一块区域（或点一下某个窗口），松手停在「准备录制」。
     private func handleScreenRecording() {
-        guard recordingEngine == nil else {
-            logger.notice("recording ignored: already running")
+        guard recordingEngine == nil, pendingRecording == nil else {
+            logger.notice("recording ignored: already running or waiting to start")
             return
         }
         guard !overlays.isPresenting else {
@@ -881,8 +918,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// 选区到手：收掉遮罩 → 上红框与控制条 → 开录。
+    /// 选区到手：收掉遮罩 → 上红框与控制条，**停在「准备录制」**等用户点「开始」。
+    ///
+    /// 不自动开录：录屏是「先把框摆好再决定」，自动开录会把用户还没准备好的那几秒也录进去
+    /// （滚动长图那边也是同一套路：控制条先停在待开始态）。
     private func beginRecording(snapshot: DisplaySnapshot, localRect: CGRect) {
-        guard recordingEngine == nil else { return }
+        guard recordingEngine == nil, pendingRecording == nil else { return }
         guard let target = makeRegionTarget(snapshot: snapshot, localRect: localRect) else {
             overlays.cancel()
             return
@@ -895,39 +936,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let border = RecordingBorderPanel()
         border.present(around: target.selectionRect)
         let hud = RecordingControlPanel()
-        hud.present(near: target.selectionRect, in: screen)
+        hud.present(near: target.selectionRect, in: screen, phase: .ready)
         recordingBorder = border
         recordingHUD = hud
+        pendingRecording = (displayID: snapshot.displayID, region: target.region)
+
+        hud.onStart = { [weak self] in self?.startRecording() }
+        hud.onTogglePause = { [weak self] in self?.toggleRecordingPause() }
+        hud.onStop = { [weak self] in self?.stopRecording() }
+        hud.onCancel = { [weak self] in self?.cancelRecording() }
+        recordingElapsed = 0
+        recordingDisplayID = snapshot.displayID
+        registerRecordingKeyMonitors()
+    }
+
+    /// 用户点了「开始」（待开始态按 ⌘⇧S 同样走这里）：**这才真的开录**。
+    private func startRecording() {
+        guard let pending = pendingRecording, recordingEngine == nil else { return }
+        pendingRecording = nil
+        recordingHUD?.setPhase(.recording)
+        recordingElapsed = 0
 
         let engine = RecordingEngine()
-        engine.onTick = { [weak self, weak hud] elapsed in
+        engine.onTick = { [weak self, weak hud = recordingHUD] elapsed in
             hud?.update(elapsed: elapsed)
             self?.recordingElapsed = elapsed
         }
         engine.onFinish = { [weak self] url in self?.finishRecording(temporaryURL: url) }
         engine.onFail = { [weak self] error in self?.failRecording(error) }
         recordingEngine = engine
-        recordingElapsed = 0
-        recordingDisplayID = snapshot.displayID
-
-        hud.onTogglePause = { [weak self] in self?.toggleRecordingPause() }
-        hud.onStop = { [weak self] in
-            guard let engine = self?.recordingEngine else { return }
-            Task { await engine.stop() }
-        }
-        hud.onCancel = { [weak self] in self?.cancelRecording() }
-        registerRecordingKeyMonitors()
 
         let options = RecordingEngine.Options(
             fps: settings.recordFrameRate,
             capturesSystemAudio: settings.recordSystemAudio
         )
-        let excluded = [hud.windowNumber, border.windowNumber].compactMap { $0 }
+        let excluded = [recordingHUD?.windowNumber, recordingBorder?.windowNumber].compactMap { $0 }
         Task { @MainActor in
             do {
                 try await engine.start(
-                    displayID: snapshot.displayID,
-                    regionInPoints: target.region,
+                    displayID: pending.displayID,
+                    regionInPoints: pending.region,
                     options: options,
                     excludingWindowNumbers: excluded
                 )
@@ -935,6 +983,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 failRecording(error)
             }
         }
+    }
+
+    /// 「完成」：收工保存。
+    private func stopRecording() {
+        guard let engine = recordingEngine else { return }
+        Task { await engine.stop() }
     }
 
     /// 暂停 / 继续。
@@ -951,8 +1005,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 取消：不保存。
     private func cancelRecording() {
-        guard let engine = recordingEngine else { return }
-        Task { await engine.cancel() }
+        // 待开始那一档还没有引擎（也就没有文件要丢）：直接收掉红框 + 控制条。
+        if let engine = recordingEngine {
+            Task { await engine.cancel() }
+        }
         stopRecordingUI()
     }
 
@@ -1038,9 +1094,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recordingBorder?.close()
         recordingBorder = nil
         recordingEngine = nil
+        pendingRecording = nil
     }
 
-    /// Esc = 取消（不保存）；⌘⇧P 暂停 / 继续；⌘⇧S 完成。
+    /// Esc = 取消（不保存）；⌘⇧P 暂停 / 继续；⌘⇧S 完成（待开始态则是「开始」）。
     ///
     /// 本地 + 全局都装：录屏时用户多半在操作别的 App，只有本地监视器收不到按键。
     /// 全局监视器只能旁观、拦不住事件（系统限制），所以两边都挂。
@@ -1063,7 +1120,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return nil
                 }
                 if key == "s" {
-                    if let engine = self.recordingEngine { Task { await engine.stop() } }
+                    // 待开始态按 ⌘⇧S = 开始录制；录制中 = 完成。
+                    if self.recordingEngine != nil {
+                        self.stopRecording()
+                    } else {
+                        self.startRecording()
+                    }
                     return nil
                 }
             }
@@ -1573,6 +1635,31 @@ struct CaptureRegionTarget {
             didSave(to: url)
         } catch {
             logger.error("save failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// 视频卡的「保存」：把成片**另存一份**到用户挑的地方。
+    ///
+    /// 与截图的「保存」同一个面板、同一个默认目录；差别是原片已经在保存目录里了，
+    /// 所以这是**复制**（原片留着，卡片上的播放 / 在访达中显示 / 拖拽都还指着它）。
+    private func saveVideoAs(_ url: URL) {
+        let panel = NSSavePanel()
+        panel.directoryURL = settings.saveDirectory
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.mpeg4Movie]
+        panel.nameFieldStringValue = url.lastPathComponent
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+        // 选到原片自己：什么都不做（绝不允许「先删目标再拷」把自己删了）。
+        guard destination.standardizedFileURL != url.standardizedFileURL else { return }
+        do {
+            // 面板已经确认过「替换」，这里先清掉同名文件再拷。
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.copyItem(at: url, to: destination)
+            logger.notice("recording saved as: \(destination.lastPathComponent)")
+        } catch {
+            logger.error("save recording as failed: \(error.localizedDescription)")
         }
     }
 

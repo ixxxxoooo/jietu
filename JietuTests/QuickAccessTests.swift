@@ -142,15 +142,18 @@ struct QuickAccessTests {
         }
     }
 
-    @Test("视频卡（录屏收工）：四角各一个圆盘，没有中央胶囊")
-    func videoCardHasFourCornerDiscs() {
+    @Test("视频卡（录屏收工）：四角圆盘 + 中央「保存」，与图片卡同构")
+    func videoCardHasFourDiscsAndACenterCapsule() {
         let card = CGSize(width: 260, height: 146)
         let frames: [(String, NSRect)] = QuickAccessAction.videoCard.map {
             ($0.title, QuickAccessControlsView.frame(of: $0, in: card))
         }
-        #expect(frames.count == 4, "视频卡是四角四个动作")
-        #expect(!QuickAccessAction.videoCard.contains(.save), "文件已经落盘了，没有「保存」")
-        for (title, frame) in frames {
+        #expect(frames.count == 5, "四角 + 中央：与图片卡同一套摆位")
+        #expect(QuickAccessAction.videoCard.contains(.save), "操作栏要能保存（另存为…）")
+        // 中央那颗是胶囊（图标 + 文字），其余是圆盘。
+        let save = QuickAccessControlsView.frame(of: .save, in: card)
+        #expect(save.width > QuickAccessControlsView.diameter)
+        for (title, frame) in frames where title != "保存" {
             #expect(frame.width == QuickAccessControlsView.diameter, "\(title) 是圆盘")
             #expect(frame.height == QuickAccessControlsView.diameter)
             #expect(frame.minX >= 0 && frame.maxX <= card.width, "\(title) 越界")
@@ -171,6 +174,70 @@ struct QuickAccessTests {
         #expect(close.minX > card.width / 2 && close.minY > card.height / 2)
         #expect(play.minX < card.width / 2 && play.minY < card.height / 2)
         #expect(reveal.minX > card.width / 2 && reveal.minY < card.height / 2)
+    }
+
+    @Test("视频卡的「保存」把成片交给外面（另存为），且不动原片")
+    func videoCardSaveHandsTheFileOut() {
+        // 放一个真文件当「成片」：dismiss 之后它必须还在（临时导出文件才删）。
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jietu-test-\(UUID().uuidString).mp4")
+        try? Data([0x00, 0x01]).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let controller = QuickAccessPanelController()
+        var saved: URL?
+        controller.onSaveVideo = { saved = $0 }
+        controller.presentVideo(
+            url: url,
+            thumbnail: solidImage(width: 520, height: 292),
+            thumbnailPointSize: CGSize(width: 260, height: 146),
+            duration: 12,
+            onDisplay: CGMainDisplayID()
+        )
+
+        guard let panel = controller.panelsForTesting.last else {
+            controller.dismiss()
+            Issue.record("浮窗没建起来")
+            return
+        }
+        // SwiftUI 的 `NSViewRepresentable` 要等一次布局 / 绘制才真的挂出子视图。
+        panel.contentView?.layoutSubtreeIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        panel.contentView?.layoutSubtreeIfNeeded()
+
+        guard let controls = findControls(in: panel.contentView) else {
+            controller.dismiss()
+            Issue.record("没找到浮窗上的图标层")
+            return
+        }
+        #expect(controls.button(for: .save) != nil, "视频卡上要有「保存」")
+        controls.button(for: .save)?.onClick?()
+        #expect(saved == url, "「保存」要把这个成片交出去")
+
+        controller.dismiss()
+        #expect(FileManager.default.fileExists(atPath: url.path), "关卡片不能删用户的成片")
+    }
+
+    private func solidImage(width: Int, height: Int) -> CGImage {
+        let ctx = CGContext(
+            data: nil, width: width, height: height,
+            bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        ctx.setFillColor(NSColor.systemTeal.cgColor)
+        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return ctx.makeImage()!
+    }
+
+    /// 浮窗的图标层藏在 NSHostingView 里，递归找一下。
+    private func findControls(in view: NSView?) -> QuickAccessControlsView? {
+        guard let view else { return nil }
+        if let controls = view as? QuickAccessControlsView { return controls }
+        for subview in view.subviews {
+            if let found = findControls(in: subview) { return found }
+        }
+        return nil
     }
 
     @Test("视频卡时长文本：m:ss，超过一小时才带小时位")
@@ -194,7 +261,7 @@ struct QuickAccessTests {
             thumbnailPointSize: point,
             duration: 12,
             cardSize: card,
-            onPlay: {}, onReveal: {}, onCopyFile: {}, onClose: {},
+            onPlay: {}, onReveal: {}, onCopyFile: {}, onSave: {}, onClose: {},
             onHoverChange: { _ in }, dragProvider: { NSItemProvider() }
         )
         #expect(card == CGSize(width: 260, height: 167))
@@ -208,7 +275,7 @@ struct QuickAccessTests {
             thumbnailPointSize: small,
             duration: 3,
             cardSize: smallCard,
-            onPlay: {}, onReveal: {}, onCopyFile: {}, onClose: {},
+            onPlay: {}, onReveal: {}, onCopyFile: {}, onSave: {}, onClose: {},
             onHoverChange: { _ in }, dragProvider: { NSItemProvider() }
         )
         #expect(smallView.thumbnailDisplaySize == small)
