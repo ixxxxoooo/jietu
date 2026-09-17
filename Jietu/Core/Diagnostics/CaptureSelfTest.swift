@@ -2586,7 +2586,8 @@ enum CaptureSelfTest {
         }
     }
 
-    private static func writePNG(_ image: CGImage, to url: URL) throws {
+    /// 写 PNG（app 级自检也要用）。
+    static func writePNG(_ image: CGImage, to url: URL) throws {
         guard
             let destination = CGImageDestinationCreateWithURL(
                 url as CFURL,

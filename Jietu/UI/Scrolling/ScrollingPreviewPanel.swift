@@ -123,11 +123,13 @@ struct ScrollingPreviewView: View {
     var body: some View {
         Group {
             if let image {
-                // 图的像素尺寸就是这块内容区（见 `previewPixelSize`），直接铺满即可：
-                // 不再让 SwiftUI 每帧重采样整张长图，也不必再做 aspect fit 的裁切。
+                // 画的图与这块内容区同比例（见 `previewPixelSize`），所以 `.fit` 正好铺满；
+                // 保留比例这一条不能省：万一拿到的是别的比例的图（兜底路径给的是整张长图），
+                // `.resizable()` 直接铺满会把它**拉变形**——用户看到的"预览拉伸"就是它。
                 Image(nsImage: image)
                     .resizable()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else {
                 Text("等待滚动…")
                     .font(Theme.Typography.rowSubtitle)

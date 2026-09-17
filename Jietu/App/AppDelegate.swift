@@ -173,14 +173,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let clickThrough = overlays.debugWindowIgnoresMouseEvents(displayID: displayID) ?? false
                 try? await Task.sleep(for: .milliseconds(500))
                 let previewVisible = scrollingPreview?.isVisible ?? false
+                // 首帧要等一次采集，别抢在它前面读。
+                var previewWait: Double = 0
+                while scrollingSession?.debugPreviewImageSize == nil, previewWait < 3 {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    previewWait += 0.1
+                }
+                let previewSize = scrollingSession?.debugPreviewImageSize
+                let expectedPreview = ScrollingPreviewPanel.previewPixelSize
+                let previewMatches = previewSize.map {
+                    abs($0.width - expectedPreview.width) < 1
+                        && abs($0.height - expectedPreview.height) < 1
+                } ?? false
                 report.append(
                     "手动：点「滚动截图 → 手动滚动」→ \(triggered ? "已触发" : "**没触发**")"
                         + "，会话=\(sessionStarted ? "在跑" : "**没起来**")"
                         + "，控制条=\(panelVisible ? "可见" : "**不可见**")"
                         + "，遮罩鼠标穿透=\(clickThrough ? "是（取景框）" : "**否**")"
                         + "，右侧预览=\(previewVisible ? "挂上" : "**没挂**")"
+                        + "，预览图=\(previewSize.map { "\(Int($0.width))×\(Int($0.height))" } ?? "—")"
+                        + "（画布应为 \(Int(expectedPreview.width))×\(Int(expectedPreview.height))）"
                         + "，交出的选区=\(handoff.map { CaptureSelfTest.describe($0.rect) } ?? "—")"
                 )
+                budgets.append(("预览走小画布（不是整张长图）", previewMatches ? 0 : nil, 0))
+
+                // 抓一张运行中的截图：好亲眼确认预览面板里那张图没有被拉变形
+                // （用户报过的就是「刚开始长截图时右侧图片拉伸了」）。
+                if let shots = try? await capture.captureAllDisplays(excludingOwnApplication: false),
+                    let shot = shots.first(where: { $0.displayID == displayID }) ?? shots.first
+                {
+                    let url = URL(fileURLWithPath: NSTemporaryDirectory())
+                        .appendingPathComponent("jietu-scroll-preview.png")
+                    try? CaptureSelfTest.writePNG(shot.image, to: url)
+                    report.append("运行中截图（看右侧预览有没有变形）-> \(url.path)")
+                }
                 budgets.append(("工具栏触发→会话起来", triggered ? triggerMs : nil, 300))
                 budgets.append(("会话在跑", sessionStarted ? 0 : nil, 0))
                 budgets.append(("控制条可见", panelVisible ? 0 : nil, 0))
@@ -226,8 +252,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try? await Task.sleep(for: .milliseconds(900))
                 let pausedAtStart = scrollingPanel?.debugIsPaused ?? true
 
-                let beforePause = CFAbsoluteTimeGetCurrent()
-                post(.mouseMoved, at: outside)
+                // 自动滚动每拍都会发一次滚轮（事件位置 = 当时的光标），window server 会把光标
+                // 同步到那个位置——所以「移出去」这一下可能要试几次，否则会被那一拍顶回来。
+                var pauseMs: Double?
+                for _ in 0..<8 {
+                    let attemptAt = CFAbsoluteTimeGetCurrent()
+                    post(.mouseMoved, at: outside)
+                    pauseMs = await waitUntil(attemptAt, timeout: 0.6) {
+                        scrollingPanel?.debugIsPaused == true
+                    }
+                    if pauseMs != nil { break }
+                }
                 try? await Task.sleep(for: .milliseconds(250))
                 let cursorNow = DisplayGeometry.flipY(NSEvent.mouseLocation)
                 let regionNow = scrollingSession.map { session -> CGRect in
@@ -244,13 +279,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             ? "是" : "否"
                     )
                 )
-                let pauseMs = await waitUntil(beforePause, timeout: 2) {
-                    scrollingPanel?.debugIsPaused == true
-                }
-                let afterResume = CFAbsoluteTimeGetCurrent()
-                post(.mouseMoved, at: inside)
-                let resumeMs = await waitUntil(afterResume, timeout: 2) {
-                    scrollingPanel?.debugIsPaused == false
+                var resumeMs: Double?
+                for _ in 0..<8 {
+                    let attemptAt = CFAbsoluteTimeGetCurrent()
+                    post(.mouseMoved, at: inside)
+                    resumeMs = await waitUntil(attemptAt, timeout: 0.6) {
+                        scrollingPanel?.debugIsPaused == false
+                    }
+                    if resumeMs != nil { break }
                 }
                 let autoTriggerText = autoTriggered ? "已触发" : "**没触发**"
                 let autoStartText = pausedAtStart ? "**暂停（不该）**" : "滚动中"

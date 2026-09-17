@@ -187,6 +187,8 @@ enum ScrollStitcher {
         private var previewContext: CGContext?
         private var previewScale: CGFloat = 1
         private var previewCanvas = CGSize.zero
+        /// 画布上已经码到哪一行（缩放后）：内容从顶部往下码，满了整体上移一格。
+        private var previewFilledRows: CGFloat = 0
 
         init(
             firstFrame: CGImage,
@@ -293,46 +295,48 @@ enum ScrollStitcher {
             context.translateBy(x: 0, y: CGFloat(canvasHeight))
             context.scaleBy(x: 1, y: -1)
             previewContext = context
-            // 首帧可能比画布高：这一张按「顶对齐」画，先看到页面最上面。
-            drawPreview(slice: first, fromRow: 0, rows: first.height, pinnedToBottom: false)
+            drawPreview(slice: first, fromRow: 0, rows: first.height)
         }
 
         /// 把 `slice` 的某几行画进预览画布（按 `previewScale` 缩放）。
-        private func drawPreview(
-            slice: BitmapData, fromRow: Int, rows: Int, pinnedToBottom: Bool
-        ) {
+        ///
+        /// 定位规则：内容从**顶部**往下码，码满之后整体上移一格——所以早期不留缝、
+        /// 后来也总是「最新的一段在底部」。
+        private func drawPreview(slice: BitmapData, fromRow: Int, rows: Int) {
             guard let context = previewContext, rows > 0 else { return }
             guard let image = slice.makeCGImage(pixelRange: fromRow..<(fromRow + rows)) else {
                 return
             }
             let scaledHeight = CGFloat(rows) * previewScale
-            let y = pinnedToBottom ? max(0, previewCanvas.height - scaledHeight) : 0
+            // 装不下了：先把已有内容整体上移「溢出」那么多，最老的一段被挤出去。
+            let overflow = previewFilledRows + scaledHeight - previewCanvas.height
+            if overflow > 0 {
+                if let snapshot = context.makeImage() {
+                    context.clear(CGRect(origin: .zero, size: previewCanvas))
+                    context.draw(
+                        snapshot,
+                        in: CGRect(
+                            x: 0, y: -overflow,
+                            width: previewCanvas.width, height: previewCanvas.height
+                        )
+                    )
+                }
+                previewFilledRows = max(0, previewFilledRows - overflow)
+            }
             context.draw(
                 image,
-                in: CGRect(x: 0, y: y, width: previewCanvas.width, height: scaledHeight)
+                in: CGRect(
+                    x: 0, y: previewFilledRows,
+                    width: previewCanvas.width, height: scaledHeight
+                )
             )
+            previewFilledRows = min(previewCanvas.height, previewFilledRows + scaledHeight)
         }
 
         private func appendToPreview(_ bitmap: BitmapData, overlapPixels: Int) {
-            guard let context = previewContext else { return }
             let newRows = bitmap.height - overlapPixels
             guard newRows > 0 else { return }
-
-            let scaledRows = CGFloat(newRows) * previewScale
-            // 旧内容整体上移一格（最老的一段被挤出画布），新内容补在最下面。
-            if let snapshot = context.makeImage() {
-                context.clear(CGRect(origin: .zero, size: previewCanvas))
-                context.draw(
-                    snapshot,
-                    in: CGRect(
-                        x: 0,
-                        y: -scaledRows,
-                        width: previewCanvas.width,
-                        height: previewCanvas.height
-                    )
-                )
-            }
-            drawPreview(slice: bitmap, fromRow: overlapPixels, rows: newRows, pinnedToBottom: true)
+            drawPreview(slice: bitmap, fromRow: overlapPixels, rows: newRows)
         }
 
         private func detectScrollbar(current: BitmapData, previous: BitmapData) {

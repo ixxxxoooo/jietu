@@ -59,6 +59,11 @@ final class ScrollingCaptureSession {
     /// 每拼上新内容回一次长图，供右侧实时预览显示。
     var onPreview: ((CGImage) -> Void)?
 
+    #if DEBUG
+    /// 自检用：最近一次发出去的预览图尺寸（应当等于画布尺寸，例如 232×800）。
+    private(set) var debugPreviewImageSize: CGSize?
+    #endif
+
     private var isStopped = false
     private var didCaptureAnything = false
     /// 自动滚动器（只有 `.automatic` 才创建）。
@@ -116,7 +121,11 @@ final class ScrollingCaptureSession {
         didCaptureAnything = false
         stitchedHeight = first.height
         onProgress?(stitchedHeight)
-        onPreview?(first)
+        // 首帧也要走**画布**：直接把选区原图发出去的话，预览面板会按面板尺寸把它拉变形
+        // （比例完全不同：选区是宽扁的，面板是窄高的）——用户看到的「刚开始就拉伸」就是它。
+        if let preview = stitcher.currentPreviewImage() {
+            emitPreview(preview)
+        }
 
         // 自动模式：告诉拼接器「每帧大概位移多少像素」，它就能省掉每帧一次的 Vision 配准。
         if mode == .automatic, target.regionInPoints.height > 1 {
@@ -169,7 +178,7 @@ final class ScrollingCaptureSession {
                 idleIntervals = 0
                 onProgress?(stitchedHeight)
                 if let preview = stitcher.currentPreviewImage() {
-                    onPreview?(preview)
+                    emitPreview(preview)
                 }
 
             case .noNewContent:
@@ -228,6 +237,14 @@ final class ScrollingCaptureSession {
         }
 
         return lastImage
+    }
+
+    /// 发一张预览图出去（顺便记下尺寸：自检要确认走的是小画布而不是整张长图）。
+    private func emitPreview(_ image: CGImage) {
+        #if DEBUG
+        debugPreviewImageSize = CGSize(width: image.width, height: image.height)
+        #endif
+        onPreview?(image)
     }
 
     /// 光标当前所在的全局 cg 坐标（原点主屏左上）。
