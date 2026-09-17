@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import os
@@ -6,7 +7,8 @@ import os
 ///
 /// 两种模式：
 /// - `.manual`：用户把鼠标放进选区自己滚（合成滚动需要辅助功能权限，这是保守选项）；
-/// - `.automatic`：`AutoScroller` 往选区中央发合成滚轮，匀速推进 + 屏蔽用户输入，
+/// - `.automatic`：`AutoScroller` 往**光标所在点**发合成滚轮，匀速推进；光标移出选区即
+///   **暂停**（不滚、也不屏蔽输入），移回来继续——这样用户随时能把鼠标挪去点「完成 / 取消」。
 ///   任意按键即结束。
 ///
 /// 两种模式都靠「连续若干拍没有位移」判断到底了：连续没有新内容（或用户点完成 / Esc）就收工。
@@ -35,8 +37,10 @@ final class ScrollingCaptureSession {
 
     /// 采样模式。`.automatic` 才会合成滚动事件。
     var mode: Mode = .manual
-    /// 采样间隔（秒）。
+    /// 采样间隔（秒）。自动模式另有更密的节奏（见 `automaticInterval`）。
     var interval: TimeInterval = 0.25
+    /// 自动模式的采样间隔：步子细了，拍子也得跟上，看着才顺。
+    var automaticInterval: TimeInterval = 0.12
     /// 连续多少拍没有位移就自动结束（自动模式可以短一些：合成滚动没有「人手停顿」）。
     var idleIntervalsToStop = 6
     /// 还没动起来之前允许的空拍数：手动模式要留给用户「把鼠标挪进选区」的时间，
@@ -44,6 +48,10 @@ final class ScrollingCaptureSession {
     var startupIntervalsToStop = 24
     /// 长图高度上限（像素），超过就收工，避免无限增长。
     var maxPixelHeight = 20_000
+    /// 自动滚动期间的「暂停」回调（光标移出选区）。控制条据此把状态说清楚。
+    var onPausedChange: ((Bool) -> Void)?
+    /// 右侧预览画布的像素尺寸（由控制条那边按屏幕缩放算好传进来）。
+    var previewPixelSize: CGSize = .zero
 
     /// 当前长图高度（像素），用于控制条显示进度。
     private(set) var stitchedHeight = 0
@@ -77,6 +85,7 @@ final class ScrollingCaptureSession {
         defer {
             autoScroller?.removeInputBlocker()
             scroller = nil
+            onPausedChange?(false)
         }
 
         // 构建长效区域捕获器，避免单帧重复 IPC 查询 shareableContent
@@ -90,10 +99,18 @@ final class ScrollingCaptureSession {
             return nil
         }
 
+        // 自动模式：光标在选区外什么也滚不动（滚轮送给光标下面的窗口），
+        // 先把它挪进选区中心一次——「自动」就该点完自己跑，不要用户再手动搬一次鼠标。
+        if mode == .automatic, !cursorInsideRegion() {
+            let region = target.regionInGlobalCGPoints
+            CGWarpMouseCursorPosition(CGPoint(x: region.midX, y: region.midY))
+        }
+
         let stitcher = ScrollStitcher.Session(
             firstFrame: first,
-            maxFrames: 120,
-            maxPixelHeight: maxPixelHeight
+            maxFrames: mode == .automatic ? 240 : 120,
+            maxPixelHeight: maxPixelHeight,
+            previewPixelSize: previewPixelSize
         )
 
         didCaptureAnything = false
@@ -101,17 +118,41 @@ final class ScrollingCaptureSession {
         onProgress?(stitchedHeight)
         onPreview?(first)
 
+        // 自动模式：告诉拼接器「每帧大概位移多少像素」，它就能省掉每帧一次的 Vision 配准。
+        if mode == .automatic, target.regionInPoints.height > 1 {
+            let scale = CGFloat(first.height) / target.regionInPoints.height
+            let step = AutoScroller.stepPoints(forHeight: target.regionInPoints.height)
+            stitcher.expectedShiftPixels = Int((CGFloat(step) * scale).rounded())
+        }
+
         var idleIntervals = 0
+        var isPaused = false
 
         while !isStopped, idleIntervals < idleLimit(hasContent: didCaptureAnything),
             stitchedHeight < maxPixelHeight
         {
             if mode == .automatic {
-                autoScroller?.postScrollStep()
+                // 光标在选区里才滚。移出去 = 暂停：不滚、放行输入，用户去点控制条。
+                let inside = cursorInsideRegion()
+                if inside != !isPaused {
+                    isPaused = !inside
+                    onPausedChange?(isPaused)
+                }
+                autoScroller?.setActive(inside)
+                if inside {
+                    autoScroller?.postScrollStep(at: currentCursorCGPoint())
+                }
             }
+
             // 合成滚动要过一拍才落到画面上：抢在它生效前抓，就会把「滚动前」那帧
             // 当成新帧（连续几拍都判「没有新内容」，实测 0.3 秒就误收工）。
-            try? await Task.sleep(for: .seconds(interval))
+            try? await Task.sleep(for: .seconds(mode == .automatic ? automaticInterval : interval))
+
+            // 暂停中不数空拍：用户可能是去点「完成 / 取消」，不该被自动收工抢了先
+            // （那会直接把长图交付出去，和「取消」完全是两回事）。
+            if mode == .automatic, isPaused {
+                continue
+            }
 
             guard !isStopped else { break }
 
@@ -187,6 +228,28 @@ final class ScrollingCaptureSession {
         }
 
         return lastImage
+    }
+
+    /// 光标当前所在的全局 cg 坐标（原点主屏左上）。
+    private func currentCursorCGPoint() -> CGPoint {
+        DisplayGeometry.flipY(NSEvent.mouseLocation)
+    }
+
+    #if DEBUG
+    /// 自检用：会话内部的选区矩形（全局 cg）。
+    var debugRegion: CGRect { target.regionInGlobalCGPoints }
+    #endif
+
+    /// 光标是否落在选区里（= 自动滚动该不该滚）。
+    ///
+    /// 合成滚轮是发给「光标下面的窗口」的，所以光标在选区里才滚得动；移出去就暂停，
+    /// 顺手把输入让开——用户随时能把鼠标挪去点控制条上的「完成 / 取消」。
+    static func shouldScroll(cursor: CGPoint, region: CGRect) -> Bool {
+        region.contains(cursor)
+    }
+
+    private func cursorInsideRegion() -> Bool {
+        Self.shouldScroll(cursor: currentCursorCGPoint(), region: target.regionInGlobalCGPoints)
     }
 
     /// 自动模式才建滚动器：往选区中央发合成滚轮，并屏蔽用户在选区里的输入。

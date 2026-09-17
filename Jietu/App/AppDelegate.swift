@@ -91,14 +91,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let snapshots = try await capture.captureAllDisplays()
                 guard let snapshot = snapshots.first else { throw CaptureError.noDisplays }
                 let displayID = snapshot.displayID
+                let screen = NSScreen.screens.first { $0.jietu_displayID == displayID }
+                    ?? NSScreen.main ?? NSScreen.screens[0]
                 let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
-
-                overlays.purpose = .screenshot
-                overlays.present(
-                    session: CaptureSession(snapshots: snapshots, windows: windows),
-                    inlineMode: true
-                )
-                try? await Task.sleep(for: .milliseconds(700))
 
                 func post(_ type: CGEventType, at point: CGPoint) {
                     CGEvent(
@@ -109,33 +104,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     )?.post(tap: .cghidEventTap)
                 }
 
-                // 拖一块选区：就地模式松手即进标注、弹出工具栏。
-                let start = CGPoint(x: 320, y: 260)
-                let end = CGPoint(x: 900, y: 700)
-                post(.mouseMoved, at: CGPoint(x: 200, y: 160))
-                try? await Task.sleep(for: .milliseconds(150))
-                post(.mouseMoved, at: start)
-                try? await Task.sleep(for: .milliseconds(120))
-                post(.leftMouseDown, at: start)
-                for step in 1...6 {
-                    let t = CGFloat(step) / 6
-                    post(
-                        .leftMouseDragged,
-                        at: CGPoint(
-                            x: start.x + (end.x - start.x) * t,
-                            y: start.y + (end.y - start.y) * t
-                        )
+                /// 弹遮罩（就地模式）→ 拖一块选区 → 返回选区（本显示器 local 矩形）。
+                @MainActor func dragSelection() async -> CGRect? {
+                    overlays.purpose = .screenshot
+                    overlays.present(
+                        session: CaptureSession(snapshots: snapshots, windows: windows),
+                        inlineMode: true
                     )
-                    try? await Task.sleep(for: .milliseconds(40))
+                    try? await Task.sleep(for: .milliseconds(700))
+
+                    let start = CGPoint(x: 320, y: 260)
+                    let end = CGPoint(x: 900, y: 700)
+                    post(.mouseMoved, at: CGPoint(x: 200, y: 160))
+                    try? await Task.sleep(for: .milliseconds(150))
+                    post(.mouseMoved, at: start)
+                    try? await Task.sleep(for: .milliseconds(120))
+                    post(.leftMouseDown, at: start)
+                    for step in 1...6 {
+                        let t = CGFloat(step) / 6
+                        post(
+                            .leftMouseDragged,
+                            at: CGPoint(
+                                x: start.x + (end.x - start.x) * t,
+                                y: start.y + (end.y - start.y) * t
+                            )
+                        )
+                        try? await Task.sleep(for: .milliseconds(40))
+                    }
+                    post(.leftMouseUp, at: end)
+                    try? await Task.sleep(for: .milliseconds(600))
+                    return overlays.debugSelections
+                        .first { $0.displayID == displayID }?.localRect
                 }
-                post(.leftMouseUp, at: end)
-                try? await Task.sleep(for: .milliseconds(600))
 
-                let selection = overlays.debugSelections
-                    .first { $0.displayID == displayID }?.localRect
-                report.append("就地选区=\(selection.map(CaptureSelfTest.describe) ?? "无")")
+                @MainActor func waitUntil(
+                    _ since: CFAbsoluteTime, timeout: TimeInterval = 1.5,
+                    until condition: () -> Bool
+                ) async -> Double? {
+                    while CFAbsoluteTimeGetCurrent() - since < timeout {
+                        if condition() { return (CFAbsoluteTimeGetCurrent() - since) * 1000 }
+                        try? await Task.sleep(for: .milliseconds(5))
+                    }
+                    return nil
+                }
 
-                // 点「滚动截图 → 手动滚动」：这一刻会话就该起来了。
+                // MARK: 一、手动滚动：工具栏点了就开跑
+                guard let selection = await dragSelection() else {
+                    report.append("error: 就地模式没有形成选区 / 没有工具栏")
+                    report.append("RESULT: FAIL")
+                    CaptureSelfTest.finish(report, code: 1)
+                    return
+                }
+                report.append("就地选区=\(CaptureSelfTest.describe(selection))")
+
+                var handoff: (mode: ScrollingCaptureSession.Mode, rect: CGRect)?
+                overlays.onScrollCapture = { [weak self] snapshot, mode, rect in
+                    handoff = (mode, rect)
+                    self?.startScrollingCaptureFromInline(
+                        snapshot: snapshot, mode: mode, localRect: rect
+                    )
+                }
+
                 let firedAt = CFAbsoluteTimeGetCurrent()
                 let triggered = overlays.debugTriggerScrollCapture(.manual, displayID: displayID)
                 let triggerMs = (CFAbsoluteTimeGetCurrent() - firedAt) * 1000
@@ -145,20 +174,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 try? await Task.sleep(for: .milliseconds(500))
                 let previewVisible = scrollingPreview?.isVisible ?? false
                 report.append(
-                    "点「滚动截图 → 手动滚动」→ \(triggered ? "已触发" : "**没触发**")"
+                    "手动：点「滚动截图 → 手动滚动」→ \(triggered ? "已触发" : "**没触发**")"
                         + "，会话=\(sessionStarted ? "在跑" : "**没起来**")"
                         + "，控制条=\(panelVisible ? "可见" : "**不可见**")"
                         + "，遮罩鼠标穿透=\(clickThrough ? "是（取景框）" : "**否**")"
                         + "，右侧预览=\(previewVisible ? "挂上" : "**没挂**")"
+                        + "，交出的选区=\(handoff.map { CaptureSelfTest.describe($0.rect) } ?? "—")"
                 )
-
                 budgets.append(("工具栏触发→会话起来", triggered ? triggerMs : nil, 300))
                 budgets.append(("会话在跑", sessionStarted ? 0 : nil, 0))
                 budgets.append(("控制条可见", panelVisible ? 0 : nil, 0))
                 budgets.append(("遮罩鼠标穿透", clickThrough ? 0 : nil, 0))
                 budgets.append(("右侧预览挂上", previewVisible ? 0 : nil, 0))
 
-                // 收尾走「取消」这条路：不弹「没有捕获到滚动内容」的框。
                 cancelScrollingCapture()
                 try? await Task.sleep(for: .milliseconds(600))
                 report.append(
@@ -167,6 +195,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 budgets.append(("取消后会话收干净", scrollingSession == nil ? 0 : nil, 0))
                 budgets.append(("取消后遮罩关掉", overlays.isPresenting ? nil : 0, 0))
+
+                // MARK: 二、自动滚动：光标移出选区 → 暂停 / 移回 → 恢复
+                //
+                // 用户报的「滚动时鼠标挪不动、点不到完成 / 取消」就是这一步：
+                // 合成滚轮以前固定发选区中心，window server 会把光标一起拽过去。
+                // 现在滚轮跟着光标走，光标出选区就暂停（顺带把输入让开），按钮随时点得到。
+                guard AccessibilityPermission.isGranted else {
+                    report.append("自动滚动：跳过（没有辅助功能权限，自动模式跑不起来）")
+                    report.append("RESULT: \(budgets.allSatisfy { $0.milliseconds != nil && $0.milliseconds! <= $0.limit } ? "PASS" : "FAIL")")
+                    CaptureSelfTest.finish(report, code: 0)
+                    return
+                }
+
+                guard let autoSelection = await dragSelection() else {
+                    report.append("error: 自动滚动这一轮没有形成选区")
+                    report.append("RESULT: FAIL")
+                    CaptureSelfTest.finish(report, code: 1)
+                    return
+                }
+                let inside = DisplayGeometry.cgPoint(
+                    fromLocal: CGPoint(x: autoSelection.midX, y: autoSelection.midY), screen: screen
+                )
+                let outside = CGPoint(x: inside.x - 80, y: inside.y + autoSelection.height)
+
+                let autoTriggered = overlays.debugTriggerScrollCapture(
+                    .automatic, displayID: displayID
+                )
+                let autoChrome = overlays.debugWindowIgnoresMouseEvents(displayID: displayID) ?? false
+                try? await Task.sleep(for: .milliseconds(900))
+                let pausedAtStart = scrollingPanel?.debugIsPaused ?? true
+
+                let beforePause = CFAbsoluteTimeGetCurrent()
+                post(.mouseMoved, at: outside)
+                try? await Task.sleep(for: .milliseconds(250))
+                let cursorNow = DisplayGeometry.flipY(NSEvent.mouseLocation)
+                let regionNow = scrollingSession.map { session -> CGRect in
+                    // 只用来打印：会话内部的选区矩形与光标是否在外面。
+                    session.debugRegion ?? .zero
+                } ?? .zero
+                report.append(
+                    String(
+                        format: "（探针）注入后光标 cg=(%.0f,%.0f)，选区 cg=(%.0f,%.0f %.0fx%.0f)，"
+                            + "在选区内=%@",
+                        cursorNow.x, cursorNow.y, regionNow.minX, regionNow.minY,
+                        regionNow.width, regionNow.height,
+                        ScrollingCaptureSession.shouldScroll(cursor: cursorNow, region: regionNow)
+                            ? "是" : "否"
+                    )
+                )
+                let pauseMs = await waitUntil(beforePause, timeout: 2) {
+                    scrollingPanel?.debugIsPaused == true
+                }
+                let afterResume = CFAbsoluteTimeGetCurrent()
+                post(.mouseMoved, at: inside)
+                let resumeMs = await waitUntil(afterResume, timeout: 2) {
+                    scrollingPanel?.debugIsPaused == false
+                }
+                let autoTriggerText = autoTriggered ? "已触发" : "**没触发**"
+                let autoStartText = pausedAtStart ? "**暂停（不该）**" : "滚动中"
+                let autoPauseText = CaptureSelfTest.describe(milliseconds: pauseMs)
+                let autoResumeText = CaptureSelfTest.describe(milliseconds: resumeMs)
+                let autoChromeText = autoChrome ? "是" : "**否**"
+                report.append(
+                    "自动：点「滚动截图 → 自动滚动」→ \(autoTriggerText)"
+                        + "，一开始=\(autoStartText)"
+                        + "，光标移出选区→暂停 \(autoPauseText)"
+                        + "，移回→恢复 \(autoResumeText)"
+                        + "，取景框=\(autoChromeText)"
+                )
+                budgets.append(("自动：触发即滚动（不是一上来就暂停）", pausedAtStart ? nil : 0, 0))
+                budgets.append(("光标移出选区→暂停", pauseMs, 600))
+                budgets.append(("光标移回选区→恢复", resumeMs, 600))
+
+                cancelScrollingCapture()
+                try? await Task.sleep(for: .milliseconds(600))
 
                 report.append("延迟预算：")
                 var failed = 0
@@ -192,6 +295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+
     #endif
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -573,13 +677,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard region.width >= 8, region.height >= 8 else { return nil }
 
         // 自动滚动要往「全局 cg 坐标」发事件（原点主屏左上），这里换算一次。
+        // 必须用 `cgRect`（整块矩形换算）：local 的 origin 是左下角，翻到 cg 是上边，
+        // 直接拿它配 size 会把选区整体往下推一个高度——滚轮发到别处、输入屏蔽区也会盖住控制条。
         let screen = NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID }
-        let globalRect = CGRect(
-            origin: screen.map {
-                DisplayGeometry.cgPoint(fromLocal: localRect.origin, screen: $0)
-            } ?? localRect.origin,
-            size: localRect.size
-        )
+        let globalRect = screen.map {
+            DisplayGeometry.cgRect(fromLocal: localRect, screen: $0)
+        } ?? localRect
 
         let selectionRect = CGRect(
             x: screenFrame.minX + localRect.minX,
@@ -703,6 +806,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         session.onProgress = { [weak panel] height in
             panel?.update(height: height)
         }
+        session.onPausedChange = { [weak panel] paused in
+            panel?.setPaused(paused)
+        }
+        // 预览画布按面板像素尺寸定比例、只增量画新内容：长图再长也不会卡。
+        session.previewPixelSize = ScrollingPreviewPanel.previewPixelSize
 
         // 右侧实时预览：贴在选区右边（放不下会自己翻到左边）。
         let preview = ScrollingPreviewPanel()

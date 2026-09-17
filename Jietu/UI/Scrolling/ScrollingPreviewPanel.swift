@@ -14,6 +14,19 @@ import SwiftUI
 final class ScrollingPreviewPanel {
     /// 窄条尺寸（capcap 用 120×400）。
     static let size = CGSize(width: 124, height: 408)
+
+    /// 预览**图**的像素尺寸：与面板内容区同比例、按屏幕缩放算。
+    ///
+    /// 拼图那边按这个尺寸开一块小画布、只增量往里画新内容——所以预览的渲染开销
+    /// 跟长图总长无关（以前是把整张长图丢给 SwiftUI 缩放，越滚越卡）。
+    static var previewPixelSize: CGSize {
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        let inset = Theme.Spacing.xs * 2
+        return CGSize(
+            width: max(1, (size.width - inset) * scale),
+            height: max(1, (size.height - inset) * scale)
+        )
+    }
     private static let inset: CGFloat = Theme.Spacing.xs
     private static let gap: CGFloat = 12
 
@@ -110,10 +123,11 @@ struct ScrollingPreviewView: View {
     var body: some View {
         Group {
             if let image {
+                // 图的像素尺寸就是这块内容区（见 `previewPixelSize`），直接铺满即可：
+                // 不再让 SwiftUI 每帧重采样整张长图，也不必再做 aspect fit 的裁切。
                 Image(nsImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Text("等待滚动…")
                     .font(Theme.Typography.rowSubtitle)

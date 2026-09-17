@@ -30,4 +30,32 @@ struct DisplayGeometryTests {
         #expect(abs(local.minX) < 0.001)
         #expect(abs(local.maxY - screen.frame.height) < 0.001)
     }
+
+    @Test("local 矩形 → 全局 cg 矩形：以上边为基准，不能整体下移一个高度")
+    func cgRectKeepsTopEdge() {
+        let screen = NSScreen.screens.first { $0.frame.origin == .zero }
+            ?? NSScreen.main ?? NSScreen.screens[0]
+        let local = CGRect(x: 100, y: 200, width: 300, height: 150)
+        let cg = DisplayGeometry.cgRect(fromLocal: local, screen: screen)
+
+        // local 的上边（AppKit 里更高的 y）翻过来就是 cg 的上边。
+        #expect(cg.minY == DisplayGeometry.referenceHeight - (screen.frame.minY + local.maxY))
+        #expect(cg.minX == screen.frame.minX + local.minX)
+        #expect(cg.size == local.size)
+
+        // 翻回去要回到原处（往返一致）。
+        let back = DisplayGeometry.localRect(fromCGRect: cg, screen: screen)
+        #expect(abs(back.minX - local.minX) < 0.001)
+        #expect(abs(back.minY - local.minY) < 0.001)
+        #expect(abs(back.width - local.width) < 0.001)
+        #expect(abs(back.height - local.height) < 0.001)
+
+        // 直接拿 origin 翻（老写法）会整体下移一个高度——这条就是当时那个 bug。
+        let wrong = CGRect(
+            origin: DisplayGeometry.cgPoint(fromLocal: local.origin, screen: screen),
+            size: local.size
+        )
+        #expect(wrong.minY != cg.minY)
+        #expect(abs(wrong.minY - (cg.minY + local.height)) < 0.001)
+    }
 }

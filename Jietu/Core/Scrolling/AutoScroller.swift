@@ -16,11 +16,12 @@ final class AutoScroller {
     /// 合成事件打的标记：event tap 靠它区分「自己的滚动」和「用户的滚动」。
     private nonisolated static let syntheticTag: Int64 = 0x6A69_6574_0001  // "jiet" + marker
 
-    /// 自动滚动的步长（点）：选区高度的 15%，夹在 60...180 之间。
+    /// 自动滚动的步长（点）：选区高度的 8%，夹在 40...120 之间。
     ///
-    /// 步长越小重叠越多（15% 步长 ≈ 85% 重叠），拼接越稳；步长过大会漏内容。
+    /// 越小越顺：15%（旧值）每拍跳一大格，看着是一顿一顿的；8% 步子细一半，
+    /// 重叠更多（92%）拼接也更稳。拍数上限那一侧由宿主的 `maxFrames` 兜着。
     static func stepPoints(forHeight height: CGFloat) -> Int {
-        Int(max(60, min(180, height * 0.15)))
+        Int(max(40, min(120, height * 0.08)))
     }
 
     /// 都是不可变值，`nonisolated` 是为了能在事件 tap 回调里直接读。
@@ -32,6 +33,17 @@ final class AutoScroller {
     /// 用户按了任意键：由宿主收工。
     var onKeyPressed: (() -> Void)?
 
+    /// 暂停时用户的输入一概放行。
+    ///
+    /// 光标移出选区时宿主会暂停自动滚动——那一停就得把输入让开，
+    /// 否则用户想去点控制条上的「完成 / 取消」，事件先被这里吞掉（用户报的就是这个）。
+    /// 只在主 run loop 的 tap 回调里读，写成 `nonisolated(unsafe)` 免去跨隔离的噪音。
+    private nonisolated(unsafe) var isActive = true
+
+    func setActive(_ active: Bool) {
+        isActive = active
+    }
+
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
@@ -41,8 +53,15 @@ final class AutoScroller {
         self.stepPoints = max(20, stepPoints)
     }
 
-    /// 发一步合成滚动。`wheel1` 取负 → 页面内容往下走（长截图要的方向）。
-    func postScrollStep(reversed: Bool = false) {
+    /// 发一步合成滚动，事件位置 = **光标当前所在点**。
+    ///
+    /// `wheel1` 取负 → 页面内容往下走（长截图要的方向）。
+    ///
+    /// 位置必须跟着光标走：window server 会把事件里的 `location` 当成新的光标位置同步过去，
+    /// 之前固定发选区中心，于是每滚一步都把用户的鼠标吸回中心——「滚动时鼠标挪不动、
+    /// 点不到完成 / 取消」就是它（自检实测一次滚动把光标拽走 494~583pt）。
+    /// 位置与光标一致就不会动它，而滚轮照旧送给光标下面的窗口（= 选区里的那个页面）。
+    func postScrollStep(at location: CGPoint, reversed: Bool = false) {
         guard
             let event = CGEvent(
                 scrollWheelEvent2Source: source,
@@ -54,7 +73,7 @@ final class AutoScroller {
             )
         else { return }
         event.setIntegerValueField(.eventSourceUserData, value: Self.syntheticTag)
-        event.location = center
+        event.location = location
         event.post(tap: .cghidEventTap)
     }
 
@@ -123,6 +142,11 @@ final class AutoScroller {
         type: CGEventType, event: CGEvent
     ) -> Unmanaged<CGEvent>? {
         let passthrough = Unmanaged.passUnretained(event)
+
+        // 暂停中：什么都不拦（用户要去点控制条）。
+        if !isActive, type != .tapDisabledByTimeout, type != .tapDisabledByUserInput {
+            return passthrough
+        }
 
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:

@@ -28,10 +28,33 @@ enum DisplayGeometry {
         CGPoint(x: point.x - screen.frame.minX, y: point.y - screen.frame.minY)
     }
 
+    /// 只做 Y 轴翻转：AppKit 全局点（原点左下）→ cg 点（原点主屏左上）。
+    ///
+    /// 「全局坐标」这一层没有显示器偏移可言，翻转基准就是主屏高度；`NSEvent.mouseLocation`
+    /// 这类全局点用它换算。（带显示器的换算用上面的 `cgPoint(fromLocal:screen:)`。）
+    static func flipY(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: point.x, y: referenceHeight - point.y)
+    }
+
     /// local 点 → cg 点。
     static func cgPoint(fromLocal point: CGPoint, screen: NSScreen) -> CGPoint {
         let appKit = appKitPoint(fromLocal: point, screen: screen)
         return CGPoint(x: appKit.x, y: referenceHeight - appKit.y)
+    }
+
+    /// local 矩形 → 全局 cg 矩形。
+    ///
+    /// 别直接拿 `cgPoint(fromLocal: rect.origin)` 当真原点：local 的 origin 是**左下角**，
+    /// 翻到 cg 之后它在**上边**——直接配 size 用会把整块矩形往下推一个高度（自动滚动的
+    /// 事件位置与输入屏蔽区就是这么错开的）。
+    static func cgRect(fromLocal rect: CGRect, screen: NSScreen) -> CGRect {
+        let appKit = appKitPoint(fromLocal: rect.origin, screen: screen)
+        return CGRect(
+            x: appKit.x,
+            y: referenceHeight - appKit.y - rect.height,
+            width: rect.width,
+            height: rect.height
+        )
     }
 
     /// cg 点 → local 点。

@@ -64,12 +64,23 @@ enum ScrollStitcher {
         }
 
         func makeCGImage(pixelHeight: Int? = nil) -> CGImage? {
-            let h = pixelHeight ?? height
-            guard h > 0, h <= height else { return nil }
+            makeCGImage(pixelRange: 0..<(pixelHeight ?? height))
+        }
+
+        /// 取**某几行**（行号自上而下、区间左闭右开）变成一张图。预览按增量画新内容时用它。
+        func makeCGImage(pixelRange: Range<Int>) -> CGImage? {
+            let start = max(0, pixelRange.lowerBound)
+            let end = min(height, pixelRange.upperBound)
+            let h = end - start
+            guard h > 0 else { return nil }
+            let offset = start * bytesPerRow
             let byteCount = h * bytesPerRow
-            let sub = data.prefix(byteCount)
-            guard let cfData = CFDataCreate(kCFAllocatorDefault, Array(sub), byteCount),
-                  let provider = CGDataProvider(data: cfData) else { return nil }
+            guard
+                let cfData = CFDataCreate(
+                    kCFAllocatorDefault, Array(data[offset..<(offset + byteCount)]), byteCount
+                ),
+                let provider = CGDataProvider(data: cfData)
+            else { return nil }
             return CGImage(
                 width: width,
                 height: h,
@@ -159,12 +170,33 @@ enum ScrollStitcher {
         let maxFrames: Int
         let maxPixelHeight: Int
 
-        private var previewBitmap: BitmapData?
-        private(set) var previewHeightPixels: Int = 0
+        /// 预览画布：**小尺寸、定比例、只保留最新一段**。
+        ///
+        /// 以前是把整张长图交给 SwiftUI 去缩放：图越长每帧重采样的像素越多（滚一会儿就卡），
+        /// 而且 `.fit` 会把长图越缩越细，最后只剩一条竖线。现在按「面板像素尺寸」定比例，
+        /// 每拍只把**新增的那几行**画进去、旧内容整体上移一格：开销与长图总长无关，
+        /// 全程流畅，看到的也总是刚滚出来的内容。
+        /// 自动滚动时**已知的每帧位移**（像素）：先用它算重叠、校验通过就不跑 Vision。
+        ///
+        /// 位移是我们自己发出去的（步长 × 缩放），Vision 那一下要 20~45ms/帧，
+        /// 那才是自动滚动一顿一顿的来源（自检 `--selftest-scroll-cost` 量过）。
+        /// 校验不过（页面滑到头 / 吸附、惯性滚动）就照旧回退到 Vision，正确性不变。
+        var expectedShiftPixels: Int = 0
 
-        init(firstFrame: CGImage, maxFrames: Int = 120, maxPixelHeight: Int = 25_000) {
+        private let previewPixelSize: CGSize
+        private var previewContext: CGContext?
+        private var previewScale: CGFloat = 1
+        private var previewCanvas = CGSize.zero
+
+        init(
+            firstFrame: CGImage,
+            maxFrames: Int = 120,
+            maxPixelHeight: Int = 25_000,
+            previewPixelSize: CGSize = .zero
+        ) {
             self.maxFrames = maxFrames
             self.maxPixelHeight = maxPixelHeight
+            self.previewPixelSize = previewPixelSize
             guard let firstBitmap = BitmapData(image: firstFrame) else {
                 self.currentHeight = firstFrame.height
                 return
@@ -193,7 +225,11 @@ enum ScrollStitcher {
                 detectScrollbar(current: currentBitmap, previous: prevBitmap)
             }
 
-            let overlap = findOverlap(previous: prevBitmap, previousCG: prevCG, current: currentBitmap, currentCG: frame)
+            let overlap = hintedOverlap(current: currentBitmap, previous: prevBitmap)
+                ?? findOverlap(
+                    previous: prevBitmap, previousCG: prevCG,
+                    current: currentBitmap, currentCG: frame
+                )
             let newRows = currentBitmap.height - overlap
             let minimumNewRows = max(4, currentBitmap.height / 200)
             guard newRows >= minimumNewRows else {
@@ -208,11 +244,10 @@ enum ScrollStitcher {
             return .appended(newHeight: currentHeight)
         }
 
+        /// 右侧预览：最新一段的**小图**（尺寸恒定，与长图总长无关）。
         func currentPreviewImage() -> CGImage? {
-            guard let previewBitmap, previewHeightPixels > 0 else {
-                return frames.first
-            }
-            return previewBitmap.makeCGImage(pixelHeight: previewHeightPixels)
+            guard let previewContext else { return frames.first }
+            return previewContext.makeImage()
         }
 
         func finish() -> CGImage? {
@@ -237,27 +272,67 @@ enum ScrollStitcher {
         }
 
         private func initPreview(_ first: BitmapData) {
-            let capacity = min(maxPixelHeight, first.height * 8)
-            let buffer = BitmapData(width: first.width, height: capacity)
-            buffer.copyRows(from: first, sourceStartRow: 0, rowCount: first.height, destinationStartRow: 0)
-            previewBitmap = buffer
-            previewHeightPixels = first.height
+            guard previewPixelSize.width > 1, previewPixelSize.height > 1 else { return }
+            let canvasWidth = Int(previewPixelSize.width.rounded())
+            let canvasHeight = Int(previewPixelSize.height.rounded())
+            previewScale = CGFloat(canvasWidth) / CGFloat(max(1, first.width))
+            previewCanvas = CGSize(width: canvasWidth, height: canvasHeight)
+            guard
+                let context = CGContext(
+                    data: nil,
+                    width: canvasWidth,
+                    height: canvasHeight,
+                    bitsPerComponent: 8,
+                    bytesPerRow: 0,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                )
+            else { return }
+            context.interpolationQuality = .low
+            // 翻成「行从上往下」的坐标系：后面按行号算 y 就不会搞反。
+            context.translateBy(x: 0, y: CGFloat(canvasHeight))
+            context.scaleBy(x: 1, y: -1)
+            previewContext = context
+            // 首帧可能比画布高：这一张按「顶对齐」画，先看到页面最上面。
+            drawPreview(slice: first, fromRow: 0, rows: first.height, pinnedToBottom: false)
+        }
+
+        /// 把 `slice` 的某几行画进预览画布（按 `previewScale` 缩放）。
+        private func drawPreview(
+            slice: BitmapData, fromRow: Int, rows: Int, pinnedToBottom: Bool
+        ) {
+            guard let context = previewContext, rows > 0 else { return }
+            guard let image = slice.makeCGImage(pixelRange: fromRow..<(fromRow + rows)) else {
+                return
+            }
+            let scaledHeight = CGFloat(rows) * previewScale
+            let y = pinnedToBottom ? max(0, previewCanvas.height - scaledHeight) : 0
+            context.draw(
+                image,
+                in: CGRect(x: 0, y: y, width: previewCanvas.width, height: scaledHeight)
+            )
         }
 
         private func appendToPreview(_ bitmap: BitmapData, overlapPixels: Int) {
-            guard let preview = previewBitmap else { return }
+            guard let context = previewContext else { return }
             let newRows = bitmap.height - overlapPixels
             guard newRows > 0 else { return }
 
-            let needed = previewHeightPixels + newRows
-            if needed > preview.height {
-                let newCapacity = min(maxPixelHeight, needed + bitmap.height * 6)
-                let grown = BitmapData(width: preview.width, height: newCapacity)
-                grown.copyRows(from: preview, sourceStartRow: 0, rowCount: previewHeightPixels, destinationStartRow: 0)
-                previewBitmap = grown
+            let scaledRows = CGFloat(newRows) * previewScale
+            // 旧内容整体上移一格（最老的一段被挤出画布），新内容补在最下面。
+            if let snapshot = context.makeImage() {
+                context.clear(CGRect(origin: .zero, size: previewCanvas))
+                context.draw(
+                    snapshot,
+                    in: CGRect(
+                        x: 0,
+                        y: -scaledRows,
+                        width: previewCanvas.width,
+                        height: previewCanvas.height
+                    )
+                )
             }
-            previewBitmap?.copyRows(from: bitmap, sourceStartRow: overlapPixels, rowCount: newRows, destinationStartRow: previewHeightPixels)
-            previewHeightPixels = needed
+            drawPreview(slice: bitmap, fromRow: overlapPixels, rows: newRows, pinnedToBottom: true)
         }
 
         private func detectScrollbar(current: BitmapData, previous: BitmapData) {
@@ -358,6 +433,48 @@ enum ScrollStitcher {
             if stickyHeaderSamplesTaken >= 2 {
                 stickyHeaderDetectionDone = true
             }
+        }
+
+        /// 用「已知步长」直接算重叠，再用行签名校验；对得上就返回重叠行数，否则 nil（交给 Vision）。
+        private func hintedOverlap(current: BitmapData, previous: BitmapData) -> Int? {
+            let shift = expectedShiftPixels
+            guard shift > 0, current.width == previous.width else { return nil }
+            let tolerance = max(2, shift / 8)
+            for candidate in [shift, shift - tolerance, shift + tolerance] where candidate > 0 {
+                let overlap = current.height - candidate
+                guard overlap > 0, overlap < min(current.height, previous.height) else { continue }
+                if rowsMatch(previous: previous, current: current, overlap: overlap) {
+                    return overlap
+                }
+            }
+            return nil
+        }
+
+        /// 抽几行几列比一下：`current` 开头那 `overlap` 行，应当等于 `previous` **结尾**的 `overlap` 行。
+        ///
+        /// 方向别搞反：`overlap` 是「新帧开头有多少行已经在长图里了」（= 上一帧的尾巴），
+        /// 所以上一帧要从 `height - overlap` 起比，不是从 `overlap` 起。
+        private func rowsMatch(previous: BitmapData, current: BitmapData, overlap: Int) -> Bool {
+            let rows = min(overlap, current.height)
+            let base = previous.height - overlap
+            guard rows > 4, base >= 0 else { return false }
+            let columnStep = max(1, current.width / min(24, current.width))
+            var total = 0
+            var count = 0
+            for index in 0..<6 {
+                let row = min(rows - 1, rows * (index * 2 + 1) / 12)
+                var column = 0
+                while column < current.width {
+                    let lhs = previous.pixel(x: column, y: base + row)
+                    let rhs = current.pixel(x: column, y: row)
+                    total += abs(Int(lhs.r) - Int(rhs.r)) + abs(Int(lhs.g) - Int(rhs.g))
+                        + abs(Int(lhs.b) - Int(rhs.b))
+                    count += 3
+                    column += columnStep
+                }
+            }
+            guard count > 0 else { return false }
+            return Double(total) / Double(count) < 4
         }
 
         private func findOverlap(

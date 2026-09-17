@@ -22,6 +22,8 @@ final class ScrollingCapturePanelController {
 
     private var stage: Stage = .ready
     private var height = 0
+    /// 自动滚动因「光标移出选区」暂停中（控制条要把这件事说出来，否则用户以为卡死了）。
+    private var isPaused = false
 
     var onStartManual: (() -> Void)?
     var onStartAuto: (() -> Void)?
@@ -37,6 +39,11 @@ final class ScrollingCapturePanelController {
     }
 
     var isVisible: Bool { panel?.isVisible ?? false }
+
+    #if DEBUG
+    /// 自检用：自动滚动是否停在「光标移出选区」的暂停态。
+    var debugIsPaused: Bool { isPaused }
+    #endif
 
     /// 贴着选区下方展示（下方放不下就挪到上方）。
     ///
@@ -96,6 +103,13 @@ final class ScrollingCapturePanelController {
         refresh()
     }
 
+    /// 自动滚动暂停 / 恢复（光标移出选区）。
+    func setPaused(_ paused: Bool) {
+        guard isPaused != paused else { return }
+        isPaused = paused
+        refresh()
+    }
+
     private func refresh() {
         hosting?.rootView = makeRoot()
     }
@@ -139,6 +153,7 @@ final class ScrollingCapturePanelController {
         ScrollingCapturePanelView(
             height: height,
             stage: stage,
+            isPaused: isPaused,
             onStartManual: { [weak self] in self?.onStartManual?() },
             onStartAuto: { [weak self] in self?.onStartAuto?() },
             onFinish: { [weak self] in self?.onFinish?() },
@@ -160,6 +175,8 @@ final class ScrollingCapturePanelController {
 struct ScrollingCapturePanelView: View {
     var height: Int
     var stage: ScrollingCapturePanelController.Stage = .ready
+    /// 自动滚动暂停中（光标移出选区）。
+    var isPaused = false
     var onStartManual: () -> Void = {}
     var onStartAuto: () -> Void = {}
     var onFinish: () -> Void
@@ -249,7 +266,11 @@ struct ScrollingCapturePanelView: View {
     private func hintText(_ mode: ScrollingCaptureSession.Mode) -> String {
         switch mode {
         case .automatic:
-            return "正在自动滚动…任意键停止，到底后自动完成。"
+            // 自动滚动的滚轮是发给「光标下面的窗口」的：光标在选区里就滚，
+            // 移出去就暂停（也把输入让开），这样用户随时能过来点完成 / 取消。
+            return isPaused
+                ? "已暂停：鼠标在选区外。移回选区继续滚动，或直接点「完成 / 取消」。"
+                : "正在自动滚动…把鼠标移出选区即暂停；任意键停止，到底后自动完成。"
         case .manual:
             return "匀速滚动，停止约 1.5 秒自动完成。"
         }
