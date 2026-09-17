@@ -138,7 +138,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recentMenuReport.append("最近截图菜单项数=\(historyItems().count)")
 
         // 1.5 走**真实那条路**（deliver）截一张：菜单项只能多一条，不能重复。
+        //    临时关掉「保存到磁盘」：这一步只是验历史记录，别往用户的截图文件夹里塞测试图。
         if let image {
+            let savedToDisk = settings.saveToDisk
+            settings.saveToDisk = false
+            defer { settings.saveToDisk = savedToDisk }
+
             let before = historyItems().count
             deliver(image, onDisplay: CGMainDisplayID())
             let after = historyItems().count

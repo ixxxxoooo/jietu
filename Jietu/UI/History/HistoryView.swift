@@ -35,28 +35,39 @@ struct HistoryItem: Identifiable, Sendable {
         return ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
     }
 
-    var timeFormatted: String {
-        let calendar = Calendar.current
+    var timeFormatted: String { Self.timestampText(for: date) }
+
+    /// 卡片上那行时间：**日期 + 时间**。
+    ///
+    /// 只写时分秒的话，跨天翻看就分不清是哪天的（之前就是这样）。规矩照 Finder 那套：
+    /// 今天 / 昨天用相对说法，今年内写「M月d日」，跨年再带上年份。
+    ///
+    /// 纯函数（`now` 可注入），单测直接钉几种情况。
+    static func timestampText(
+        for date: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> String {
+        let time = Self.timeOnlyFormatter.string(from: date)
         if calendar.isDateInToday(date) {
-            return Self.timeOnlyFormatter.string(from: date)
-        } else if calendar.isDateInYesterday(date) {
-            return "昨天 " + Self.timeOnlyFormatter.string(from: date)
-        } else {
-            return Self.dateFormatter.string(from: date)
+            return "今天 " + time
         }
+        if calendar.isDateInYesterday(date) {
+            return "昨天 " + time
+        }
+        if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
+            return "\(calendar.component(.month, from: date))月\(calendar.component(.day, from: date))日 "
+                + time
+        }
+        return "\(calendar.component(.year, from: date))年"
+            + "\(calendar.component(.month, from: date))月"
+            + "\(calendar.component(.day, from: date))日 " + time
     }
 
     private static let timeOnlyFormatter: DateFormatter = {
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
         df.dateFormat = "HH:mm:ss"
-        return df
-    }()
-
-    private static let dateFormatter: DateFormatter = {
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "en_US_POSIX")
-        df.dateFormat = "MM-dd HH:mm"
         return df
     }()
 }
