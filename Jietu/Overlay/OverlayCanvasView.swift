@@ -253,6 +253,17 @@ final class OverlayCanvasView: NSView {
         interaction = .settled
         updateAllLayers()
     }
+
+    /// 自检用：放大镜的「模型 frame」与「当前呈现 frame」。
+    ///
+    /// 有隐式动画时两者会不同（呈现值还在半路上）——用来盯住「跟随光标不该有动画」。
+    var debugLoupePresentation: (model: CGRect, presentation: CGRect?, isHidden: Bool) {
+        (
+            model: loupeImageLayer.frame,
+            presentation: loupeImageLayer.presentation()?.frame,
+            isHidden: loupeImageLayer.isHidden
+        )
+    }
     #endif
 
     // MARK: - Region pick 回报
@@ -444,7 +455,7 @@ final class OverlayCanvasView: NSView {
             loupeGridLightLayer, loupeGuideLayer, loupeCellShadowLayer, loupeCellLayer,
         ] {
             layer.isHidden = true
-            layer.actions = ["hidden": NSNull(), "contentsRect": NSNull(), "path": NSNull()]
+            layer.actions = Self.loupeNoActions
             root.addSublayer(layer)
         }
 
@@ -453,6 +464,7 @@ final class OverlayCanvasView: NSView {
         loupePanelLayer.borderWidth = 1
         loupePanelLayer.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
         loupePanelLayer.isHidden = true
+        loupePanelLayer.actions = Self.loupeNoActions
         root.addSublayer(loupePanelLayer)
 
         for textLayer in [loupeCoordinateLayer, loupeRegionLayer, loupeColorLayer] {
@@ -463,14 +475,28 @@ final class OverlayCanvasView: NSView {
             textLayer.truncationMode = .none
             textLayer.contentsScale = scale
             textLayer.isHidden = true
+            textLayer.actions = Self.loupeNoActions
             root.addSublayer(textLayer)
         }
         loupeSwatchLayer.cornerRadius = 3
         loupeSwatchLayer.borderWidth = 1
         loupeSwatchLayer.borderColor = NSColor.white.withAlphaComponent(0.55).cgColor
         loupeSwatchLayer.isHidden = true
+        loupeSwatchLayer.actions = Self.loupeNoActions
         root.addSublayer(loupeSwatchLayer)
     }
+
+    /// 放大镜全程跟手：**关掉隐式动画**。
+    ///
+    /// 否则第一次显示时图层从 `(0,0)`（图层坐标的左下角）动画到光标处，
+    /// 看起来就是「放大镜从左下角滑过来」；跟着鼠标移动也会慢半拍。
+    private static let loupeNoActions: [String: CAAction] = [
+        "hidden": NSNull(), "opacity": NSNull(), "contents": NSNull(),
+        "contentsRect": NSNull(), "path": NSNull(), "fillColor": NSNull(),
+        "strokeColor": NSNull(), "lineWidth": NSNull(), "backgroundColor": NSNull(),
+        "cornerRadius": NSNull(), "borderWidth": NSNull(), "borderColor": NSNull(),
+        "position": NSNull(), "bounds": NSNull(), "frame": NSNull(), "string": NSNull(),
+    ]
 
     private func configureBorderLayer(_ layer: CAShapeLayer, color: NSColor) {
         layer.fillColor = nil
@@ -687,6 +713,11 @@ final class OverlayCanvasView: NSView {
 
     /// 放大镜：跟着光标，只在「还没定选区」的框选阶段出现。
     private func updateLoupe() {
+        CATransaction.begin()
+        // 跟手的东西一律不走隐式动画（见 loupeNoActions）：否则首帧会从图层原点滑过来。
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+
         let shouldShow = cursorPoint != nil && !isSettled && !isScrollCaptureChrome
             && phase == .selecting
         for layer in loupeLayers {

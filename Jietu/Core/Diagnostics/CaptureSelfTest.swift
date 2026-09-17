@@ -159,6 +159,27 @@ enum CaptureSelfTest {
 
                 // 按下 → 拖到位 → 停住不动（放大镜要跟着光标，并显示选区尺寸）。
                 postMouse(.mouseMoved, at: start)
+                // 「跟手」检查：放大镜刚出现时就该在光标旁边，不能有从图层原点滑过来的动画。
+                var elapsed = 0
+                for sampleAt in [40, 140, 360] {
+                    try? await Task.sleep(for: .milliseconds(sampleAt - elapsed))
+                    elapsed = sampleAt
+                    let visible = coordinator.debugSelections.compactMap { entry in
+                        coordinator.debugLoupePresentation(displayID: entry.displayID)
+                    }.first { !$0.isHidden }
+                    if let probe = visible {
+                        let drift = probe.presentation.map {
+                            String(
+                                format: " 呈现偏差=(%.0f,%.0f)",
+                                $0.origin.x - probe.model.origin.x,
+                                $0.origin.y - probe.model.origin.y
+                            )
+                        } ?? " 呈现=与模型一致（无动画）"
+                        report.append("t+\(sampleAt)ms 模型=\(describe(probe.model))\(drift)")
+                    } else {
+                        report.append("t+\(sampleAt)ms 放大镜还没出来")
+                    }
+                }
                 try? await Task.sleep(for: .milliseconds(120))
                 postMouse(.leftMouseDown, at: start)
                 let end = CGPoint(x: start.x + delta.width, y: start.y + delta.height)

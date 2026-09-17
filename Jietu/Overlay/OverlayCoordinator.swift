@@ -278,6 +278,13 @@ final class OverlayCoordinator {
             .debugSetSelection(localRect)
     }
 
+    /// 自检用：指定屏上放大镜的模型 / 呈现 frame。
+    func debugLoupePresentation(
+        displayID: CGDirectDisplayID
+    ) -> (model: CGRect, presentation: CGRect?, isHidden: Bool)? {
+        controllers.first { $0.snapshot.displayID == displayID }?.debugLoupePresentation
+    }
+
     /// 自检用：把每个遮罩窗自己认为的 AppKit frame 报出来。
     var debugWindowFrames: [(
         displayID: CGDirectDisplayID,

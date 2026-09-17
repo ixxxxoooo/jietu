@@ -146,6 +146,11 @@ final class OverlayWindowController {
     func debugSetSelection(_ localRect: CGRect) {
         canvas.debugSetSelection(localRect)
     }
+
+    /// 自检用：放大镜的模型 / 呈现 frame。
+    var debugLoupePresentation: (model: CGRect, presentation: CGRect?, isHidden: Bool) {
+        canvas.debugLoupePresentation
+    }
     #endif
 
     /// 滚动长图：遮罩留在原地当取景框，但**鼠标穿透**，滚轮落到下面那个页面。
