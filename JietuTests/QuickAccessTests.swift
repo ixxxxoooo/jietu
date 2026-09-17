@@ -149,11 +149,13 @@ struct QuickAccessTests {
             ($0.title, QuickAccessControlsView.frame(of: $0, in: card))
         }
         #expect(frames.count == 5, "四角 + 中央：与图片卡同一套摆位")
-        #expect(QuickAccessAction.videoCard.contains(.save), "操作栏要能保存（另存为…）")
-        // 中央那颗是胶囊（图标 + 文字），其余是圆盘。
-        let save = QuickAccessControlsView.frame(of: .save, in: card)
-        #expect(save.width > QuickAccessControlsView.diameter)
-        for (title, frame) in frames where title != "保存" {
+        #expect(QuickAccessAction.videoCard.contains(.saveVideo), "操作栏要能保存（另存为…）")
+        // 视频卡五颗全是圆盘（图片卡中央那颗才是胶囊）：中央「播放」正好落在
+        // 静止时「▶ 0:12」胶囊的位子上——点正中就是预览。
+        let play = QuickAccessControlsView.frame(of: .play, in: card)
+        #expect(play.width == QuickAccessControlsView.diameter)
+        #expect(play.midX == card.width / 2 && play.midY == card.height / 2)
+        for (title, frame) in frames {
             #expect(frame.width == QuickAccessControlsView.diameter, "\(title) 是圆盘")
             #expect(frame.height == QuickAccessControlsView.diameter)
             #expect(frame.minX >= 0 && frame.maxX <= card.width, "\(title) 越界")
@@ -165,15 +167,18 @@ struct QuickAccessTests {
             }
         }
 
-        // 位子：左上是「复制文件」、右上是「关闭」、左下是「播放」、右下是「在访达中显示」。
+        // 位子：左上复制文件、右上关闭、左下保存、右下在访达中显示，**中央播放**。
+        // 中央必须是播放：静止时那里挂着「▶ 0:12」胶囊，点卡片正中要能直接预览
+        // （之前中央是保存，点正中会弹保存面板——最顺手的那一点反而是错的）。
         let copyFile = QuickAccessControlsView.frame(of: .copyFile, in: card)
         let close = QuickAccessControlsView.frame(of: .close, in: card)
-        let play = QuickAccessControlsView.frame(of: .play, in: card)
+        let save = QuickAccessControlsView.frame(of: .saveVideo, in: card)
         let reveal = QuickAccessControlsView.frame(of: .reveal, in: card)
         #expect(copyFile.minX < card.width / 2 && copyFile.minY > card.height / 2)
         #expect(close.minX > card.width / 2 && close.minY > card.height / 2)
-        #expect(play.minX < card.width / 2 && play.minY < card.height / 2)
+        #expect(save.minX < card.width / 2 && save.minY < card.height / 2)
         #expect(reveal.minX > card.width / 2 && reveal.minY < card.height / 2)
+        #expect(QuickAccessAction.play.slot == .center)
     }
 
     @Test("视频卡的「保存」把成片交给外面（另存为），且不动原片")
@@ -210,8 +215,8 @@ struct QuickAccessTests {
             Issue.record("没找到浮窗上的图标层")
             return
         }
-        #expect(controls.button(for: .save) != nil, "视频卡上要有「保存」")
-        controls.button(for: .save)?.onClick?()
+        #expect(controls.button(for: .saveVideo) != nil, "视频卡上要有「保存」")
+        controls.button(for: .saveVideo)?.onClick?()
         #expect(saved == url, "「保存」要把这个成片交出去")
 
         controller.dismiss()

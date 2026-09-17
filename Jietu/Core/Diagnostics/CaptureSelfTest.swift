@@ -672,7 +672,7 @@ enum CaptureSelfTest {
         case .annotate: "编辑器出现"
         case .close: "浮窗消失"
         // 视频卡（录屏收工）那几个走 app 级自检，不在浮窗图标层这条量测里。
-        case .play, .reveal, .copyFile: action.title
+        case .play, .reveal, .copyFile, .saveVideo: action.title
         }
     }
 
@@ -685,7 +685,7 @@ enum CaptureSelfTest {
         case .pin: 300
         case .annotate: 500
         case .close: 600
-        case .play, .reveal, .copyFile: 600
+        case .play, .reveal, .copyFile, .saveVideo: 600
         }
     }
 

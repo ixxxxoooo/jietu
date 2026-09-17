@@ -279,6 +279,99 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     try? CaptureSelfTest.writePNG(shot.image, to: url)
                     report.append("视频卡截图 -> \(url.path)")
                 }
+                // 4.5 视频卡上的两处「预览」：点空白处 / 点播放按钮，都该交给系统「预览」。
+                if let panel = quickAccess.panelsForTesting.last, cardUp {
+                    let cardFrame = panel.frame
+
+                    @MainActor func clickCard(at local: CGPoint, label: String) {
+                        let appKit = CGPoint(
+                            x: cardFrame.minX + local.x, y: cardFrame.minY + local.y
+                        )
+                        let cg = CGPoint(
+                            x: appKit.x, y: DisplayGeometry.referenceHeight - appKit.y
+                        )
+                        post(.mouseMoved, at: cg)
+                        Thread.sleep(forTimeInterval: 0.18)
+                        post(.leftMouseDown, at: cg)
+                        Thread.sleep(forTimeInterval: 0.07)
+                        post(.leftMouseUp, at: cg)
+                        _ = label
+                    }
+
+                    // 悬停态截一张：中央该是「播放」胶囊、左下是「保存」圆盘。
+                    let hoverPoint = CGPoint(
+                        x: cardFrame.midX,
+                        y: DisplayGeometry.referenceHeight - cardFrame.midY
+                    )
+                    post(.mouseMoved, at: hoverPoint)
+                    try? await Task.sleep(for: .milliseconds(400))
+                    if let shots = try? await capture.captureAllDisplays(excludingOwnApplication: false),
+                        let shot = shots.first(where: { $0.displayID == NSScreen.main?.jietu_displayID })
+                            ?? shots.first
+                    {
+                        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+                            .appendingPathComponent("jietu-recording-card-hover.png")
+                        try? CaptureSelfTest.writePNG(shot.image, to: url)
+                        report.append("视频卡悬停截图 -> \(url.path)")
+                    }
+
+                    // 先按真接线点一次「播放」：看 macOS 自带的「预览」有没有到前台。
+                    let playRect = QuickAccessControlsView.frame(of: .play, in: cardFrame.size)
+                    clickCard(
+                        at: CGPoint(x: playRect.midX, y: playRect.midY), label: "播放按钮"
+                    )
+                    try? await Task.sleep(for: .milliseconds(1800))
+                    let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "—"
+                    report.append("点「播放」后最前面的 App=\(front)")
+                    budgets.append(("点播放 → 预览到前台", front.contains("预览") || front == "Preview" ? 0 : nil, 0))
+
+                    // 再验接线：空白处（避开四角按钮与中央「保存」）与播放按钮都要触发同一个动作。
+                    var played: [String] = []
+                    quickAccess.onPlayVideo = { url in played.append(url.lastPathComponent) }
+                    clickCard(
+                        at: CGPoint(x: cardFrame.width * 0.15, y: cardFrame.height / 2), label: "空白处"
+                    )
+                    try? await Task.sleep(for: .milliseconds(400))
+                    let afterBlank = played.count
+                    clickCard(at: CGPoint(x: playRect.midX, y: playRect.midY), label: "播放按钮")
+                    try? await Task.sleep(for: .milliseconds(400))
+                    report.append(
+                        "视频卡点击：空白处触发=\(afterBlank) 次，播放按钮触发=\(played.count - afterBlank) 次"
+                    )
+                    budgets.append(("点空白处也走预览", afterBlank >= 1 ? 0 : nil, 0))
+                    budgets.append(("点播放按钮走预览", played.count - afterBlank >= 1 ? 0 : nil, 0))
+
+                    // 正中那块：悬停时是「保存」胶囊（把「▶ 0:12」顶掉了）——看看点它到底触发谁。
+                    var saved: [String] = []
+                    quickAccess.onSaveVideo = { url in saved.append(url.lastPathComponent) }
+                    played.removeAll()
+                    clickCard(
+                        at: CGPoint(x: cardFrame.width / 2, y: cardFrame.height / 2), label: "正中"
+                    )
+                    try? await Task.sleep(for: .milliseconds(500))
+                    report.append("点卡片正中：播放=\(played.count) 保存=\(saved.count)")
+                    budgets.append(("点卡片正中走播放（不是保存）", played.count == 1 && saved.isEmpty ? 0 : nil, 0))
+
+                    // 真实使用里浮窗**不是 key window**（用户还在别的 App 里）：再验一遍，
+                    // 「第一下点击被用来激活窗口」正是这个 App 踩过无数次的坑。
+                    NSApp.deactivate()
+                    try? await Task.sleep(for: .milliseconds(600))
+                    played.removeAll()
+                    clickCard(
+                        at: CGPoint(x: cardFrame.width * 0.15, y: cardFrame.height / 2), label: "空白处"
+                    )
+                    try? await Task.sleep(for: .milliseconds(500))
+                    let inactiveBlank = played.count
+                    clickCard(at: CGPoint(x: playRect.midX, y: playRect.midY), label: "播放按钮")
+                    try? await Task.sleep(for: .milliseconds(500))
+                    report.append(
+                        "未激活时（浮窗不是 key window）点击：空白处=\(inactiveBlank) 次"
+                            + "，播放按钮=\(played.count - inactiveBlank) 次"
+                    )
+                    budgets.append(("未激活时点空白处也走预览", inactiveBlank >= 1 ? 0 : nil, 0))
+                    budgets.append(("未激活时点播放按钮走预览", played.count - inactiveBlank >= 1 ? 0 : nil, 0))
+                }
+
                 quickAccess.dismiss()
 
                 // 5. 全屏录制：**不弹遮罩**，鼠标所在那块屏整幅 → 直接停在待开始。

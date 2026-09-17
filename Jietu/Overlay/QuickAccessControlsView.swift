@@ -13,11 +13,17 @@ enum QuickAccessAction: String, CaseIterable {
     case close, pin, annotate, copy, save
     // 视频卡（录屏收工）
     case play, reveal, copyFile
+    /// 视频卡的「保存」：与图片卡那颗同名同义，但视频卡中央留给「播放」，它站左下。
+    case saveVideo
 
     /// 图片卡的动作与摆位：左上复制 / 右上关闭 / 左下标注 / 右下钉图 / 中央保存。
     static let imageCard: [QuickAccessAction] = [.copy, .close, .annotate, .pin, .save]
-    /// 视频卡的动作与摆位：左上复制文件 / 右上关闭 / 左下播放 / 右下在访达中显示 / 中央另存为。
-    static let videoCard: [QuickAccessAction] = [.copyFile, .close, .play, .reveal, .save]
+    /// 视频卡的动作与摆位：左上复制文件 / 右上关闭 / 左下保存 / 右下在访达中显示 / **中央播放**。
+    ///
+    /// 中央给「播放」而不是「保存」：静止时那里挂着「▶ 0:12」胶囊，悬停后同一位置换成
+    /// 「播放」，点下去就是预览——同一个意思、同一个位置，不用挪手。
+    /// （之前中央是「保存」，于是「点卡片正中」变成了弹保存面板，正好撞在用户最顺手的那一点上。）
+    static let videoCard: [QuickAccessAction] = [.copyFile, .close, .saveVideo, .reveal, .play]
 
     /// 控件在卡片里的位子。写死在这里，`frame(of:in:)` 与自检都按它算注入点。
     enum Slot {
@@ -28,9 +34,9 @@ enum QuickAccessAction: String, CaseIterable {
         switch self {
         case .copy, .copyFile: .topLeft
         case .close: .topRight
-        case .annotate, .play: .bottomLeft
+        case .annotate, .saveVideo: .bottomLeft
         case .pin, .reveal: .bottomRight
-        case .save: .center
+        case .save, .play: .center
         }
     }
 
@@ -40,7 +46,7 @@ enum QuickAccessAction: String, CaseIterable {
         case .pin: "pin"
         case .annotate: "pencil.tip.crop.circle"
         case .copy, .copyFile: "doc.on.doc"
-        case .save: "square.and.arrow.down"
+        case .save, .saveVideo: "square.and.arrow.down"
         case .play: "play.fill"
         case .reveal: "folder"
         }
@@ -52,7 +58,7 @@ enum QuickAccessAction: String, CaseIterable {
         case .pin: "钉图"
         case .annotate: "标注"
         case .copy: "复制"
-        case .save: "保存"
+        case .save, .saveVideo: "保存"
         case .play: "播放"
         case .reveal: "在访达中显示"
         case .copyFile: "复制文件"
@@ -62,7 +68,8 @@ enum QuickAccessAction: String, CaseIterable {
     /// 悬停时鼠标停在按钮上的说明：视频卡的「保存」是把成片**另存一份**（原片已经在保存目录里了）。
     var tooltip: String {
         switch self {
-        case .save: "另存为…"
+        case .save, .saveVideo: "另存为…"
+        case .play: "用「预览」播放"
         default: title
         }
     }

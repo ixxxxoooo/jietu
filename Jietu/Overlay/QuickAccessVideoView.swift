@@ -5,11 +5,11 @@ import SwiftUI
 ///
 /// 与图片卡（`QuickAccessView`）同一套表面与交互：卡片尺寸按封面等比算、悬停模糊露出毛玻璃、
 /// 浮出同一套 `GlassControlButton`、拖出去就是那个文件。动作与图片卡同构：
-/// - 四角：**复制文件 / 关闭 / 播放 / 在访达中显示**；
-/// - 中央胶囊：**保存**（成片已经在保存目录里了，这里是把**另存一份**到用户挑的地方）。
+/// - 四角：**复制文件 / 关闭 / 保存 / 在访达中显示**；
+/// - 中央胶囊：**播放**（点击 = 用 macOS 自带的「预览」打开）。
 ///
 /// 封面正中挂一枚「▶ 0:12」胶囊：一眼看出这是段视频、多长；悬停时它淡出，
-/// 把中央让给「保存」。
+/// **同一个位置**换成「播放」——同一个意思、同一个位置，点下去就是预览。
 ///
 /// @author ixxxxoooo
 struct QuickAccessVideoView: View {
@@ -114,7 +114,7 @@ struct QuickAccessVideoView: View {
                 case .play: onPlay()
                 case .reveal: onReveal()
                 case .copyFile: onCopyFile()
-                case .save: onSave()
+                case .saveVideo: onSave()
                 case .close: onClose()
                 default: break
                 }
