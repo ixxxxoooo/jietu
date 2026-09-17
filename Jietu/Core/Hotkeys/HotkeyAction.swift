@@ -13,6 +13,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable, Codable {
     case timedCapture
     case scrollingCapture
     case screenRecording
+    case windowRecording
+    case fullScreenRecording
 
     var id: String { rawValue }
 
@@ -23,7 +25,9 @@ enum HotkeyAction: String, CaseIterable, Identifiable, Codable {
         case .fullScreenCapture: return "全屏截图"
         case .timedCapture: return "定时截图"
         case .scrollingCapture: return "滚动长图"
-        case .screenRecording: return "录屏"
+        case .screenRecording: return "区域录制"
+        case .windowRecording: return "窗口录制"
+        case .fullScreenRecording: return "全屏录制"
         }
     }
 
@@ -36,6 +40,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable, Codable {
         case .timedCapture: return "延时 \(Int(HotkeyAction.timedCaptureDelay)) 秒后进入区域截图"
         case .scrollingCapture: return "框选区域后滚动内容，自动拼成长图"
         case .screenRecording: return "框选区域开始录屏，随时暂停 / 完成"
+        case .windowRecording: return "点哪个窗口就录哪个"
+        case .fullScreenRecording: return "录鼠标所在的整块屏"
         }
     }
 
@@ -48,6 +54,8 @@ enum HotkeyAction: String, CaseIterable, Identifiable, Codable {
         case .timedCapture: return "timer"
         case .scrollingCapture: return "scroll"
         case .screenRecording: return "record.circle"
+        case .windowRecording: return "macwindow"
+        case .fullScreenRecording: return "rectangle.fill"
         }
     }
 

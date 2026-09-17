@@ -126,7 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
 
                 // 1. 走菜单那条路：进遮罩，等用户框区域。
-                handleScreenRecording()
+                handleScreenRecording(mode: .region)
                 try? await Task.sleep(for: .milliseconds(900))
                 report.append("遮罩弹出了=\(overlays.isPresenting ? "是" : "**否**")")
 
@@ -280,6 +280,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     report.append("视频卡截图 -> \(url.path)")
                 }
                 quickAccess.dismiss()
+
+                // 5. 全屏录制：**不弹遮罩**，鼠标所在那块屏整幅 → 直接停在待开始。
+                handleScreenRecording(mode: .fullScreen)
+                try? await Task.sleep(for: .milliseconds(900))
+                let fullReady = pendingRecording != nil && recordingEngine == nil
+                    && !overlays.isPresenting
+                let fullBorder = recordingBorder?.isVisible ?? false
+                let fullRegion = pendingRecording?.region.size ?? .zero
+                report.append(
+                    "全屏录制：待开始=\(fullReady ? "是" : "**否**")"
+                        + "，遮罩=\(overlays.isPresenting ? "**还在**" : "没弹")"
+                        + "，红框=\(fullBorder ? "可见" : "**不可见**")"
+                        + "，选框 \(Int(fullRegion.width))×\(Int(fullRegion.height))"
+                )
+                budgets.append(("全屏录制直接进待开始（不弹遮罩）", fullReady && fullBorder ? 0 : nil, 0))
+                cancelRecording()
+                try? await Task.sleep(for: .milliseconds(300))
+
+                // 6. 窗口录制：遮罩里点哪个窗口就录哪个（相机光标 + 悬停高亮）。
+                let candidates = WindowHitTester.onScreenWindows(excludingPID: getpid())
+                    .filter { $0.frameInCGPoints.width > 240 && $0.frameInCGPoints.height > 240 }
+                    .sorted { $0.frameInCGPoints.width * $0.frameInCGPoints.height
+                        > $1.frameInCGPoints.width * $1.frameInCGPoints.height }
+                if let window = candidates.first {
+                    handleScreenRecording(mode: .window)
+                    try? await Task.sleep(for: .milliseconds(900))
+                    let overlayUp = overlays.isPresenting
+                    let center = CGPoint(
+                        x: window.frameInCGPoints.midX, y: window.frameInCGPoints.midY
+                    )
+                    post(.mouseMoved, at: center)
+                    try? await Task.sleep(for: .milliseconds(200))
+                    post(.leftMouseDown, at: center)
+                    try? await Task.sleep(for: .milliseconds(80))
+                    post(.leftMouseUp, at: center)
+                    try? await Task.sleep(for: .milliseconds(700))
+                    let windowReady = pendingRecording != nil && recordingEngine == nil
+                        && !overlays.isPresenting
+                    let windowRegion = pendingRecording?.region.size ?? .zero
+                    report.append(
+                        "窗口录制：遮罩=\(overlayUp ? "弹了" : "**没弹**")"
+                            + "，点窗口后待开始=\(windowReady ? "是" : "**否**")"
+                            + "，选框 \(Int(windowRegion.width))×\(Int(windowRegion.height))"
+                            + "（窗口 \(Int(window.frameInCGPoints.width))×\(Int(window.frameInCGPoints.height))）"
+                    )
+                    budgets.append(("窗口录制点窗口进待开始", windowReady ? 0 : nil, 0))
+                    cancelRecording()
+                    overlays.cancel()
+                    try? await Task.sleep(for: .milliseconds(300))
+                } else {
+                    report.append("窗口录制：屏幕上找不到够大的窗口，跳过")
+                }
 
                 report.append("延迟预算：")
                 var failed = 0
@@ -581,7 +633,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onCaptureFullScreen = { [weak self] in self?.handleFullScreenCapture() }
         menuBar.onCaptureTimed = { [weak self] seconds in self?.handleTimedCapture(after: seconds) }
         menuBar.onCaptureScrolling = { [weak self] in self?.handleScrollingCapture() }
-        menuBar.onStartRecording = { [weak self] in self?.handleScreenRecording() }
+        menuBar.onRecordRegion = { [weak self] in self?.handleScreenRecording(mode: .region) }
+        menuBar.onRecordWindow = { [weak self] in self?.handleScreenRecording(mode: .window) }
+        menuBar.onRecordFullScreen = { [weak self] in self?.handleScreenRecording(mode: .fullScreen) }
         menuBar.onOpenRecent = { url in
             NSWorkspace.shared.activateFileViewerSelecting([url])
         }
@@ -625,7 +679,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .scrollingCapture:
             handleScrollingCapture()
         case .screenRecording:
-            handleScreenRecording()
+            handleScreenRecording(mode: .region)
+        case .windowRecording:
+            handleScreenRecording(mode: .window)
+        case .fullScreenRecording:
+            handleScreenRecording(mode: .fullScreen)
         }
     }
 
@@ -703,7 +761,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // 录屏收工的那张卡：文件已经落盘了，能做的就是「拿去看 / 拿去找 / 拿去用」。
         quickAccess.onPlayVideo = { url in
-            NSWorkspace.shared.open(url)
+            Self.openWithSystemPreview(url)
         }
         quickAccess.onRevealVideo = { url in
             NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -889,8 +947,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Screen recording
 
-    /// 录屏入口：先弹遮罩框一块区域（或点一下某个窗口），松手停在「准备录制」。
-    private func handleScreenRecording() {
+    /// 录屏的三种取景方式。
+    enum RecordingMode {
+        /// 拖一块区域（顺手点个窗口也行）。
+        case region
+        /// 点哪个窗口就录哪个。
+        case window
+        /// 整块屏（鼠标所在的那块）。
+        case fullScreen
+    }
+
+    /// 录屏入口：先说清楚录哪块（区域 / 窗口 / 整屏），选区到手后停在「准备录制」。
+    ///
+    /// - 区域 / 窗口：走既有遮罩取景（两种只差默认的取景手势与光标）；
+    /// - 全屏：**不弹遮罩**——鼠标在哪块屏就录哪块，直接上红框 + 控制条的待开始态。
+    private func handleScreenRecording(mode: RecordingMode = .region) {
         guard recordingEngine == nil, pendingRecording == nil else {
             logger.notice("recording ignored: already running or waiting to start")
             return
@@ -901,11 +972,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard requireScreenCapturePermission() else { return }
 
+        if mode == .fullScreen {
+            Task { @MainActor in
+                do {
+                    let snapshots = try await capture.captureAllDisplays()
+                    guard let snapshot = snapshotUnderMouse(snapshots) ?? snapshots.first else {
+                        throw CaptureError.noDisplays
+                    }
+                    // 整屏：local 矩形就是这块屏的整幅。
+                    beginRecording(
+                        snapshot: snapshot,
+                        localRect: CGRect(origin: .zero, size: snapshot.screenFrameInPoints.size)
+                    )
+                } catch {
+                    presentCaptureFailure(error)
+                }
+            }
+            return
+        }
+
         Task { @MainActor in
             do {
                 let snapshots = try await capture.captureAllDisplays()
                 let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
-                overlays.purpose = .record
+                overlays.purpose = (mode == .window) ? .recordWindow : .record
                 overlays.present(
                     session: CaptureSession(snapshots: snapshots, windows: windows),
                     inlineMode: false
@@ -1636,6 +1726,24 @@ struct CaptureRegionTarget {
         } catch {
             logger.error("save failed: \(error.localizedDescription)")
         }
+    }
+
+    /// 用 macOS 自带的**预览**（`/System/Applications/Preview.app`）打开。
+    ///
+    /// 不用「默认打开方式」：`.mp4` 的默认程序往往是别的播放器，而用户要的是系统那份预览
+    /// （与截图预览窗口里那颗「通过"预览"打开」是同一个 App）。预览被删了才退回默认打开方式。
+    private static func openWithSystemPreview(_ url: URL) {
+        let preview = URL(fileURLWithPath: "/System/Applications/Preview.app")
+        guard FileManager.default.fileExists(atPath: preview.path) else {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        NSWorkspace.shared.open(
+            [url],
+            withApplicationAt: preview,
+            configuration: NSWorkspace.OpenConfiguration(),
+            completionHandler: nil
+        )
     }
 
     /// 视频卡的「保存」：把成片**另存一份**到用户挑的地方。

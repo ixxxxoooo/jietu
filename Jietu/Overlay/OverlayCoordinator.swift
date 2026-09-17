@@ -40,8 +40,10 @@ final class OverlayCoordinator {
         case screenshot
         case windowCapture
         case regionPick
-        /// 只要一块区域，用来录屏。
+        /// 只要一块区域，用来**区域录制**（拖一块，或者顺手点个窗口都行）。
         case record
+        /// 只要一块区域，用来**窗口录制**：相机光标 + 悬停高亮，点哪个窗口就录哪个。
+        case recordWindow
     }
 
     /// 遮罩这一次要干什么（截图 / 只要一个矩形）。**用完即复位**，见 `finish()`。
@@ -102,9 +104,10 @@ final class OverlayCoordinator {
             }
             // 滚动长图起步：选区不急着交付，鼠标停住就交给外面的控制条。
             controller.isRegionPickMode = (purpose == .regionPick)
-            controller.isRecordMode = (purpose == .record)
-            // 专选窗口模式（直接高亮并选窗）
-            controller.isWindowOnlyMode = (purpose == .windowCapture)
+            // 两种录屏都以 `.record` 收尾（都要拿到一块 local 矩形），差别只在默认怎么取景。
+            controller.isRecordMode = (purpose == .record || purpose == .recordWindow)
+            // 专选窗口模式（直接高亮并选窗）：截图的那档和「窗口录制」共用。
+            controller.isWindowOnlyMode = (purpose == .windowCapture || purpose == .recordWindow)
             controller.onWindowSelected = { [weak self] window in
                 self?.finish(
                     .windowCaptured(window: window, snapshot: snapshot),

@@ -1068,8 +1068,10 @@ final class OverlayCanvasView: NSView {
             size.height,
             snapshot.effectiveScale
         )
-        if isRecordMode {
-            text += "  ·  拖拽框选要录的区域（或点一下某个窗口），松手即开录  ·  Esc 取消"
+        if isRecordMode && isWindowOnlyMode {
+            text += "  ·  点击要录的窗口  ·  ␣ 切换自由框选  ·  Esc 取消"
+        } else if isRecordMode {
+            text += "  ·  拖拽框选要录的区域（或点一下某个窗口）  ·  Esc 取消"
         } else if isRegionPickMode {
             text += selection == nil
                 ? "  ·  拖拽框选（鼠标停住出「手动 / 自动」）  ·  Esc 取消"
@@ -1423,7 +1425,7 @@ final class OverlayCanvasView: NSView {
             return
         }
 
-        // 录屏：选区成型就直接开录（不留遮罩让用户再调——松手即录，与参考实现一致）。
+        // 录屏：选区成型就把这块交给外面（控制条会停在「准备录制」，点开始才真开录）。
         if isRecordMode {
             if isSettled, let selection {
                 onRecordRegionPicked?(selection)
