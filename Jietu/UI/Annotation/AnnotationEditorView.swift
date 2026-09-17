@@ -142,7 +142,19 @@ struct AnnotationEditorView: View {
 
     static let toolbarHeight: CGFloat = 56
     static let padding: CGFloat = 10
-    static let minWindowWidth: CGFloat = 900
+
+    /// 工具栏**一行放得下**所需的最小宽度：再窄右边的按钮就会被窗口裁掉。
+    ///
+    /// 数值不是手算的，是让 SwiftUI 自己报的（`NSHostingView.fittingSize`）：
+    /// `Jietu Dev --selftest-editor <目录>` 会打印出来（实测 967）。
+    /// 改工具栏（增减按钮 / 改字号）后跑一下这个自检，把这个数改掉；
+    /// `JietuTests` 里有一条用例会盯着「工具栏必须放得进这个宽度」。
+    static let toolbarMinWidth: CGFloat = 967
+
+    /// 带标题栏的编辑器窗口最小宽度（工具栏之外还要留点余量）。
+    static let minWindowWidth: CGFloat = max(900, toolbarMinWidth)
+    /// 原地编辑窗口的最小宽度：图片可以很窄，但工具栏必须放得下。
+    static let minInlineWidth: CGFloat = toolbarMinWidth
     static let minWindowHeight: CGFloat = 430
     private static let minZoom: CGFloat = 0.1
     private static let maxZoom: CGFloat = 8
@@ -206,7 +218,7 @@ struct AnnotationEditorView: View {
             }
         }
         .frame(
-            minWidth: inline ? 320 : Self.minWindowWidth,
+            minWidth: inline ? Self.minInlineWidth : Self.minWindowWidth,
             minHeight: inline ? 200 : Self.minWindowHeight
         )
         .onAppear {

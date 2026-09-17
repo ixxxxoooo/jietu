@@ -1,5 +1,6 @@
 import AppKit
 import ImageIO
+import SwiftUI
 import UniformTypeIdentifiers
 
 #if DEBUG
@@ -91,6 +92,17 @@ enum CaptureSelfTest {
             )
             return true
 
+        case "--selftest-editor":
+            // 标注编辑器：拿一张很小的图开窗，截图检查工具栏有没有被窗口裁掉。
+            runEditorTest(
+                outputDirectory: URL(
+                    fileURLWithPath: value ?? NSTemporaryDirectory(),
+                    isDirectory: true
+                ),
+                inline: !arguments.contains("--window")
+            )
+            return true
+
         default:
             return false
         }
@@ -103,8 +115,96 @@ enum CaptureSelfTest {
             : URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
     }
 
-    private static func runScrollProbe(spec: String, outputDirectory: URL) {
+    /// 标注编辑器窗口：验证「小图 / 原地模式」下工具栏不会被裁。
+    private static func runEditorTest(outputDirectory: URL, inline: Bool) {
         Task { @MainActor in
+            var report: [String] = []
+            do {
+                let image = try makeTestImage(width: 260, height: 180)
+
+                // 先量一下工具栏真正需要多宽（SwiftUI 的最小尺寸），再拿它对照现用常量。
+                let probe = AnnotationEditorView(
+                    baseImage: image,
+                    inline: true,
+                    onCopy: { _ in }, onSave: { _ in }, onPin: { _, _ in }, onClose: {}
+                )
+                let probeHost = NSHostingView(rootView: probe)
+                report.append(
+                    "SwiftUI 最小宽=\(Int(probeHost.fittingSize.width.rounded()))"
+                        + " 高=\(Int(probeHost.fittingSize.height.rounded()))"
+                )
+
+                // 原地模式：故意用一个比工具栏窄的选区当锚点。
+                let anchor: CGRect? = inline
+                    ? CGRect(x: 700, y: 560, width: 260, height: 180)
+                    : nil
+                let controller = AnnotationEditorWindowController(image: image, anchor: anchor)
+                retainedEditor = controller
+                controller.present()
+                report.append(
+                    "editor inline=\(inline) image=260x180"
+                        + " 工具栏最小宽=\(Int(AnnotationEditorView.toolbarMinWidth))"
+                        + " 窗口最小宽=\(Int(AnnotationEditorView.minWindowWidth))"
+                )
+
+                try? await Task.sleep(for: .milliseconds(900))
+                let snapshots = try await CaptureEngine().captureAllDisplays(
+                    excludingOwnApplication: false
+                )
+                try FileManager.default.createDirectory(
+                    at: outputDirectory, withIntermediateDirectories: true
+                )
+                for (index, snapshot) in snapshots.enumerated() {
+                    let url = outputDirectory
+                        .appendingPathComponent("editor-\(inline ? "inline" : "window")-\(index).png")
+                    try writePNG(snapshot.image, to: url)
+                    report.append("  display \(snapshot.displayID) -> \(url.path)")
+                }
+                controller.close()
+                report.append("RESULT: PASS")
+                finish(report, code: 0)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
+    }
+
+    /// 自检用的小图：彩色块 + 斜线，够看出缩放 / 裁切。
+    private static func makeTestImage(width: Int, height: Int) throws -> CGImage {
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { throw CaptureError.emptyImage(0) }
+        context.setFillColor(CGColor(red: 0.98, green: 0.98, blue: 0.96, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let colors: [CGColor] = [
+            CGColor(red: 0.95, green: 0.4, blue: 0.4, alpha: 1),
+            CGColor(red: 0.4, green: 0.7, blue: 0.95, alpha: 1),
+            CGColor(red: 0.5, green: 0.85, blue: 0.5, alpha: 1),
+        ]
+        for (index, color) in colors.enumerated() {
+            context.setFillColor(color)
+            let size = CGFloat(min(width, height) / 4)
+            context.fill(
+                CGRect(
+                    x: 8 + CGFloat(index) * (size + 8), y: CGFloat(height) - size - 8,
+                    width: size, height: size
+                )
+            )
+        }
+        guard let image = context.makeImage() else { throw CaptureError.emptyImage(0) }
+        return image
+    }
+
+    private static var retainedEditor: AnnotationEditorWindowController?
+
+    private static func runScrollProbe(spec: String, outputDirectory: URL) {        Task { @MainActor in
             var report: [String] = []
             do {
                 let engine = CaptureEngine()

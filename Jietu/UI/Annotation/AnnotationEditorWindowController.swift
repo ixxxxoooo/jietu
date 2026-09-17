@@ -143,13 +143,16 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
     }
 
     /// 原地编辑窗口尺寸：图片原始大小 + 底部工具栏。
+    ///
+    /// 图片再窄也得给工具栏留足宽度（否则右边的按钮会被窗口裁掉）；
+    /// 多出来的部分是透明的，只有工具栏那条会真的画出来。
     private func inlineWindowSize(for image: CGImage) -> CGSize {
         let scale = max(1, anchorScreen()?.backingScaleFactor ?? 2)
         let imageSize = CGSize(
             width: CGFloat(image.width) / scale,
             height: CGFloat(image.height) / scale
         )
-        let width = max(imageSize.width, 620)
+        let width = max(imageSize.width, AnnotationEditorView.minInlineWidth)
         return CGSize(width: width, height: imageSize.height + AnnotationEditorView.toolbarHeight)
     }
 
