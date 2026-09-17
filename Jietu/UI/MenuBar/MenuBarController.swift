@@ -67,12 +67,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func configureStatusButton() {
         guard let button = statusItem.button else { return }
         button.image = Self.icon("camera.viewfinder", description: "Jietu")
-        button.image?.isTemplate = true
         button.toolTip = "Jietu 截图"
     }
 
+    /// 图标按 16pt 取：SF Symbol 默认的文本字号渲染出来只有 12.5pt 墨迹，
+    /// 比菜单栏里相邻的图标（14~17pt）小一档，显式放大后才齐平。
     private static func icon(_ symbol: String, description: String) -> NSImage? {
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 16, weight: .regular))
         image?.isTemplate = true
         return image
     }
