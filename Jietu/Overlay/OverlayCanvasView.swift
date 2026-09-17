@@ -230,6 +230,17 @@ final class OverlayCanvasView: NSView {
         inputArmedAt = CACurrentMediaTime() + delay
     }
 
+    /// 遮罩刚出现时先点亮鼠标所在窗口。
+    ///
+    /// 不做这一步的话，第一帧是**整屏压暗**（还没有 hover 过任何窗口），
+    /// 要等用户动一下鼠标才亮起来——看起来就像「一上来先糊了一层遮罩」。
+    func primeHoveredWindow() {
+        let local = convert(NSEvent.mouseLocation, from: nil)
+        guard canvasBounds.contains(local) else { return }
+        updateHoveredWindow(at: local)
+        updateWindowHighlight()
+    }
+
     private var isInputArmed: Bool {
         CACurrentMediaTime() >= inputArmedAt
     }
@@ -383,9 +394,9 @@ final class OverlayCanvasView: NSView {
         dimLayer.frame = bounds
         root.addSublayer(dimLayer)
 
-        // 吸附预览（自动识别窗口边界）：绿色粗线描边。
-        windowHighlightLayer.fillColor = NSColor(Theme.selectionGreen)
-            .withAlphaComponent(0.06).cgColor
+        // 吸附预览（自动识别窗口边界）：**只描边、不填色**。
+        // 之前压了一层 6% 的绿：窗口一大（满屏窗口）整块屏幕都跟着泛绿。
+        windowHighlightLayer.fillColor = nil
         windowHighlightLayer.strokeColor = NSColor(Theme.selectionGreen).cgColor
         windowHighlightLayer.lineWidth = 3
         windowHighlightLayer.isHidden = true

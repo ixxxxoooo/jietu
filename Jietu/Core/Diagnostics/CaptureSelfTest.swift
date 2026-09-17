@@ -1457,6 +1457,25 @@ enum CaptureSelfTest {
                     Self.reportDim("outside", baseline: baseImage, overlay: overlayImage, rect: outsideRect)
                 }
 
+                // 初始状态（全程没人动过鼠标）：鼠标所在窗口当场就该是亮的，
+                // 而且**不准带绿色**——吸附预览以前压了 6% 绿，窗口一大就整屏泛绿。
+                let cursor = NSEvent.mouseLocation
+                for snapshot in withOverlay {
+                    guard snapshot.screenFrameInPoints.contains(cursor),
+                        let base = baseline.first(where: { $0.displayID == snapshot.displayID })
+                    else { continue }
+                    print(
+                        String(
+                            format: "光标处（鼠标所在窗口）：亮度 %.3f → %.3f，绿偏移 %.3f → %.3f",
+                            Self.luminance(in: base, at: cursor, size: 24),
+                            Self.luminance(in: snapshot, at: cursor, size: 24),
+                            Self.greenBias(in: base, at: cursor, size: 24),
+                            Self.greenBias(in: snapshot, at: cursor, size: 24)
+                        )
+                    )
+                    print("  期望：亮度基本不变（窗口被点亮、没被压暗），绿偏移也基本不变（没有染色）")
+                }
+
                 try? await Task.sleep(for: .seconds(duration))
                 coordinator.cancel()
                 Self.finish(["overlay held \(duration)s then dismissed", "RESULT: PASS"], code: 0)

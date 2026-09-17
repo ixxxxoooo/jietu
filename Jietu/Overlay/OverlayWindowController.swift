@@ -136,6 +136,8 @@ final class OverlayWindowController {
     func show() {
         // 300ms 静默期：躲开窗口出现瞬间的杂散鼠标事件。
         canvas.armInput(after: 0.3)
+        // 一上来就把鼠标所在窗口点亮（压暗层的洞口），不是整屏先糊一层。
+        canvas.primeHoveredWindow()
         window.orderFrontRegardless()
         window.makeKey()
         window.makeFirstResponder(canvas)
