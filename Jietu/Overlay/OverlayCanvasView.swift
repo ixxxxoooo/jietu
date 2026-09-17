@@ -454,21 +454,40 @@ final class OverlayCanvasView: NSView {
 
     /// 放大镜各层：图（nearest，硬边像素）+ 两层网格（深浅内容上都看得见）
     /// + 十字带 + 中心格描边 + 外框，读数面板单独几层。
+    ///
+    /// 外框不用「粗描边圈一圈」——那是块状灰边，厚且糊。改成论坛通用的浮空做法：
+    /// 一层柔和投影托起来 + 一根 1px 发丝线（外侧白、内侧墨），转角走 `.continuous`。
     private func configureLoupe(scale: CGFloat, root: CALayer) {
-        loupeShadowLayer.fillColor = nil
-        loupeShadowLayer.strokeColor = NSColor.black.withAlphaComponent(0.35).cgColor
-        loupeShadowLayer.lineWidth = 5
+        // 投影载体：本身被上面的图完全盖住，只为投出阴影。
+        loupeShadowLayer.fillColor = NSColor.black.cgColor
+        loupeShadowLayer.strokeColor = nil
+        loupeShadowLayer.shadowColor = NSColor.black.cgColor
+        loupeShadowLayer.shadowOpacity = 0.38
+        loupeShadowLayer.shadowRadius = 12
+        loupeShadowLayer.shadowOffset = CGSize(width: 0, height: -4)
+        loupeShadowLayer.cornerRadius = Theme.Radius.card
+        loupeShadowLayer.cornerCurve = .continuous
+
+        // 外圈发丝线：深色内容上把边界提出来。
         loupeBorderLayer.fillColor = nil
-        loupeBorderLayer.strokeColor = NSColor.white.withAlphaComponent(0.9).cgColor
-        loupeBorderLayer.lineWidth = 1.5
+        loupeBorderLayer.strokeColor = nil
+        loupeBorderLayer.backgroundColor = nil
+        loupeBorderLayer.borderWidth = 1
+        loupeBorderLayer.borderColor = NSColor.white.withAlphaComponent(0.45).cgColor
+        loupeBorderLayer.cornerRadius = Theme.Radius.card
+        loupeBorderLayer.cornerCurve = .continuous
 
         loupeImageLayer.contents = snapshot.image
         loupeImageLayer.contentsGravity = .resize
         loupeImageLayer.magnificationFilter = .nearest
         loupeImageLayer.minificationFilter = .nearest
-        loupeImageLayer.cornerRadius = 10
+        loupeImageLayer.cornerRadius = Theme.Radius.card
+        loupeImageLayer.cornerCurve = .continuous
         loupeImageLayer.masksToBounds = true
         loupeImageLayer.contentsScale = scale
+        // 内圈发丝线：浅色内容上把边界提出来（与上一条一深一浅，任何底色都看得见）。
+        loupeImageLayer.borderWidth = 1
+        loupeImageLayer.borderColor = NSColor.black.withAlphaComponent(0.15).cgColor
 
         loupeGridDarkLayer.fillColor = nil
         loupeGridDarkLayer.strokeColor = NSColor.black.withAlphaComponent(0.28).cgColor
@@ -477,13 +496,13 @@ final class OverlayCanvasView: NSView {
         loupeGridLightLayer.strokeColor = NSColor.white.withAlphaComponent(0.16).cgColor
         loupeGridLightLayer.lineWidth = 0.5
 
-        // 十字带：光标那一行 / 一列整条淡淡染一下（品牌蓝），中心格再描白边。
+        // 十字带：光标那一行 / 一列整条淡淡染一下（品牌绿），中心格再描一圈白的。
         loupeGuideLayer.fillColor = NSColor(Theme.selectionGreen)
             .withAlphaComponent(0.16).cgColor
         loupeGuideLayer.strokeColor = nil
         loupeCellShadowLayer.fillColor = nil
-        loupeCellShadowLayer.strokeColor = NSColor.black.withAlphaComponent(0.5).cgColor
-        loupeCellShadowLayer.lineWidth = 3
+        loupeCellShadowLayer.strokeColor = NSColor.black.withAlphaComponent(0.45).cgColor
+        loupeCellShadowLayer.lineWidth = 2
         loupeCellLayer.fillColor = nil
         loupeCellLayer.strokeColor = NSColor.white.withAlphaComponent(0.95).cgColor
         loupeCellLayer.lineWidth = 1.5
@@ -497,18 +516,23 @@ final class OverlayCanvasView: NSView {
             root.addSublayer(layer)
         }
 
+        // 读数面板：深墨压底（内容什么颜色都得读得清）+ `Radius.card` 圆角
+        // + ramp 的 `border` 发丝线 + 一层柔和投影，和浮窗 / 工具栏同一套观感。
         loupePanelLayer.backgroundColor = NSColor.black.withAlphaComponent(0.72).cgColor
-        loupePanelLayer.cornerRadius = 8
+        loupePanelLayer.cornerRadius = Theme.Radius.card
+        loupePanelLayer.cornerCurve = .continuous
         loupePanelLayer.borderWidth = 1
-        loupePanelLayer.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
+        loupePanelLayer.borderColor = NSColor.white.withAlphaComponent(0.20).cgColor
+        loupePanelLayer.shadowColor = NSColor.black.cgColor
+        loupePanelLayer.shadowOpacity = 0.35
+        loupePanelLayer.shadowRadius = 10
+        loupePanelLayer.shadowOffset = CGSize(width: 0, height: -3)
         loupePanelLayer.isHidden = true
         loupePanelLayer.actions = Self.loupeNoActions
         root.addSublayer(loupePanelLayer)
 
         for textLayer in [loupeCoordinateLayer, loupeRegionLayer, loupeColorLayer] {
-            textLayer.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
             textLayer.fontSize = 11
-            textLayer.foregroundColor = NSColor.white.withAlphaComponent(0.92).cgColor
             textLayer.alignmentMode = .left
             textLayer.truncationMode = .none
             textLayer.contentsScale = scale
@@ -516,12 +540,35 @@ final class OverlayCanvasView: NSView {
             textLayer.actions = Self.loupeNoActions
             root.addSublayer(textLayer)
         }
-        loupeSwatchLayer.cornerRadius = 3
+        loupeSwatchLayer.cornerRadius = Theme.Radius.glyph
+        loupeSwatchLayer.cornerCurve = .continuous
         loupeSwatchLayer.borderWidth = 1
-        loupeSwatchLayer.borderColor = NSColor.white.withAlphaComponent(0.55).cgColor
+        loupeSwatchLayer.borderColor = NSColor.white.withAlphaComponent(0.35).cgColor
         loupeSwatchLayer.isHidden = true
         loupeSwatchLayer.actions = Self.loupeNoActions
         root.addSublayer(loupeSwatchLayer)
+    }
+
+    /// 读数行：标签走 ramp 的次级墨（0.60），数值走主墨（1.00）+ 等宽数字
+    /// （数值跟着光标刷新，等宽才不会左右抖）。
+    private static func loupeReadoutRow(label: String, value: String) -> NSAttributedString {
+        let row = NSMutableAttributedString(
+            string: label,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 11, weight: .regular),
+                .foregroundColor: NSColor.white.withAlphaComponent(0.60),
+            ]
+        )
+        row.append(
+            NSAttributedString(
+                string: value,
+                attributes: [
+                    .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
+                    .foregroundColor: NSColor.white,
+                ]
+            )
+        )
+        return row
     }
 
     /// 放大镜全程跟手：**关掉隐式动画**。
@@ -809,10 +856,6 @@ final class OverlayCanvasView: NSView {
         origin.x = min(max(origin.x, bounds.minX + 8), bounds.maxX - side - 8)
         origin.y = min(max(origin.y, bounds.minY + 8), bounds.maxY - side - 8)
         let frame = CGRect(origin: origin, size: CGSize(width: side, height: side))
-        let rounded = CGPath(
-            roundedRect: CGRect(origin: .zero, size: frame.size),
-            cornerWidth: 10, cornerHeight: 10, transform: nil
-        )
 
         for layer in [
             loupeShadowLayer, loupeBorderLayer, loupeImageLayer, loupeGridDarkLayer,
@@ -820,8 +863,11 @@ final class OverlayCanvasView: NSView {
         ] {
             layer.frame = frame
         }
-        loupeShadowLayer.path = rounded
-        loupeBorderLayer.path = rounded
+        // 外框 / 投影都走 `cornerRadius`（不再描 path），转角才是 `.continuous` 的 squircle。
+        loupeShadowLayer.shadowPath = CGPath(
+            roundedRect: CGRect(origin: .zero, size: frame.size),
+            cornerWidth: Theme.Radius.card, cornerHeight: Theme.Radius.card, transform: nil
+        )
 
         updateLoupeReadout(frame: frame, pixel: cursorPixel)
         #if DEBUG
@@ -858,49 +904,62 @@ final class OverlayCanvasView: NSView {
             sampledColor = PixelSampler.sample(snapshot.image, atPixel: pixel)
         }
 
-        let coordinate = String(format: "坐标: (%.0f, %.0f)", pixel.x, pixel.y)
+        let coordinate = Self.loupeReadoutRow(
+            label: "坐标: ", value: String(format: "(%.0f, %.0f)", pixel.x, pixel.y)
+        )
         // 「区域」= 现在按下去会截到的那块：选框 / 悬停窗口，都没有就显示占位。
         let regionPoints = selection ?? hoveredWindowLocalRect
-        let region = regionPoints.map {
-            String(
-                format: "区域: %.0f × %.0f",
-                ($0.width * snapshot.effectiveScale).rounded(),
-                ($0.height * snapshot.effectiveScale).rounded()
-            )
-        } ?? "区域: —"
-        let colorText = "色值: " + (sampledColor?.hexString ?? "—")
+        let region = Self.loupeReadoutRow(
+            label: "区域: ",
+            value: regionPoints.map {
+                String(
+                    format: "%.0f × %.0f",
+                    ($0.width * snapshot.effectiveScale).rounded(),
+                    ($0.height * snapshot.effectiveScale).rounded()
+                )
+            } ?? "—"
+        )
+        let colorRow = Self.loupeReadoutRow(
+            label: "色值: ", value: sampledColor?.hexString ?? "—"
+        )
+        let rows = [coordinate, region, colorRow]
 
+        let inset = Theme.Spacing.md
         let rowHeight: CGFloat = 15
-        let inset: CGFloat = 8
-        let textWidth = max(
-            Self.loupeTextWidth(coordinate),
-            max(Self.loupeTextWidth(region), Self.loupeTextWidth(colorText))
-        )
-        let swatchSize: CGFloat = 11
+        let swatchSize: CGFloat = 12
+        let textWidth = rows.map(Self.loupeTextWidth).max() ?? 0
         let panelWidth = min(
-            bounds.width - 16,
-            max(Loupe.side, textWidth + inset * 2 + swatchSize + 10)
+            bounds.width - Theme.Spacing.md * 2,
+            max(Loupe.side, textWidth + inset * 2 + swatchSize + Theme.Spacing.sm)
         )
-        let panelHeight = rowHeight * 3 + inset * 2 - 4
+        // 上下留白对称（原来下面靠 -4 硬凑，看着挤）。
+        let panelHeight = rowHeight * CGFloat(rows.count) + inset * 2
 
-        var panelY = frame.minY - panelHeight + 2
-        if panelY < bounds.minY + 8 { panelY = frame.maxY - 2 }
-        panelY = min(max(panelY, bounds.minY + 8), bounds.maxY - panelHeight - 8)
+        var panelY = frame.minY - panelHeight - Theme.Spacing.xs
+        if panelY < bounds.minY + Theme.Spacing.md {
+            panelY = frame.maxY + Theme.Spacing.xs
+        }
+        panelY = min(
+            max(panelY, bounds.minY + Theme.Spacing.md),
+            bounds.maxY - panelHeight - Theme.Spacing.md
+        )
         let panelX = min(
-            max(frame.minX, bounds.minX + 8),
-            max(bounds.minX + 8, bounds.maxX - panelWidth - 8)
+            max(frame.minX, bounds.minX + Theme.Spacing.md),
+            max(bounds.minX + Theme.Spacing.md, bounds.maxX - panelWidth - Theme.Spacing.md)
         )
         let panelFrame = CGRect(
             x: panelX, y: panelY, width: panelWidth, height: panelHeight
         )
         loupePanelLayer.frame = panelFrame
 
-        let rows = [loupeCoordinateLayer, loupeRegionLayer, loupeColorLayer]
-        for (index, layer) in rows.enumerated() {
-            layer.string = [coordinate, region, colorText][index]
+        let rowsTop = panelFrame.maxY - inset
+        for (index, layer) in [loupeCoordinateLayer, loupeRegionLayer, loupeColorLayer]
+            .enumerated()
+        {
+            layer.string = rows[index]
             layer.frame = CGRect(
                 x: panelFrame.minX + inset,
-                y: panelFrame.minY + panelHeight - inset + 2 - CGFloat(index + 1) * rowHeight,
+                y: rowsTop - CGFloat(index + 1) * rowHeight,
                 width: panelWidth - inset * 2,
                 height: rowHeight
             )
@@ -918,20 +977,18 @@ final class OverlayCanvasView: NSView {
             loupeSwatchLayer.isHidden = true
         }
         loupeSwatchLayer.frame = CGRect(
-            x: panelFrame.minX + inset + Self.loupeTextWidth(colorText) + 8,
-            y: panelFrame.minY + panelHeight - inset + 2 - 3 * rowHeight
-                + (rowHeight - swatchSize) / 2,
+            x: panelFrame.minX + inset + Self.loupeTextWidth(colorRow) + Theme.Spacing.sm,
+            y: rowsTop - 3 * rowHeight + (rowHeight - swatchSize) / 2,
             width: swatchSize,
             height: swatchSize
         )
-        for layer in rows + [loupePanelLayer] {
+        for layer in [loupeCoordinateLayer, loupeRegionLayer, loupeColorLayer, loupePanelLayer] {
             layer.isHidden = false
         }
     }
 
-    private static func loupeTextWidth(_ text: String) -> CGFloat {
-        let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-        return (text as NSString).size(withAttributes: [.font: font]).width
+    private static func loupeTextWidth(_ text: NSAttributedString) -> CGFloat {
+        ceil(text.size().width)
     }
 
     private func updateWindowHighlight() {

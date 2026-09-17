@@ -144,248 +144,6 @@ final class PinPanel: NSPanel {
     }
 }
 
-/// 原生 macOS 玻璃质感圆形图标按钮。
-///
-/// 与设计系统的 `GlassCircleButton` 对齐（同款系统自适应 Liquid Glass）：
-/// - 底层 `NSGlassEffectView(.regular)` + `glassFrost` 色调，跟随系统外观；
-/// - 图标走 alpha ramp 的 `textPrimary`（深色白 / 浅色黑），不再固定深色底 + 白图标；
-/// - 悬停时柔和微光渐变（Theme.Duration.hover），按下时缩放 + 变暗反馈；
-/// - 重写 `acceptsFirstMouse`，保证即使在后台/未激活窗口下也是单次点击即刻响应。
-///
-/// @author ixxxxoooo
-/// 悬停高亮层：用 layer 直接填色。
-///
-/// 不能用 `NSBox` —— 它的 `fillColor` 走的是自己那套绘制，放进
-/// `NSGlassEffectView.contentView` 里**完全不渲染**（悬停看不到任何反馈）。
-private final class HoverTintView: NSView {
-    var tintColor: NSColor = .clear
-    var cornerRadius: CGFloat = 0
-
-    override var wantsUpdateLayer: Bool { true }
-
-    override func updateLayer() {
-        layer?.backgroundColor = tintColor.cgColor
-        layer?.cornerRadius = cornerRadius
-    }
-}
-
-final class PinGlassCircleButton: NSControl {
-    var onClick: (() -> Void)?
-
-    /// 开关型按钮（钉图的实况文本）点开后的样子：图标换成**居中的绿色对勾**。
-    /// 不用角标——28pt 的圆盘上角标又小又偏，勾在正中间才对得上「已生效」。
-    var isActive = false {
-        didSet {
-            guard isActive != oldValue else { return }
-            updateIcon()
-        }
-    }
-
-    private let symbolName: String
-    /// 当前实际画出来的符号（点亮后是 `checkmark`），测试用。
-    private var currentSymbolName = ""
-    private let glassView = NSGlassEffectView()
-    private let glassContainer = NSView()
-    private let iconView = NSImageView()
-    private let hoverOverlay = HoverTintView()
-    private var isHovered = false
-    private var isPressed = false
-    private var trackingArea: NSTrackingArea?
-
-    init(
-        diameter: CGFloat = 28,
-        systemSymbolName: String,
-        tooltip: String
-    ) {
-        symbolName = systemSymbolName
-        super.init(frame: NSRect(x: 0, y: 0, width: diameter, height: diameter))
-        wantsLayer = true
-        toolTip = tooltip
-
-        // 1. 系统自适应玻璃：与 `Theme.frosted` 同配方（`.regular` + glassFrost 色调）
-        glassView.style = .regular
-        glassView.cornerRadius = diameter / 2
-        glassView.tintColor = NSColor(name: nil) { $0.isDark
-            ? .srgbInk(1, alpha: 0.05)
-            : .srgbInk(1, alpha: 0.25)
-        }
-        addSubview(glassView)
-
-        // `NSGlassEffectView` 只保证 `contentView` 的层级；悬停层与图标必须放进去，
-        // 否则会被玻璃盖住（悬停看不到任何反馈）。
-        glassContainer.wantsLayer = true
-        glassView.contentView = glassContainer
-
-        // 2. 悬停微光高亮层（ramp 的 menuHover，与 `GlassCircleButton` 同配方）
-        hoverOverlay.tintColor = NSColor(name: nil) { $0.isDark
-            ? .srgbInk(1, alpha: 0.10)
-            : .srgbInk(0, alpha: 0.09)
-        }
-        hoverOverlay.cornerRadius = diameter / 2
-        hoverOverlay.alphaValue = 0
-        hoverOverlay.wantsLayer = true
-        glassContainer.addSubview(hoverOverlay)
-
-        // 3. 图标（SF Symbol，未点亮走 alpha ramp 的 textPrimary；点亮换成绿勾）
-        iconView.imageScaling = .scaleProportionallyDown
-        iconView.wantsLayer = true
-        glassContainer.addSubview(iconView)
-        updateIcon()
-
-        // 4. 原生柔和投影，增强玻璃浮空通透感（白底图上也要能把按钮「托」出来）
-        shadow = NSShadow()
-        shadow?.shadowColor = NSColor.black.withAlphaComponent(0.35)
-        shadow?.shadowOffset = NSSize(width: 0, height: -1)
-        shadow?.shadowBlurRadius = 3
-    }
-
-    /// 未点亮：原形图标 + `textPrimary`；点亮：居中的绿色对勾（功能色 `success`）。
-    private func updateIcon() {
-        let symbol = isActive ? "checkmark" : symbolName
-        // 勾单独放大了才不显小（原图标四周有留白，勾是满格的）。
-        let config = NSImage.SymbolConfiguration(
-            pointSize: isActive ? 13 : 12,
-            weight: isActive ? .semibold : .semibold
-        )
-        currentSymbolName = symbol
-        iconView.image = NSImage(systemSymbolName: symbol, accessibilityDescription: toolTip)?
-            .withSymbolConfiguration(config)
-        iconView.contentTintColor = isActive
-            ? NSColor(Theme.Colors.success)
-            : NSColor(name: nil) { $0.isDark ? .srgbInk(1, alpha: 1) : .srgbInk(0, alpha: 1) }
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override var acceptsFirstResponder: Bool { false }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard !isHidden, bounds.contains(point) else { return nil }
-        return self
-    }
-
-    override func layout() {
-        super.layout()
-        glassView.frame = bounds
-        glassView.cornerRadius = bounds.width / 2
-        glassContainer.frame = glassView.bounds
-        hoverOverlay.frame = glassContainer.bounds
-        hoverOverlay.cornerRadius = bounds.width / 2
-        hoverOverlay.needsDisplay = true
-
-        let iconSize: CGFloat = 16
-        iconView.frame = NSRect(
-            x: (glassContainer.bounds.width - iconSize) / 2,
-            y: (glassContainer.bounds.height - iconSize) / 2,
-            width: iconSize,
-            height: iconSize
-        )
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingArea {
-            removeTrackingArea(trackingArea)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        trackingArea = area
-    }
-
-    /// 由宿主 `PinContentView` 统一驱动：它的 tracking 已确认可靠（按钮就是靠它唤出的），
-    /// 按钮自己的 tracking area 在隐藏→显示切换后不一定会重建。
-    func setHovering(_ hovering: Bool) {
-        guard isHovered != hovering else { return }
-        isHovered = hovering
-        animateHover(highlighted: hovering)
-    }
-
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        addCursorRect(bounds, cursor: .arrow)
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        setHovering(true)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        setHovering(false)
-        isPressed = false
-        animatePress(pressed: false)
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        isPressed = true
-        animatePress(pressed: true)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        let wasPressed = isPressed
-        isPressed = false
-        animatePress(pressed: false)
-
-        let point = convert(event.locationInWindow, from: nil)
-        let inBounds = bounds.contains(point) || (superview.map { bounds.contains(convert(event.locationInWindow, from: $0)) } ?? false)
-        if wasPressed && inBounds {
-            onClick?()
-        }
-    }
-
-    private func animateHover(highlighted: Bool) {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.12
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            hoverOverlay.animator().alphaValue = highlighted ? 1.0 : 0.0
-        }
-    }
-
-    private func animatePress(pressed: Bool) {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = pressed ? 0.08 : 0.14
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            glassView.animator().alphaValue = pressed ? 0.75 : 1.0
-            iconView.animator().alphaValue = pressed ? 0.75 : 1.0
-        }
-
-        guard let layer else { return }
-        let from = layer.presentation()?.transform ?? layer.transform
-        let to = pressed
-            ? CATransform3DMakeScale(0.85, 0.85, 1)
-            : CATransform3DIdentity
-        layer.transform = to
-
-        let animation = CABasicAnimation(keyPath: "transform")
-        animation.fromValue = from
-        animation.toValue = to
-        animation.duration = pressed ? 0.08 : 0.18
-        animation.timingFunction = CAMediaTimingFunction(
-            name: pressed ? .easeOut : .easeInEaseOut
-        )
-        layer.add(animation, forKey: "pressScale")
-    }
-
-    /// 测试用：按钮底是否**跟随系统外观**（不再强制深色）。
-    var followsSystemAppearance: Bool {
-        glassView.appearance == nil && glassView.style == .regular
-    }
-
-    /// 测试用：当前画出来的符号名（点亮后应为 `checkmark`）。
-    var renderedSymbolName: String { currentSymbolName }
-
-    /// 测试用：当前图标颜色。
-    var renderedIconTint: NSColor? { iconView.contentTintColor }
-}
-
 /// 钉图的绘制与交互载体。
 ///
 /// 用自绘而非 `NSImageView`：需要自己处理移动、边缘缩放与缩放，避免和系统
@@ -403,10 +161,10 @@ final class PinContentView: NSView {
 
     var onRequestClose: (() -> Void)?
 
-    private var closeButton: PinGlassCircleButton?
+    private var closeButton: GlassControlButton?
     private var liveTextOverlay: ImageAnalysisOverlayView?
     private let liveTextDelegate = PinLiveTextDelegate()
-    private var liveTextButton: PinGlassCircleButton?
+    private var liveTextButton: GlassControlButton?
     private var isLiveTextOn = false
 
     init(frame: NSRect, image: CGImage) {
@@ -774,9 +532,9 @@ final class PinContentView: NSView {
     // MARK: - Close & Live Text Buttons
 
     private func configureCloseButton() {
-        let button = PinGlassCircleButton(
+        let button = GlassControlButton(
+            symbol: "xmark",
             diameter: 28,
-            systemSymbolName: "xmark",
             tooltip: "关闭 (⌘W)"
         )
         button.onClick = { [weak self] in
@@ -788,9 +546,9 @@ final class PinContentView: NSView {
     }
 
     private func configureLiveTextButton() {
-        let button = PinGlassCircleButton(
+        let button = GlassControlButton(
+            symbol: "text.viewfinder",
             diameter: 28,
-            systemSymbolName: "text.viewfinder",
             tooltip: "实况文本"
         )
         button.onClick = { [weak self] in

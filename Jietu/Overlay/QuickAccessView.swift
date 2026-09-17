@@ -66,34 +66,29 @@ struct QuickAccessView: View {
         .help("点击打开标注编辑器，拖拽到其它 App 或文件夹可导出")
         // 克制：只做一次短淡入，缩放 / 位移一概不做。
         .animation(.easeOut(duration: Theme.Duration.hover), value: isHovering)
-        .onHover { hovering in
-            isHovering = hovering
-            onHoverChange(hovering)
-        }
     }
 
-    /// 四角圆形图标 + 中间保存按钮；它们自己带玻璃底，不靠压暗截图来凸显。
+    /// 四角圆形图标 + 中间「保存」胶囊，**与钉图共用同一套玻璃图标按钮**
+    /// （同款系统玻璃、悬停微光、按下缩放反馈、首击即生效）。
+    ///
+    /// 悬停由这一层自己判定（AppKit tracking）并上报：卡片模糊、浮窗暂停自动关闭、
+    /// 图标显隐都跟着同一个来源，不会出现「按钮已经浮出来了、卡片还是静的」。
     private var controls: some View {
-        ZStack {
-            GlassButton(title: "保存", systemImage: "square.and.arrow.down", action: onSave)
-
-            VStack(spacing: 0) {
-                HStack(spacing: 0) {
-                    GlassCircleButton(title: "关闭", systemImage: "xmark", action: onClose)
-                    Spacer(minLength: 0)
-                    GlassCircleButton(title: "钉图", systemImage: "pin", action: onPin)
+        QuickAccessControlLayer(
+            onAction: { action in
+                switch action {
+                case .close: onClose()
+                case .pin: onPin()
+                case .annotate: onAnnotate()
+                case .copy: onCopy()
+                case .save: onSave()
                 }
-                Spacer(minLength: 0)
-                HStack(spacing: 0) {
-                    GlassCircleButton(
-                        title: "标注", systemImage: "pencil.tip.crop.circle", action: onAnnotate)
-                    Spacer(minLength: 0)
-                    GlassCircleButton(title: "复制", systemImage: "doc.on.doc", action: onCopy)
-                }
+            },
+            onHoverChange: { hovering in
+                isHovering = hovering
+                onHoverChange(hovering)
             }
-        }
-        .padding(Theme.Spacing.md)
-        .opacity(isHovering ? 1 : 0)
-        .allowsHitTesting(isHovering)
+        )
+        .frame(width: cardSize.width, height: cardSize.height)
     }
 }

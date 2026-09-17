@@ -18,6 +18,7 @@ import UniformTypeIdentifiers
 ///   Jietu --selftest-frames x,y,w,h [--with-blocker]
 ///                                           逐拍 dump 帧 + 平均差 / Vision 位移 / 拼接判定
 ///   Jietu --selftest-scrollprobe x,y,w,h    几种合成滚轮写法哪个能真的推动目标窗口
+///   Jietu --selftest-quickaccess <输出目录> 浮窗图标：逐个注入点击，量响应速度（含截图）
 enum CaptureSelfTest {
     @MainActor
     static func handleCommandLineIfNeeded() -> Bool {
@@ -110,6 +111,16 @@ enum CaptureSelfTest {
             )
             return true
 
+        case "--selftest-quickaccess":
+            // 浮窗图标：真弹一张浮窗、真点每个图标，量「按下 → 反馈 / 动作 / 可见效果」。
+            runQuickAccessTest(
+                outputDirectory: URL(
+                    fileURLWithPath: value ?? NSTemporaryDirectory(),
+                    isDirectory: true
+                )
+            )
+            return true
+
         case "--selftest-editor":
             // 标注编辑器：拿一张很小的图开窗，截图检查工具栏有没有被窗口裁掉。
             runEditorTest(
@@ -138,6 +149,353 @@ enum CaptureSelfTest {
     ///
     /// 参数 `x,y,w,h` 是拖拽起点与位移（全局 cg 坐标、原点主屏左上）。
     /// 钉图按钮对比度自检：纯白底图上，两个浮动按钮应当仍然是「深色圆盘 + 白图标」。
+    private static var retainedQuickAccess: QuickAccessPanelController?
+    private static var retainedQuickAccessEditor: AnnotationEditorWindowController?
+
+    /// 浮窗图标自检：真弹一张浮窗、真注入点击，逐图标量响应速度。
+    ///
+    /// 「灵敏」拆成四段分别量，哪一段慢了一看就知道：
+    /// 1. 按下 → 按下反馈（控件自己记，正常 < 1ms）；
+    /// 2. 按下 → 动作闭包（AppKit 派发）；
+    /// 3. 按下 → 可见效果（关窗 / 钉图窗口出现 / 编辑器出现 / 落盘 / 写剪贴板）；
+    /// 4. **光标甩过去就点**（不等图标淡入）——浮窗图标最容易在这里点空。
+    ///
+    /// 历史教训：双击手势识别器会把单击压后一个双击间隔（实测关窗晚 ~520ms），
+    /// 肉眼看就是「钝」。这条自检就是防它回来。
+    private static func runQuickAccessTest(outputDirectory: URL) {
+        Task { @MainActor in
+            var report: [String] = []
+            /// 每段延迟的预算：超了就 FAIL。
+            var budgets: [(label: String, milliseconds: Double?, limit: Double)] = []
+            do {
+                InteractionMetrics.reset()
+                InteractionMetrics.enable()
+                try FileManager.default.createDirectory(
+                    at: outputDirectory, withIntermediateDirectories: true
+                )
+                guard let screen = NSScreen.main, let displayID = screen.jietu_displayID
+                else { throw CaptureError.noDisplays }
+
+                let image = try makeTestImage(width: 800, height: 600)
+                let cardSize = QuickAccessView.panelSize(
+                    for: CGSize(width: image.width, height: image.height)
+                )
+                report.append(
+                    "浮窗卡片 \(Int(cardSize.width))x\(Int(cardSize.height))"
+                        + "（图 \(image.width)x\(image.height)px）"
+                )
+
+                // 探针：把「动作真的发生了吗」变成可观察的信号。
+                var fired: [String] = []
+                var dismissed = 0
+                var savedFile: URL?
+                var editor: AnnotationEditorWindowController?
+                var pasteboardDelta = 0
+
+                let controller = QuickAccessPanelController()
+                controller.autoCloseDelay = 0  // 自检期间不许自动关
+                controller.position = .bottomRight
+                controller.onDismiss = { dismissed += 1 }
+                controller.onCopy = { image in
+                    let before = NSPasteboard.general.changeCount
+                    CaptureOutput.copyToPasteboard(image)
+                    pasteboardDelta = NSPasteboard.general.changeCount - before
+                    fired.append("复制")
+                }
+                controller.onSave = { image in
+                    let url = outputDirectory.appendingPathComponent("quickaccess-save.png")
+                    try? CaptureOutput.pngData(image)?.write(to: url)
+                    savedFile = FileManager.default.fileExists(atPath: url.path) ? url : nil
+                    fired.append("保存")
+                }
+                controller.onPin = { image in
+                    PinWindowController.pin(image: image, on: screen)
+                    fired.append("钉图")
+                }
+                controller.onAnnotate = { image in
+                    let editorController = AnnotationEditorWindowController(image: image)
+                    editor = editorController
+                    retainedQuickAccessEditor = editorController
+                    editorController.present()
+                    fired.append("标注")
+                }
+                retainedQuickAccess = controller
+                controller.present(
+                    image: image,
+                    onDisplay: displayID,
+                    saveDirectory: outputDirectory
+                )
+                try? await Task.sleep(for: .milliseconds(700))
+                guard let panel = controller.panelsForTesting.first,
+                    let contentView = panel.contentView,
+                    let controls = findControlsView(in: contentView)
+                else {
+                    report.append("error: 浮窗 / 控件层没有出现")
+                    report.append("RESULT: FAIL")
+                    finish(report, code: 1)
+                    return
+                }
+                report.append("卡片 frame=\(describe(panel.frame)) 图标层=\(controls)")
+
+                /// 图标中心 / 卡片本体某点的屏幕坐标（cg：原点主屏左上，Y 向下）。
+                @MainActor func cgPoint(localInPanel point: CGPoint, of panel: NSPanel) -> CGPoint {
+                    let appKit = CGPoint(
+                        x: panel.frame.minX + point.x, y: panel.frame.minY + point.y
+                    )
+                    return DisplayGeometry.cgPoint(
+                        fromLocal: CGPoint(
+                            x: appKit.x - screen.frame.minX, y: appKit.y - screen.frame.minY
+                        ),
+                        screen: screen
+                    )
+                }
+
+                @MainActor func iconPoint(_ action: QuickAccessAction, of panel: NSPanel) -> CGPoint {
+                    let rect = QuickAccessControlsView.frame(of: action, in: cardSize)
+                    return cgPoint(localInPanel: CGPoint(x: rect.midX, y: rect.midY), of: panel)
+                }
+
+                /// 卡片本体上的一点（避开四角圆盘与中间胶囊）：验证「点击进标注」照旧。
+                let bodyLocal = CGPoint(x: cardSize.width / 2, y: cardSize.height * 0.26)
+                let bodyPoint = cgPoint(localInPanel: bodyLocal, of: panel)
+                /// 卡片外侧的一点：用来把光标挪开，好触发 mouseEntered。
+                let awayPoint = cgPoint(
+                    localInPanel: CGPoint(x: -60, y: cardSize.height / 2), of: panel
+                )
+
+                @MainActor func waitFrom(
+                    _ since: CFAbsoluteTime, timeout: TimeInterval = 2,
+                    until condition: () -> Bool
+                ) async -> Double? {
+                    while CFAbsoluteTimeGetCurrent() - since < timeout {
+                        if condition() { return (CFAbsoluteTimeGetCurrent() - since) * 1000 }
+                        try? await Task.sleep(for: .milliseconds(4))
+                    }
+                    return nil
+                }
+
+                /// 注入一次真实点击（60ms 按住时长）；`waitForHover` = 先甩到别处再进来等图标浮出。
+                @MainActor func click(at point: CGPoint, waitForHover: Bool) async -> CFAbsoluteTime {
+                    if waitForHover {
+                        postMouse(.mouseMoved, at: awayPoint)
+                        try? await Task.sleep(for: .milliseconds(150))
+                        postMouse(.mouseMoved, at: point)
+                        try? await Task.sleep(for: .milliseconds(200))  // 图标淡入 0.12s
+                    }
+                    let press = CFAbsoluteTimeGetCurrent()
+                    postMouse(.leftMouseDown, at: point)
+                    try? await Task.sleep(for: .milliseconds(60))
+                    postMouse(.leftMouseUp, at: point)
+                    return press
+                }
+
+                @MainActor func alphas() -> [CGFloat] {
+                    QuickAccessAction.allCases.map { controls.button(for: $0)?.alphaValue ?? -1 }
+                }
+
+                // 1. 静息态：图标应当全部隐形。
+                postMouse(.mouseMoved, at: awayPoint)
+                try? await Task.sleep(for: .milliseconds(300))
+                report.append("静息态透明度 \(describe(alphas()))（期望全 0）")
+
+                // 2. 悬停态：图标淡入到位，截图给人看风格。
+                postMouse(.mouseMoved, at: bodyPoint)
+                let fadeIn = await waitFrom(CFAbsoluteTimeGetCurrent()) {
+                    alphas().allSatisfy { $0 > 0.99 }
+                }
+                report.append(
+                    String(format: "悬停 → 图标淡入到位 %@", describe(milliseconds: fadeIn))
+                )
+                budgets.append(("悬停→图标可用", fadeIn, 260))
+                try? await Task.sleep(for: .milliseconds(150))
+                let hoverShots = try await CaptureEngine().captureAllDisplays(
+                    excludingOwnApplication: false
+                )
+                if let shot = hoverShots.first(where: { $0.displayID == displayID })
+                    ?? hoverShots.first
+                {
+                    let url = outputDirectory.appendingPathComponent("quickaccess-hover.png")
+                    try writePNG(shot.image, to: url)
+                    report.append("悬停态截图 -> \(url.path)")
+                }
+
+                // 3. 卡片本体单击（光标甩过来就点，不等悬停）：应当开标注编辑器，而不是点空。
+                let bodyBefore = fired.count
+                postMouse(.mouseMoved, at: awayPoint)
+                try? await Task.sleep(for: .milliseconds(150))
+                let bodyPress = CFAbsoluteTimeGetCurrent()
+                postMouse(.mouseMoved, at: bodyPoint)
+                postMouse(.leftMouseDown, at: bodyPoint)
+                try? await Task.sleep(for: .milliseconds(60))
+                postMouse(.leftMouseUp, at: bodyPoint)
+                let bodyMs = await waitFrom(bodyPress, timeout: 2) { fired.count > bodyBefore }
+                let bodyAction = fired.count > bodyBefore ? fired[fired.count - 1] : "什么都没发生"
+                report.append(
+                    String(format: "卡片本体甩过去就点 → %@ %@", bodyAction,
+                           describe(milliseconds: bodyMs))
+                )
+                budgets.append(("卡片本体单击", bodyMs, 200))
+
+                // 4. 逐个图标：先悬停再点，量「按下 → 动作闭包 → 可见效果」。
+                for action in [QuickAccessAction.save, .copy, .pin, .annotate] {
+                    let before = fired.count
+                    let press = await click(
+                        at: iconPoint(action, of: panel), waitForHover: true
+                    )
+                    let actionMs = await waitFrom(press) { fired.count > before }
+                    let effectMs: Double?
+                    switch action {
+                    case .save:
+                        effectMs = await waitFrom(press) { savedFile != nil }
+                    case .copy:
+                        effectMs = await waitFrom(press) { pasteboardDelta > 0 }
+                    case .pin:
+                        effectMs = await waitFrom(press) {
+                            NSApp.windows.contains { $0 is PinPanel && $0.isVisible }
+                        }
+                    case .annotate:
+                        effectMs = await waitFrom(press) { editor?.isVisible == true }
+                    default:
+                        effectMs = nil
+                    }
+                    report.append(
+                        String(
+                            format: "    %@：按下→动作 %@，按下→%@ %@",
+                            action.title,
+                            describe(milliseconds: actionMs),
+                            effectLabel(for: action),
+                            describe(milliseconds: effectMs)
+                        )
+                    )
+                    budgets.append(("\(action.title)·动作", actionMs, 60))
+                    budgets.append(("\(action.title)·\(effectLabel(for: action))", effectMs, effectLimit(for: action)))
+                }
+
+                // 5. 关闭（最后点）：浮窗开始侧滑 → 消失 → 回调。
+                let closePress = await click(
+                    at: iconPoint(.close, of: panel), waitForHover: true
+                )
+                let startX = panel.frame.minX
+                let slideMs = await waitFrom(closePress) { panel.frame.minX != startX }
+                let goneMs = await waitFrom(closePress, timeout: 3) { !panel.isVisible }
+                let dismissedMs = await waitFrom(closePress, timeout: 3) { dismissed > 0 }
+                report.append(
+                    String(
+                        format: "    关闭：按下→开始侧滑 %@，→面板消失 %@，→回调 %@",
+                        describe(milliseconds: slideMs),
+                        describe(milliseconds: goneMs),
+                        describe(milliseconds: dismissedMs)
+                    )
+                )
+                budgets.append(("关闭·开始侧滑", slideMs, 120))
+                budgets.append(("关闭·面板消失", goneMs, 500))
+
+                // 6. 光标甩过去就点（不等图标淡入）：不能点空，更不能点成「标注」。
+                controller.present(
+                    image: image,
+                    onDisplay: displayID,
+                    saveDirectory: outputDirectory
+                )
+                try? await Task.sleep(for: .milliseconds(700))
+                guard let second = controller.panelsForTesting.last else {
+                    report.append("error: 第二张浮窗没有出现")
+                    report.append("RESULT: FAIL")
+                    finish(report, code: 1)
+                    return
+                }
+                let fastBefore = fired.count
+                postMouse(.mouseMoved, at: awayPoint)
+                try? await Task.sleep(for: .milliseconds(200))
+                let fastPress = CFAbsoluteTimeGetCurrent()
+                let fastTarget = iconPoint(.close, of: second)
+                postMouse(.mouseMoved, at: fastTarget)
+                postMouse(.leftMouseDown, at: fastTarget)  // 同一拍按下，不等悬停
+                try? await Task.sleep(for: .milliseconds(60))
+                postMouse(.leftMouseUp, at: fastTarget)
+                let fastMs = await waitFrom(fastPress, timeout: 2) { !second.isVisible }
+                let misfired = fired.count > fastBefore ? fired[fired.count - 1] : nil
+                report.append(
+                    String(
+                        format: "甩过去就点关闭（不等悬停）→ %@ %@",
+                        misfired.map { "误触发「\($0)」" } ?? "关掉了",
+                        describe(milliseconds: fastMs)
+                    )
+                )
+                budgets.append(("甩过去就点·关闭", misfired == nil ? fastMs : nil, 200))
+
+                // 7. 控件自己记的点按延迟（按下 → 反馈 / 动作）。
+                report.append("控件内部点按延迟（DEBUG 量测）：")
+                report.append(contentsOf: InteractionMetrics.report())
+                let feedbackMax = InteractionMetrics.maximum(.feedback)
+                let actionMax = InteractionMetrics.maximum(.action)
+                budgets.append(("按下→反馈（最慢一次）", feedbackMax, 16))
+                budgets.append(("抬起→动作（最慢一次）", actionMax, 16))
+
+                report.append("延迟预算：")
+                var failed = 0
+                for budget in budgets {
+                    let value = budget.milliseconds
+                    let ok = value != nil && value! <= budget.limit
+                    if !ok { failed += 1 }
+                    report.append(
+                        String(
+                            format: "    %@ %@ / 预算 %.0f ms  %@",
+                            ok ? "✅" : "❌",
+                            describe(milliseconds: value),
+                            budget.limit,
+                            budget.label
+                        )
+                    )
+                }
+                report.append("RESULT: \(failed == 0 ? "PASS" : "FAIL（\(failed) 项超预算）")")
+                finish(report, code: failed == 0 ? 0 : 1)
+            } catch {
+                report.append("error: \(error.localizedDescription)")
+                report.append("RESULT: FAIL")
+                finish(report, code: 1)
+            }
+        }
+    }
+
+    /// 某个动作「可见效果」的说明与预算（毫秒）。
+    private static func effectLabel(for action: QuickAccessAction) -> String {
+        switch action {
+        case .save: "落盘"
+        case .copy: "写剪贴板"
+        case .pin: "钉图窗口出现"
+        case .annotate: "编辑器出现"
+        case .close: "浮窗消失"
+        }
+    }
+
+    private static func effectLimit(for action: QuickAccessAction) -> Double {
+        switch action {
+        case .save: 250
+        case .copy: 60
+        case .pin: 400
+        case .annotate: 900
+        case .close: 500
+        }
+    }
+
+    /// 递归找浮窗里的图标层（NSViewRepresentable 会以真实子视图的形式挂进宿主）。
+    private static func findControlsView(in view: NSView) -> QuickAccessControlsView? {
+        if let controls = view as? QuickAccessControlsView { return controls }
+        for subview in view.subviews {
+            if let found = findControlsView(in: subview) { return found }
+        }
+        return nil
+    }
+
+    private static func describe(milliseconds: Double?) -> String {
+        guard let milliseconds else { return "**超时**" }
+        return String(format: "%.0f ms", milliseconds)
+    }
+
+    private static func describe(_ values: [CGFloat]) -> String {
+        values.map { String(format: "%.2f", $0) }.joined(separator: " / ")
+    }
+
     private static func runPinTest(outputDirectory: URL) {
         Task { @MainActor in
             var report: [String] = []

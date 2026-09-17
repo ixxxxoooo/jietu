@@ -23,11 +23,9 @@ struct PinWindowTests {
 
     @Test("钉图按钮跟随系统外观：与浮窗/授权面板同款玻璃，不再固定深色")
     func pinButtonFollowsSystemAppearance() {
-        let close = PinGlassCircleButton(
-            diameter: 28, systemSymbolName: "xmark", tooltip: "关闭"
-        )
-        let liveText = PinGlassCircleButton(
-            diameter: 28, systemSymbolName: "text.viewfinder", tooltip: "实况文本"
+        let close = GlassControlButton(symbol: "xmark", diameter: 28, tooltip: "关闭")
+        let liveText = GlassControlButton(
+            symbol: "text.viewfinder", diameter: 28, tooltip: "实况文本"
         )
         #expect(close.followsSystemAppearance)
         #expect(liveText.followsSystemAppearance)
@@ -35,8 +33,8 @@ struct PinWindowTests {
 
     @Test("实况文本按钮点亮后换成居中的绿色对勾，再点一次还原")
     func pinLiveTextButtonSwapsToGreenCheckmarkWhenActive() {
-        let button = PinGlassCircleButton(
-            diameter: 28, systemSymbolName: "text.viewfinder", tooltip: "实况文本"
+        let button = GlassControlButton(
+            symbol: "text.viewfinder", diameter: 28, tooltip: "实况文本"
         )
         #expect(button.renderedSymbolName == "text.viewfinder")
         // 未点亮：黑 / 白墨，三通道相等（灰度）。

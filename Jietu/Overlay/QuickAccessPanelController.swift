@@ -63,6 +63,9 @@ final class QuickAccessPanelController {
 
     var isVisible: Bool { !entries.isEmpty }
 
+    /// 自检用：当前浮窗面板（取 frame 算注入点）。
+    var panelsForTesting: [NSPanel] { entries.map(\.panel) }
+
     // MARK: - Present
 
     func present(image: CGImage, onDisplay displayID: CGDirectDisplayID, saveDirectory: URL) {
