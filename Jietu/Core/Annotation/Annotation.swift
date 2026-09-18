@@ -88,15 +88,56 @@ struct RGBAColor: Equatable, Hashable, Codable {
         return RGBAColor(red: clamp(red), green: clamp(green), blue: clamp(blue), alpha: clamp(alpha))
     }
 
-    static let red = RGBAColor(red: 1, green: 0.23, blue: 0.19, alpha: 1)
-    static let orange = RGBAColor(red: 1, green: 0.58, blue: 0, alpha: 1)
-    static let yellow = RGBAColor(red: 1, green: 0.8, blue: 0, alpha: 1)
-    static let green = RGBAColor(red: 0.19, green: 0.78, blue: 0.35, alpha: 1)
-    static let blue = RGBAColor(red: 0.11, green: 0.55, blue: 1, alpha: 1)
-    static let white = RGBAColor(red: 1, green: 1, blue: 1, alpha: 1)
-    static let black = RGBAColor(red: 0, green: 0, blue: 0, alpha: 1)
+    static let red = RGBAColor(red: 1.0, green: 0.231, blue: 0.188, alpha: 1)       // #FF3B30
+    static let blue = RGBAColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 1)        // #007AFF
+    static let green = RGBAColor(red: 0.0, green: 0.831, blue: 0.420, alpha: 1)     // #00D46B
+    static let yellow = RGBAColor(red: 1.0, green: 0.800, blue: 0.0, alpha: 1)      // #FFCC00
+    static let orange = RGBAColor(red: 0.843, green: 0.467, blue: 0.341, alpha: 1)  // #D77757
+    static let white = RGBAColor(red: 1, green: 1, blue: 1, alpha: 1)               // #FFFFFF
+    static let gray = RGBAColor(red: 0.502, green: 0.502, blue: 0.502, alpha: 1)    // #808080
+    static let black = RGBAColor(red: 0, green: 0, blue: 0, alpha: 1)               // #000000
 
-    static let palette: [RGBAColor] = [.red, .orange, .yellow, .green, .blue, .white, .black]
+    static let palette: [RGBAColor] = [.red, .blue, .green, .yellow, .orange, .white, .gray, .black]
+}
+
+/// 箭头端点样式。
+///
+/// @author ixxxxoooo
+enum ArrowStyle: String, CaseIterable, Identifiable, Codable {
+    case standard
+    case doubleEnded
+    case tapered
+    case dotTail
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .standard: return "单向箭头"
+        case .doubleEnded: return "双向箭头"
+        case .tapered: return "实心箭头"
+        case .dotTail: return "圆点箭头"
+        }
+    }
+}
+
+/// 形状填充模式（线框、填充、半透明）。
+///
+/// @author ixxxxoooo
+enum ShapeFillMode: String, CaseIterable, Identifiable, Codable {
+    case none
+    case opaque
+    case translucent
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .none: return "线框"
+        case .opaque: return "填充"
+        case .translucent: return "半透明填充"
+        }
+    }
 }
 
 /// 可复制的标注样式：颜色 / 线宽 / 字号 / 马赛克块大小。
@@ -113,6 +154,10 @@ struct AnnotationStyle: Equatable {
     var mosaicBlock: CGFloat?
     /// 仅当被复制的对象是模糊时才有值。
     var blurRadius: CGFloat?
+    var arrowStyle: ArrowStyle?
+    var shapeFillMode: ShapeFillMode?
+    var textHasStroke: Bool?
+    var textHasCallout: Bool?
 
     init(
         color: RGBAColor,
@@ -120,12 +165,20 @@ struct AnnotationStyle: Equatable {
         fontSize: CGFloat? = nil,
         mosaicBlock: CGFloat? = nil,
         blurRadius: CGFloat? = nil,
+        arrowStyle: ArrowStyle? = nil,
+        shapeFillMode: ShapeFillMode? = nil,
+        textHasStroke: Bool? = nil,
+        textHasCallout: Bool? = nil
     ) {
         self.color = color
         self.lineWidth = lineWidth
         self.fontSize = fontSize
         self.mosaicBlock = mosaicBlock
         self.blurRadius = blurRadius
+        self.arrowStyle = arrowStyle
+        self.shapeFillMode = shapeFillMode
+        self.textHasStroke = textHasStroke
+        self.textHasCallout = textHasCallout
     }
 
     /// 从一条已有标注里提取样式：只带上与该类型相关的字段，
@@ -149,6 +202,10 @@ struct AnnotationStyle: Equatable {
             fontSize: fontSize,
             mosaicBlock: mosaicBlock,
             blurRadius: blurRadius,
+            arrowStyle: annotation.arrowStyle,
+            shapeFillMode: annotation.shapeFillMode,
+            textHasStroke: annotation.textHasStroke,
+            textHasCallout: annotation.textHasCallout
         )
     }
 
@@ -159,10 +216,16 @@ struct AnnotationStyle: Equatable {
         switch annotation.kind {
         case .text, .callout:
             if let fontSize { copy = copy.withFontSize(fontSize) }
+            if let textHasStroke { copy = copy.withTextStroke(textHasStroke) }
+            if let textHasCallout { copy = copy.withTextCallout(textHasCallout) }
         case .pixelate:
             if let mosaicBlock { copy = copy.withPixelateBlock(mosaicBlock) }
         case .blur:
             if let blurRadius { copy = copy.withBlurRadius(blurRadius) }
+        case .arrow:
+            if let arrowStyle { copy = copy.withArrowStyle(arrowStyle) }
+        case .rectangle, .ellipse:
+            if let shapeFillMode { copy = copy.withShapeFillMode(shapeFillMode) }
         default:
             break
         }
@@ -208,19 +271,31 @@ struct Annotation: Identifiable, Equatable {
     var lineWidth: CGFloat
     /// 绕自身中心的旋转角（弧度）。
     var rotation: CGFloat
+    var arrowStyle: ArrowStyle
+    var shapeFillMode: ShapeFillMode
+    var textHasStroke: Bool
+    var textHasCallout: Bool
 
     init(
         id: UUID = UUID(),
         kind: Kind,
         color: RGBAColor,
         lineWidth: CGFloat = 3,
-        rotation: CGFloat = 0
+        rotation: CGFloat = 0,
+        arrowStyle: ArrowStyle = .standard,
+        shapeFillMode: ShapeFillMode = .none,
+        textHasStroke: Bool = false,
+        textHasCallout: Bool = false
     ) {
         self.id = id
         self.kind = kind
         self.color = color
         self.lineWidth = lineWidth
         self.rotation = rotation
+        self.arrowStyle = arrowStyle
+        self.shapeFillMode = shapeFillMode
+        self.textHasStroke = textHasStroke
+        self.textHasCallout = textHasCallout
     }
 }
 
@@ -573,6 +648,30 @@ extension Annotation {
         default:
             break
         }
+        return copy
+    }
+
+    func withArrowStyle(_ style: ArrowStyle) -> Annotation {
+        var copy = self
+        copy.arrowStyle = style
+        return copy
+    }
+
+    func withShapeFillMode(_ mode: ShapeFillMode) -> Annotation {
+        var copy = self
+        copy.shapeFillMode = mode
+        return copy
+    }
+
+    func withTextStroke(_ stroke: Bool) -> Annotation {
+        var copy = self
+        copy.textHasStroke = stroke
+        return copy
+    }
+
+    func withTextCallout(_ callout: Bool) -> Annotation {
+        var copy = self
+        copy.textHasCallout = callout
         return copy
     }
 

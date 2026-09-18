@@ -18,28 +18,36 @@ struct InlineToolbarTests {
         #expect(picked == [.manual, .automatic])
     }
 
-    @Test("滚动截图选项条：打开后有内容，且与颜色 / 粗细互斥")
-    func scrollOptionsRenderAndStayExclusive() {
+    @Test("二级菜单：选中工具时展开对应选项条，未选中时收起")
+    func subToolbarExpandsWhenToolSelected() {
         let model = InlineToolbarModel()
 
         func optionsSize() -> NSSize {
             NSHostingView(rootView: InlineOptionsToolbar(model: model)).fittingSize
         }
 
-        let closed = optionsSize()
-        model.showScroll = true
-        let opened = optionsSize()
-        #expect(opened.width > closed.width, "打开滚动截图后选项条应当变宽（两个选项在里面）")
+        #expect(!model.isSubToolbarVisible)
+        #expect(optionsSize().width == 0, "默认无工具时二级菜单内容为空")
 
-        // 三个子面板互斥：主工具栏三个按钮的动作里各自关掉别人。
-        // 这里直接按同样的口径置位，钉住「同时只能开一个」这条约定。
-        model.showColor = true
-        model.showScroll = false
-        model.showWidth = false
-        #expect(optionsSize().width > 0)
-        model.showColor = false
-        model.showWidth = true
-        #expect(optionsSize().width > 0)
+        model.tool = .rectangle
+        #expect(model.isSubToolbarVisible)
+        #expect(optionsSize().width > 0, "选中矩形后二级菜单应展开显示粗细、颜色与填充选项")
+
+        model.tool = .arrow
+        #expect(model.isSubToolbarVisible)
+        #expect(optionsSize().width > 0, "选中箭头后二级菜单应展开显示箭头样式与颜色")
+
+        model.tool = .text
+        #expect(model.isSubToolbarVisible)
+        #expect(optionsSize().width > 0, "选中文字后二级菜单应展开显示字号、颜色与描边标注选项")
+
+        model.tool = nil
+        #expect(!model.isSubToolbarVisible)
+        #expect(optionsSize().width == 0, "取消选择工具后二级菜单收起")
+
+        model.showScroll = true
+        #expect(model.isSubToolbarVisible)
+        #expect(optionsSize().width > 0, "打开滚动截图后二级菜单展开显示模式选项")
     }
 
     @Test("主工具栏带「录屏」入口：点了就把当前选区交出去")
@@ -58,7 +66,7 @@ struct InlineToolbarTests {
         #expect(fired == 1)
     }
 
-    @Test("主工具栏带「滚动截图」入口，且与颜色 / 粗细同一套展开机制")
+    @Test("主工具栏带「滚动截图」入口")
     func mainToolbarHasScrollEntry() {
         let model = InlineToolbarModel()
         let host = NSHostingView(rootView: InlineMainToolbar(model: model))

@@ -214,4 +214,66 @@ struct AnnotationRendererTests {
         let newPoint = try sample(rendered, 30, 30)
         #expect(newPoint.red >= 200 && newPoint.green >= 200 && newPoint.blue >= 200)
     }
+
+    @Test("矩形纯色填充与半透明填充渲染正确")
+    func shapeFillModesRender() throws {
+        let base = TestImage.solidBlack(side: 40)
+        let solidRect = Annotation(
+            kind: .rectangle(CGRect(x: 5, y: 5, width: 30, height: 30)),
+            color: .red,
+            lineWidth: 2,
+            shapeFillMode: .opaque
+        )
+        let solidRendered = try #require(AnnotationRenderer.render(base: base, annotations: [solidRect]))
+        let solidCenter = try sample(solidRendered, 20, 20)
+        #expect(solidCenter.red >= 200, "纯色填充中心应充满红色")
+
+        let transRect = Annotation(
+            kind: .rectangle(CGRect(x: 5, y: 5, width: 30, height: 30)),
+            color: .red,
+            lineWidth: 2,
+            shapeFillMode: .translucent
+        )
+        let transRendered = try #require(AnnotationRenderer.render(base: base, annotations: [transRect]))
+        let transCenter = try sample(transRendered, 20, 20)
+        #expect(transCenter.red > 30 && transCenter.red < 200, "半透明填充中心应有适中 alpha 叠色")
+    }
+
+    @Test("4 种箭头样式均可正常渲染且不崩溃")
+    func arrowStylesRender() throws {
+        let base = TestImage.solidBlack(side: 60)
+        for style in ArrowStyle.allCases {
+            let arrow = Annotation(
+                kind: .arrow(from: CGPoint(x: 10, y: 30), to: CGPoint(x: 50, y: 30), control: nil),
+                color: .white,
+                lineWidth: 3,
+                arrowStyle: style
+            )
+            let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [arrow]))
+            let hit = try sample(rendered, 30, 30)
+            #expect(hit.red >= 180, "\(style.title) 箭身处应有实心笔迹")
+        }
+    }
+
+    @Test("文字描边与标注气泡均可正常渲染")
+    func textEffectsRender() throws {
+        let base = TestImage.solidBlack(side: 60)
+        let strokedText = Annotation(
+            kind: .text(origin: CGPoint(x: 10, y: 20), string: "Hi", fontSize: 18),
+            color: .red,
+            lineWidth: 2,
+            textHasStroke: true
+        )
+        let rendered1 = try #require(AnnotationRenderer.render(base: base, annotations: [strokedText]))
+        #expect(rendered1.width == 60)
+
+        let calloutText = Annotation(
+            kind: .text(origin: CGPoint(x: 10, y: 20), string: "Hi", fontSize: 18),
+            color: .red,
+            lineWidth: 2,
+            textHasCallout: true
+        )
+        let rendered2 = try #require(AnnotationRenderer.render(base: base, annotations: [calloutText]))
+        #expect(rendered2.width == 60)
+    }
 }

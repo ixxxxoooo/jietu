@@ -103,10 +103,34 @@ enum AnnotationRenderer {
         let body: () -> Void = {
             switch annotation.kind {
             case .rectangle(let rect):
-                context.stroke(contextRect(rect, imageHeight: imageHeight))
+                let cRect = contextRect(rect, imageHeight: imageHeight)
+                switch annotation.shapeFillMode {
+                case .none:
+                    context.stroke(cRect)
+                case .opaque:
+                    context.fill(cRect)
+                case .translucent:
+                    context.saveGState()
+                    context.setFillColor(annotation.color.cgColor.copy(alpha: 0.28) ?? color)
+                    context.fill(cRect)
+                    context.restoreGState()
+                    context.stroke(cRect)
+                }
 
             case .ellipse(let rect):
-                context.strokeEllipse(in: contextRect(rect, imageHeight: imageHeight))
+                let cRect = contextRect(rect, imageHeight: imageHeight)
+                switch annotation.shapeFillMode {
+                case .none:
+                    context.strokeEllipse(in: cRect)
+                case .opaque:
+                    context.fillEllipse(in: cRect)
+                case .translucent:
+                    context.saveGState()
+                    context.setFillColor(annotation.color.cgColor.copy(alpha: 0.28) ?? color)
+                    context.fillEllipse(in: cRect)
+                    context.restoreGState()
+                    context.strokeEllipse(in: cRect)
+                }
 
             case .highlight(let rect):
                 context.saveGState()
@@ -121,7 +145,9 @@ enum AnnotationRenderer {
                     from: from,
                     to: to,
                     control: control,
+                    style: annotation.arrowStyle,
                     lineWidth: annotation.lineWidth,
+                    color: annotation.color,
                     in: context,
                     imageHeight: imageHeight
                 )
@@ -140,6 +166,8 @@ enum AnnotationRenderer {
                     topLeft: origin,
                     fontSize: fontSize,
                     color: annotation.color,
+                    hasStroke: annotation.textHasStroke,
+                    hasCallout: annotation.textHasCallout,
                     in: context,
                     imageHeight: imageHeight
                 )
@@ -214,39 +242,96 @@ enum AnnotationRenderer {
         from: CGPoint,
         to: CGPoint,
         control: CGPoint?,
+        style: ArrowStyle = .standard,
         lineWidth: CGFloat,
+        color: RGBAColor,
         in context: CGContext,
         imageHeight: Int
     ) {
         let start = contextPoint(from, imageHeight: imageHeight)
         let end = contextPoint(to, imageHeight: imageHeight)
 
-        var tangent: CGPoint
+        var tangentStart: CGPoint
+        var tangentEnd: CGPoint
         if let control {
             let c = contextPoint(control, imageHeight: imageHeight)
             context.move(to: start)
             context.addQuadCurve(to: end, control: c)
             context.strokePath()
-            tangent = CGPoint(x: end.x - c.x, y: end.y - c.y)
+            tangentStart = CGPoint(x: c.x - start.x, y: c.y - start.y)
+            tangentEnd = CGPoint(x: end.x - c.x, y: end.y - c.y)
         } else {
             context.move(to: start)
             context.addLine(to: end)
             context.strokePath()
-            tangent = CGPoint(x: end.x - start.x, y: end.y - start.y)
+            tangentStart = CGPoint(x: end.x - start.x, y: end.y - start.y)
+            tangentEnd = tangentStart
         }
 
-        let angle = atan2(tangent.y, tangent.x)
         let headLength = max(12, lineWidth * 5)
         let spread = CGFloat.pi / 7
-        for offset in [CGFloat.pi - spread, CGFloat.pi + spread] {
-            let point = CGPoint(
-                x: end.x + cos(angle + offset) * headLength,
-                y: end.y + sin(angle + offset) * headLength
+
+        // 起点修饰：双向箭头 / 圆点起笔
+        switch style {
+        case .doubleEnded:
+            let startAngle = atan2(-tangentStart.y, -tangentStart.x)
+            for offset in [CGFloat.pi - spread, CGFloat.pi + spread] {
+                let point = CGPoint(
+                    x: start.x + cos(startAngle + offset) * headLength,
+                    y: start.y + sin(startAngle + offset) * headLength
+                )
+                context.move(to: start)
+                context.addLine(to: point)
+            }
+            context.strokePath()
+
+        case .dotTail:
+            let dotRadius = max(4, lineWidth * 1.5)
+            context.fillEllipse(
+                in: CGRect(
+                    x: start.x - dotRadius,
+                    y: start.y - dotRadius,
+                    width: dotRadius * 2,
+                    height: dotRadius * 2
+                )
             )
-            context.move(to: end)
-            context.addLine(to: point)
+
+        case .standard, .tapered:
+            break
         }
-        context.strokePath()
+
+        // 终点箭头：普通 V 箭头 / 实心三角形
+        let endAngle = atan2(tangentEnd.y, tangentEnd.x)
+        switch style {
+        case .standard, .doubleEnded, .dotTail:
+            for offset in [CGFloat.pi - spread, CGFloat.pi + spread] {
+                let point = CGPoint(
+                    x: end.x + cos(endAngle + offset) * headLength,
+                    y: end.y + sin(endAngle + offset) * headLength
+                )
+                context.move(to: end)
+                context.addLine(to: point)
+            }
+            context.strokePath()
+
+        case .tapered:
+            let triLength = max(14, lineWidth * 5.5)
+            let triSpread = CGFloat.pi / 6.5
+            let p1 = CGPoint(
+                x: end.x + cos(endAngle + CGFloat.pi - triSpread) * triLength,
+                y: end.y + sin(endAngle + CGFloat.pi - triSpread) * triLength
+            )
+            let p2 = CGPoint(
+                x: end.x + cos(endAngle + CGFloat.pi + triSpread) * triLength,
+                y: end.y + sin(endAngle + CGFloat.pi + triSpread) * triLength
+            )
+            context.beginPath()
+            context.move(to: end)
+            context.addLine(to: p1)
+            context.addLine(to: p2)
+            context.closePath()
+            context.fillPath()
+        }
     }
 
     private static func drawPen(_ points: [CGPoint], in context: CGContext, imageHeight: Int) {
@@ -271,6 +356,8 @@ enum AnnotationRenderer {
         topLeft: CGPoint,
         fontSize: CGFloat,
         color: RGBAColor,
+        hasStroke: Bool = false,
+        hasCallout: Bool = false,
         in context: CGContext,
         imageHeight: Int
     ) {
@@ -280,12 +367,64 @@ enum AnnotationRenderer {
         var ascent: CGFloat = 0
         var descent: CGFloat = 0
         var leading: CGFloat = 0
-        _ = CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
-        context.textPosition = CGPoint(
-            x: topLeft.x,
-            y: CGFloat(imageHeight) - (topLeft.y + ascent)
-        )
+        let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
+        let height = ascent + descent
+
+        let textY = CGFloat(imageHeight) - (topLeft.y + ascent)
+
+        // 标注特效：绘制背景底板气泡
+        if hasCallout {
+            let paddingH: CGFloat = max(6, fontSize * 0.35)
+            let paddingV: CGFloat = max(3, fontSize * 0.2)
+            let bgRect = CGRect(
+                x: topLeft.x - paddingH,
+                y: textY - descent - paddingV,
+                width: width + paddingH * 2,
+                height: height + paddingV * 2
+            )
+            context.saveGState()
+            context.setFillColor(color.cgColor)
+            let cornerRadius = min(8, bgRect.height / 3)
+            let path = CGPath(
+                roundedRect: bgRect,
+                cornerWidth: cornerRadius,
+                cornerHeight: cornerRadius,
+                transform: nil
+            )
+            context.addPath(path)
+            context.fillPath()
+            context.restoreGState()
+
+            // 标注底板为纯色时，文字使用高对比白色（浅底用黑）
+            let lum = 0.299 * color.red + 0.587 * color.green + 0.114 * color.blue
+            let textColor = lum > 0.65 ? RGBAColor.black : RGBAColor.white
+            let contrastLine = makeLine(string, font: font, color: textColor)
+            context.textPosition = CGPoint(x: topLeft.x, y: textY)
+            CTLineDraw(contrastLine, context)
+            return
+        }
+
+        // 描边特效：先描一圈高对比边框，再填字
+        if hasStroke {
+            let lum = 0.299 * color.red + 0.587 * color.green + 0.114 * color.blue
+            let strokeColor = lum > 0.65 ? RGBAColor.black.cgColor : RGBAColor.white.cgColor
+            let strokeWidth = max(2.5, fontSize * 0.14)
+
+            context.saveGState()
+            context.setTextDrawingMode(.stroke)
+            context.setStrokeColor(strokeColor)
+            context.setLineWidth(strokeWidth)
+            context.setLineJoin(.round)
+            context.textPosition = CGPoint(x: topLeft.x, y: textY)
+            CTLineDraw(line, context)
+            context.restoreGState()
+        }
+
+        context.saveGState()
+        context.setTextDrawingMode(.fill)
+        context.textPosition = CGPoint(x: topLeft.x, y: textY)
         CTLineDraw(line, context)
+        context.restoreGState()
     }
 
     private static func drawCallout(

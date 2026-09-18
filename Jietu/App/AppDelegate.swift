@@ -71,6 +71,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 单实例守卫：多开会让热键重复注册、浮窗／菜单栏各来一份。
         if handOffToExistingInstance() { return }
 
+        // 跑单元测试时宿主是同一个 App bundle，不需要启动实际业务逻辑（菜单栏、全局热键、登录项、OCR 预热等）。
+        guard !Self.isRunningTests else { return }
+
         setUpMenuBar()
         setUpHotkeys()
         setUpQuickAccess()

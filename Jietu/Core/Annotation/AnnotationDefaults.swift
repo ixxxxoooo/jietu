@@ -15,8 +15,17 @@ struct AnnotationDefaults: Equatable, Codable {
     var mosaicBlock: CGFloat
     var blurRadius: CGFloat
     var eraserSize: CGFloat
+    var arrowStyle: ArrowStyle
+    var shapeFillMode: ShapeFillMode
+    var textHasStroke: Bool
+    var textHasCallout: Bool
 
     static let standard = AnnotationDefaults()
+
+    enum CodingKeys: String, CodingKey {
+        case tool, color, lineWidth, fontSize, mosaicBlock, blurRadius, eraserSize
+        case arrowStyle, shapeFillMode, textHasStroke, textHasCallout
+    }
 
     init(
         tool: AnnotationTool = .rectangle,
@@ -25,7 +34,11 @@ struct AnnotationDefaults: Equatable, Codable {
         fontSize: CGFloat = 22,
         mosaicBlock: CGFloat = 10,
         blurRadius: CGFloat = 12,
-        eraserSize: CGFloat = 28
+        eraserSize: CGFloat = 28,
+        arrowStyle: ArrowStyle = .standard,
+        shapeFillMode: ShapeFillMode = .none,
+        textHasStroke: Bool = false,
+        textHasCallout: Bool = false
     ) {
         self.tool = tool
         self.color = color
@@ -34,6 +47,25 @@ struct AnnotationDefaults: Equatable, Codable {
         self.mosaicBlock = mosaicBlock
         self.blurRadius = blurRadius
         self.eraserSize = eraserSize
+        self.arrowStyle = arrowStyle
+        self.shapeFillMode = shapeFillMode
+        self.textHasStroke = textHasStroke
+        self.textHasCallout = textHasCallout
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        tool = try container.decodeIfPresent(AnnotationTool.self, forKey: .tool) ?? .rectangle
+        color = try container.decodeIfPresent(RGBAColor.self, forKey: .color) ?? .red
+        lineWidth = try container.decodeIfPresent(CGFloat.self, forKey: .lineWidth) ?? 7
+        fontSize = try container.decodeIfPresent(CGFloat.self, forKey: .fontSize) ?? 22
+        mosaicBlock = try container.decodeIfPresent(CGFloat.self, forKey: .mosaicBlock) ?? 10
+        blurRadius = try container.decodeIfPresent(CGFloat.self, forKey: .blurRadius) ?? 12
+        eraserSize = try container.decodeIfPresent(CGFloat.self, forKey: .eraserSize) ?? 28
+        arrowStyle = try container.decodeIfPresent(ArrowStyle.self, forKey: .arrowStyle) ?? .standard
+        shapeFillMode = try container.decodeIfPresent(ShapeFillMode.self, forKey: .shapeFillMode) ?? .none
+        textHasStroke = try container.decodeIfPresent(Bool.self, forKey: .textHasStroke) ?? false
+        textHasCallout = try container.decodeIfPresent(Bool.self, forKey: .textHasCallout) ?? false
     }
 
     /// 夹到与 UI 滑块一致的范围。

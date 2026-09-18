@@ -1909,9 +1909,14 @@ final class OverlayCanvasView: NSView {
         model.tool = nil
         model.color = seed.color
         model.lineWidth = seed.lineWidth
+        model.fontSize = seed.fontSize
         model.eraserSize = seed.eraserSize
         model.mosaicBlock = seed.mosaicBlock
         model.blurRadius = seed.blurRadius
+        model.arrowStyle = seed.arrowStyle
+        model.shapeFillMode = seed.shapeFillMode
+        model.textHasStroke = seed.textHasStroke
+        model.textHasCallout = seed.textHasCallout
         model.editorShortcuts = editorShortcuts
         model.onConfirm = { [weak self] in self?.confirmInline() }
         model.onCancel = { [weak self] in self?.onCancel?() }
@@ -1942,7 +1947,7 @@ final class OverlayCanvasView: NSView {
         mainToolbarHost = main
         layoutToolbars()
 
-        // 只在颜色/粗细开关变化时重建下方选项条。
+        // 监听工具/参数变化以更新选项条与存档。
         observeOptions(model)
         observeDefaults(model)
     }
@@ -1953,9 +1958,14 @@ final class OverlayCanvasView: NSView {
             _ = model.tool
             _ = model.color
             _ = model.lineWidth
+            _ = model.fontSize
             _ = model.eraserSize
             _ = model.mosaicBlock
             _ = model.blurRadius
+            _ = model.arrowStyle
+            _ = model.shapeFillMode
+            _ = model.textHasStroke
+            _ = model.textHasCallout
         } onChange: { [weak self] in
             DispatchQueue.main.async {
                 guard let self, self.toolbarModel === model else { return }
@@ -1964,10 +1974,14 @@ final class OverlayCanvasView: NSView {
                         tool: model.tool ?? self.annotationDefaults.tool,
                         color: model.color,
                         lineWidth: model.lineWidth,
-                        fontSize: self.annotationDefaults.fontSize,
+                        fontSize: model.fontSize,
                         mosaicBlock: model.mosaicBlock,
                         blurRadius: model.blurRadius,
-                        eraserSize: model.eraserSize
+                        eraserSize: model.eraserSize,
+                        arrowStyle: model.arrowStyle,
+                        shapeFillMode: model.shapeFillMode,
+                        textHasStroke: model.textHasStroke,
+                        textHasCallout: model.textHasCallout
                     )
                 )
                 self.observeDefaults(model)
@@ -2020,16 +2034,23 @@ final class OverlayCanvasView: NSView {
         toolbarModel = nil
     }
 
-    /// 颜色 / 粗细开关变化时重建选项条（重新量尺寸，避免改尺寸闪烁）。
+    /// 工具/参数/子工具栏开关变化时重建选项条。
     private func observeOptions(_ model: InlineToolbarModel) {
         withObservationTracking {
-            _ = model.showColor
-            _ = model.showWidth
+            _ = model.isSubToolbarVisible
+            _ = model.tool
             _ = model.showScroll
             _ = model.isLiveTextActive
-            // 编辑文字时改颜色 / 粗细，输入框要跟着变（所见即所得）。
             _ = model.color
             _ = model.lineWidth
+            _ = model.fontSize
+            _ = model.eraserSize
+            _ = model.mosaicBlock
+            _ = model.blurRadius
+            _ = model.arrowStyle
+            _ = model.shapeFillMode
+            _ = model.textHasStroke
+            _ = model.textHasCallout
         } onChange: { [weak self] in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -2069,7 +2090,7 @@ final class OverlayCanvasView: NSView {
         optionsToolbarHost?.removeFromSuperview()
         optionsToolbarHost = nil
 
-        guard let model = toolbarModel, model.showColor || model.showWidth || model.showScroll
+        guard let model = toolbarModel, model.isSubToolbarVisible
         else { return }
         let host = NSHostingView(rootView: InlineOptionsToolbar(model: model))
         host.translatesAutoresizingMaskIntoConstraints = true
@@ -2100,15 +2121,18 @@ final class OverlayCanvasView: NSView {
         guard let options = optionsToolbarHost else { return }
         options.layoutSubtreeIfNeeded()
         let size = options.fittingSize
-        // 居中到**刚才点的那个按钮**下方（按钮的 midX 由 SwiftUI 上报）。
-        let anchorX = main.frame.minX + (toolbarModel?.optionsAnchorX ?? mainSize.width)
+        // 居中显示到主工具栏正下方（水平 midX 对齐）
         let x = min(
-            max(anchorX - size.width / 2, bounds.minX + 8),
+            max(main.frame.midX - size.width / 2, bounds.minX + 8),
             max(bounds.minX + 8, bounds.maxX - size.width - 8)
         )
+        var y = main.frame.minY - 8 - size.height
+        if y < bounds.minY + 8 {
+            y = main.frame.maxY + 8
+        }
         options.frame = CGRect(
             x: x,
-            y: main.frame.minY - 8 - size.height,
+            y: y,
             width: size.width,
             height: size.height
         )
@@ -2147,14 +2171,37 @@ final class OverlayCanvasView: NSView {
             height: abs(start.y - current.y)
         )
         switch tool {
-        case .rectangle: return Annotation(kind: .rectangle(rect), color: model.color, lineWidth: model.lineWidth)
-        case .ellipse: return Annotation(kind: .ellipse(rect), color: model.color, lineWidth: model.lineWidth)
-        case .highlight: return Annotation(kind: .highlight(rect), color: model.color, lineWidth: model.lineWidth)
-        case .pixelate: return Annotation(kind: .pixelate(rect, block: model.mosaicBlock), color: model.color, lineWidth: model.lineWidth)
-        case .blur: return Annotation(kind: .blur(rect, radius: model.blurRadius), color: model.color, lineWidth: model.lineWidth)
-        case .arrow: return Annotation(kind: .arrow(from: start, to: current, control: nil), color: model.color, lineWidth: model.lineWidth)
-        case .line: return Annotation(kind: .line(from: start, to: current), color: model.color, lineWidth: model.lineWidth)
-        case .pen: return Annotation(kind: .pen(points: [start, current]), color: model.color, lineWidth: model.lineWidth)
+        case .rectangle:
+            return Annotation(
+                kind: .rectangle(rect),
+                color: model.color,
+                lineWidth: model.lineWidth,
+                shapeFillMode: model.shapeFillMode
+            )
+        case .ellipse:
+            return Annotation(
+                kind: .ellipse(rect),
+                color: model.color,
+                lineWidth: model.lineWidth,
+                shapeFillMode: model.shapeFillMode
+            )
+        case .highlight:
+            return Annotation(kind: .highlight(rect), color: model.color, lineWidth: model.lineWidth)
+        case .pixelate:
+            return Annotation(kind: .pixelate(rect, block: model.mosaicBlock), color: model.color, lineWidth: model.lineWidth)
+        case .blur:
+            return Annotation(kind: .blur(rect, radius: model.blurRadius), color: model.color, lineWidth: model.lineWidth)
+        case .arrow:
+            return Annotation(
+                kind: .arrow(from: start, to: current, control: nil),
+                color: model.color,
+                lineWidth: model.lineWidth,
+                arrowStyle: model.arrowStyle
+            )
+        case .line:
+            return Annotation(kind: .line(from: start, to: current), color: model.color, lineWidth: model.lineWidth)
+        case .pen:
+            return Annotation(kind: .pen(points: [start, current]), color: model.color, lineWidth: model.lineWidth)
         case .counter:
             return Annotation(
                 kind: .counter(center: start, value: inlineCounterValue, leader: nil),
@@ -2391,15 +2438,9 @@ final class OverlayCanvasView: NSView {
         updateInlineSelectionLayers()
     }
 
-    /// 写入标注的字号（图像像素）：与提交时用的同一条公式。
-    private static func inlineTextFontSize(lineWidth: CGFloat) -> CGFloat {
-        max(12, lineWidth * 6)
-    }
-
     /// 字号 / 颜色都跟最终渲染一致（系统字体 + 标注色），这才是「所见即所得」。
     private func applyInlineTextStyle(_ field: NSTextField, model: InlineToolbarModel) {
-        let scale = max(1, snapshot.effectiveScale)
-        let pointSize = Self.inlineTextFontSize(lineWidth: model.lineWidth) / scale
+        let pointSize = max(10, model.fontSize)
         let font = NSFont.systemFont(ofSize: pointSize)
         field.font = font
         let color = NSColor(cgColor: model.color.cgColor) ?? .labelColor
@@ -2465,17 +2506,24 @@ final class OverlayCanvasView: NSView {
 
         pushUndo()
         if let editingID, let index = annotations.firstIndex(where: { $0.id == editingID }) {
-            annotations[index] = annotations[index].withText(string)
+            annotations[index] = annotations[index]
+                .withText(string)
+                .withTextStroke(model.textHasStroke)
+                .withTextCallout(model.textHasCallout)
             selectedID = editingID
         } else {
             let annotation = Annotation(
                 kind: .text(
                     origin: origin,
                     string: string,
-                    fontSize: max(12, model.lineWidth * 6)
+                    fontSize: max(12, model.fontSize * snapshot.effectiveScale)
                 ),
                 color: model.color,
-                lineWidth: model.lineWidth
+                lineWidth: model.lineWidth,
+                arrowStyle: model.arrowStyle,
+                shapeFillMode: model.shapeFillMode,
+                textHasStroke: model.textHasStroke,
+                textHasCallout: model.textHasCallout
             )
             annotations.append(annotation)
             selectedID = annotation.id
