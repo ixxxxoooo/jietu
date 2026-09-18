@@ -1147,6 +1147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 跑单元测试时宿主就是同一个 App bundle，而 App 通常正开着；
         // 这里必须放行，否则测试根本起不来。
         guard !Self.isRunningTests else { return false }
+        #if DEBUG
         // app 级自检常与正式实例同时在场（它要真接线，不能当成"多开"被杀掉）。
         for flag in [
             CaptureSelfTest.appLevelInlineScrollFlag, CaptureSelfTest.appLevelRecordingFlag,
@@ -1154,6 +1155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ] where CommandLine.arguments.contains(flag) {
             return false
         }
+        #endif
         guard let bundleID = Bundle.main.bundleIdentifier, !bundleID.isEmpty else { return false }
         let selfPID = ProcessInfo.processInfo.processIdentifier
         let others = NSRunningApplication
