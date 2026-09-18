@@ -94,15 +94,20 @@ struct InlineTextFieldTests {
         _ = window.makeFirstResponder(field)
         field.attachEditorObservers()
 
-        if let editor = field.currentEditor() as? NSTextView, let storage = editor.textStorage {
-            storage.replaceCharacters(in: NSRange(location: 0, length: 0), with: "ceshi")
-            // 触发 textStorage didProcessEditing
-            NotificationCenter.default.post(
-                name: NSTextStorage.didProcessEditingNotification,
-                object: storage
-            )
-            #expect(changeCount >= 1, "textStorage 变化应触发 onTextWidthChange")
+        #expect(field.isEditable, "InlineTextField 必须可编辑")
+        guard let editor = field.currentEditor() as? NSTextView, let storage = editor.textStorage else {
+            Issue.record("获取焦点后必须成功挂载 currentEditor")
+            return
         }
+
+        storage.replaceCharacters(in: NSRange(location: 0, length: 0), with: "ceshi")
+        // 触发 textStorage didProcessEditing
+        NotificationCenter.default.post(
+            name: NSTextStorage.didProcessEditingNotification,
+            object: storage
+        )
+        #expect(changeCount >= 1, "textStorage 变化应触发 onTextWidthChange")
+        #expect(field.currentText() == "ceshi", "currentText 应返回当前输入的文本")
 
         field.detachEditorObservers()
     }

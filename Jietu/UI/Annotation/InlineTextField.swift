@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 
 /// 专属文字编辑 Cell：支持动态调整水平/垂直内边距（如标注特效气泡所需的 padding）。
 ///
@@ -8,9 +7,19 @@ final class InlineTextFieldCell: NSTextFieldCell {
     var paddingH: CGFloat = 2
     var paddingV: CGFloat = 0
 
+    private func contentRect(for rect: NSRect) -> NSRect {
+        guard rect.width > paddingH * 2 && rect.height > paddingV * 2 else { return rect }
+        return NSRect(
+            x: rect.origin.x + paddingH,
+            y: rect.origin.y + paddingV,
+            width: rect.width - paddingH * 2,
+            height: rect.height - paddingV * 2
+        )
+    }
+
     override func drawingRect(forBounds rect: NSRect) -> NSRect {
-        let original = super.drawingRect(forBounds: rect)
-        return original.insetBy(dx: paddingH, dy: paddingV)
+        let superRect = super.drawingRect(forBounds: rect)
+        return contentRect(for: superRect)
     }
 
     override func edit(
@@ -20,8 +29,7 @@ final class InlineTextFieldCell: NSTextFieldCell {
         delegate: Any?,
         event: NSEvent?
     ) {
-        let inset = rect.insetBy(dx: paddingH, dy: paddingV)
-        super.edit(withFrame: inset, in: controlView, editor: textObj, delegate: delegate, event: event)
+        super.edit(withFrame: contentRect(for: rect), in: controlView, editor: textObj, delegate: delegate, event: event)
     }
 
     override func select(
@@ -32,9 +40,8 @@ final class InlineTextFieldCell: NSTextFieldCell {
         start selStart: Int,
         length selLength: Int
     ) {
-        let inset = rect.insetBy(dx: paddingH, dy: paddingV)
         super.select(
-            withFrame: inset,
+            withFrame: contentRect(for: rect),
             in: controlView,
             editor: textObj,
             delegate: delegate,
@@ -67,21 +74,26 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
     private var storageObserver: Any?
     private var textChangeObserver: Any?
 
+    override class var cellClass: AnyClass? {
+        get { InlineTextFieldCell.self }
+        set { super.cellClass = newValue }
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        self.cell = InlineTextFieldCell(textCell: "")
         self.delegate = self
         setupCommon()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        self.cell = InlineTextFieldCell(textCell: "")
         self.delegate = self
         setupCommon()
     }
 
     private func setupCommon() {
+        isEditable = true
+        isSelectable = true
         isBordered = false
         isBezeled = false
         drawsBackground = false
@@ -265,9 +277,6 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
             editor.textColor = self.textColor
             editor.font = font
             editor.insertionPointColor = self.textColor ?? .textColor
-            if let cell = self.cell as? InlineTextFieldCell {
-                editor.frame = bounds.insetBy(dx: cell.paddingH, dy: cell.paddingV)
-            }
         }
     }
 
@@ -302,153 +311,5 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
         }
 
         self.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
-        if let editor = currentEditor() as? NSTextView, let cell = self.cell as? InlineTextFieldCell {
-            editor.frame = bounds.insetBy(dx: cell.paddingH, dy: cell.paddingV)
-        }
-    }
-}
-
-// MARK: - SwiftUI Representable
-
-/// SwiftUI 容器视图：穿透非文本框区域的鼠标点击，让画布手势正常工作。
-final class InlineTextContainerView: NSView {
-    override var isFlipped: Bool { true }
-
-    let field = InlineTextField(frame: .zero)
-    private var currentOrigin: CGPoint = .zero
-    private var onCommitHandler: (() -> Void)?
-    private var onCancelHandler: (() -> Void)?
-    private var onTextChangedHandler: ((String) -> Void)?
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        addSubview(field)
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        addSubview(field)
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        if field.frame.contains(point) {
-            return super.hitTest(point)
-        }
-        return nil
-    }
-
-    func setup(
-        text: String,
-        origin: CGPoint,
-        fontSize: CGFloat,
-        color: RGBAColor,
-        hasStroke: Bool,
-        hasCallout: Bool,
-        onCommit: @escaping () -> Void,
-        onCancel: @escaping () -> Void,
-        onTextChanged: @escaping (String) -> Void
-    ) {
-        currentOrigin = origin
-        onCommitHandler = onCommit
-        onCancelHandler = onCancel
-        onTextChangedHandler = onTextChanged
-
-        field.stringValue = text
-        field.onCommit = { [weak self] in
-            self?.onCommitHandler?()
-        }
-        field.onCancel = { [weak self] in
-            self?.onCancelHandler?()
-        }
-        field.onTextWidthChange = { [weak self] in
-            guard let self else { return }
-            self.field.fitToOrigin(self.currentOrigin, isFlipped: true)
-            self.onTextChangedHandler?(self.field.currentText())
-        }
-
-        field.applyStyle(
-            fontSize: fontSize,
-            color: color,
-            hasStroke: hasStroke,
-            hasCallout: hasCallout
-        )
-        field.fitToOrigin(origin, isFlipped: true)
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self, let window = self.window else { return }
-            window.makeFirstResponder(self.field)
-            self.field.attachEditorObservers()
-        }
-    }
-
-    func update(
-        text: String,
-        origin: CGPoint,
-        fontSize: CGFloat,
-        color: RGBAColor,
-        hasStroke: Bool,
-        hasCallout: Bool,
-        onCommit: @escaping () -> Void,
-        onCancel: @escaping () -> Void
-    ) {
-        currentOrigin = origin
-        onCommitHandler = onCommit
-        onCancelHandler = onCancel
-
-        let isEditing = (field.currentEditor() as? NSTextView) != nil
-        if !isEditing && field.stringValue != text {
-            field.stringValue = text
-        }
-
-        field.applyStyle(
-            fontSize: fontSize,
-            color: color,
-            hasStroke: hasStroke,
-            hasCallout: hasCallout
-        )
-        field.fitToOrigin(origin, isFlipped: true)
-    }
-}
-
-/// SwiftUI 就地文本编辑宿主组件。
-struct InlineTextEditorHost: NSViewRepresentable {
-    @Binding var text: String
-    let origin: CGPoint
-    let fontSize: CGFloat
-    let color: RGBAColor
-    let hasStroke: Bool
-    let hasCallout: Bool
-    let onCommit: () -> Void
-    let onCancel: () -> Void
-
-    func makeNSView(context: Context) -> InlineTextContainerView {
-        let container = InlineTextContainerView()
-        container.setup(
-            text: text,
-            origin: origin,
-            fontSize: fontSize,
-            color: color,
-            hasStroke: hasStroke,
-            hasCallout: hasCallout,
-            onCommit: onCommit,
-            onCancel: onCancel,
-            onTextChanged: { newText in
-                self.text = newText
-            }
-        )
-        return container
-    }
-
-    func updateNSView(_ container: InlineTextContainerView, context: Context) {
-        container.update(
-            text: text,
-            origin: origin,
-            fontSize: fontSize,
-            color: color,
-            hasStroke: hasStroke,
-            hasCallout: hasCallout,
-            onCommit: onCommit,
-            onCancel: onCancel
-        )
     }
 }

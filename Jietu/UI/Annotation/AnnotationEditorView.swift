@@ -482,17 +482,58 @@ struct AnnotationEditorView: View {
     @ViewBuilder
     private var textEditorOverlay: some View {
         if editingTextID != nil {
-            InlineTextEditorHost(
-                text: $inlineText,
-                origin: inlineOriginView,
-                fontSize: inlineFontSize * pointsPerPixel,
-                color: color,
-                hasStroke: textHasStroke,
-                hasCallout: textHasCallout,
-                onCommit: { commitInlineText() },
-                onCancel: { cancelInlineText() }
+            let font = max(10, inlineFontSize * pointsPerPixel)
+            let measured = Annotation.textSize(
+                string: inlineText.isEmpty ? " " : inlineText,
+                fontSize: inlineFontSize
             )
-            .frame(width: displayedSize.width, height: displayedSize.height)
+            let lum = 0.299 * color.red + 0.587 * color.green + 0.114 * color.blue
+            let contrastColor = lum > 0.65 ? Color.black : Color.white
+            let strokeColor = lum > 0.65 ? Color.black : Color.white
+            let padH: CGFloat = textHasCallout ? max(6, font * 0.35) : 4
+            let padV: CGFloat = textHasCallout ? max(3, font * 0.2) : 2
+            let width = max(28, measured.width * pointsPerPixel + padH * 2 + 8)
+            let height = font * 1.3 + padV * 2 + 4
+
+            TextField("", text: $inlineText)
+                .textFieldStyle(.plain)
+                .font(.system(size: font))
+                .foregroundStyle(textHasCallout ? contrastColor : color.swiftUIColor)
+                .padding(.horizontal, padH)
+                .padding(.vertical, padV)
+                .frame(width: width, height: height)
+                .background(
+                    Group {
+                        if textHasCallout {
+                            RoundedRectangle(cornerRadius: min(8, height / 3), style: .continuous)
+                                .fill(color.swiftUIColor)
+                        } else {
+                            Color.clear
+                        }
+                    }
+                )
+                .overlay(
+                    Group {
+                        if !textHasCallout {
+                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                .strokeBorder(color.swiftUIColor.opacity(0.45), lineWidth: 1)
+                        }
+                    }
+                )
+                .shadow(
+                    color: (textHasStroke && !textHasCallout) ? strokeColor : Color.clear,
+                    radius: max(1, font * 0.08)
+                )
+                .position(
+                    x: inlineOriginView.x + (width / 2) - (textHasCallout ? padH : 0),
+                    y: inlineOriginView.y + (height / 2) - (textHasCallout ? padV : 0)
+                )
+                .focused($inlineFieldFocused)
+                .onSubmit { commitInlineText() }
+                .onExitCommand { cancelInlineText() }
+                .onAppear {
+                    DispatchQueue.main.async { inlineFieldFocused = true }
+                }
         }
     }
 
