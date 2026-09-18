@@ -61,4 +61,20 @@ struct TooltipTests {
         #expect(size.width > 300)
         #expect(size.height > 20)
     }
+
+    @Test("提示延迟常量配置合理（初始延迟在 0.3s~0.6s 之间，连续延迟 <= 0.1s）")
+    func tooltipDelayDurationConfig() {
+        #expect(Theme.Duration.tooltipDelay >= 0.3 && Theme.Duration.tooltipDelay <= 0.6)
+        #expect(Theme.Duration.tooltipReshowDelay <= 0.1)
+    }
+
+    @Test("TooltipTracker 连续悬停状态判定")
+    @MainActor
+    func tooltipTrackerState() {
+        let tracker = TooltipTracker.shared
+        tracker.notifyVisible()
+        #expect(tracker.isContinuouslyHovering)
+        tracker.notifyHidden()
+        #expect(tracker.isContinuouslyHovering)
+    }
 }

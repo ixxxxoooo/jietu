@@ -54,7 +54,7 @@ struct BarButton<Label: View>: View {
         .animation(.easeOut(duration: Theme.Duration.hover), value: hovered)
         .keyboardShortcut(if: key, modifiers: modifiers)
         .tooltip(help, placement: tooltipPlacement)
-        .helpIfPresent(help)
+        .accessibilityLabel(help ?? "")
     }
 
     /// 选中常驻；否则悬停压一层比选中更淡的墨。

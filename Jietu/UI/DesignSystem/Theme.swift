@@ -239,6 +239,10 @@ enum Theme {
         /// 控件响应悬停。
         static let hover: TimeInterval = 0.12
         static let tooltip: TimeInterval = 0.15
+        /// 悬停提示气泡初始出现延迟（避免鼠标掠过时立刻弹出）。
+        static let tooltipDelay: TimeInterval = 0.45
+        /// 连续浏览相邻控件时复用提示的短暂延迟。
+        static let tooltipReshowDelay: TimeInterval = 0.05
         /// 原地工具栏淡入。
         static let toolbarFadeIn: TimeInterval = 0.15
         /// QAO 侧滑。
