@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// 专属文字编辑 Cell：支持动态调整水平/垂直内边距（如标注特效气泡所需的 padding）。
 ///
@@ -70,6 +71,7 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
     var onCancel: (() -> Void)?
     var onCommit: (() -> Void)?
     var onTextWidthChange: (() -> Void)?
+    var onTextChanged: ((String) -> Void)?
 
     private var storageObserver: Any?
     private var textChangeObserver: Any?
@@ -114,6 +116,11 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
         onCommit?()
     }
 
+    func controlTextDidChange(_ obj: Notification) {
+        onTextWidthChange?()
+        onTextChanged?(currentText())
+    }
+
     override func becomeFirstResponder() -> Bool {
         let result = super.becomeFirstResponder()
         attachEditorObservers()
@@ -133,7 +140,9 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
                 object: storage,
                 queue: .main
             ) { [weak self] _ in
-                self?.onTextWidthChange?()
+                guard let self else { return }
+                self.onTextWidthChange?()
+                self.onTextChanged?(self.currentText())
             }
         }
         if textChangeObserver == nil {
@@ -142,7 +151,9 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
                 object: editor,
                 queue: .main
             ) { [weak self] _ in
-                self?.onTextWidthChange?()
+                guard let self else { return }
+                self.onTextWidthChange?()
+                self.onTextChanged?(self.currentText())
             }
         }
     }
@@ -311,5 +322,156 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
         }
 
         self.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
+    }
+}
+
+/// 容纳 `InlineTextField` 的容器视图，提供 SwiftUI 与 AppKit 之间的事件桥接与自适应定位。
+final class InlineTextFieldContainerView: NSView {
+    override var isFlipped: Bool { true }
+
+    let textField = InlineTextField(frame: .zero)
+    var origin: CGPoint = .zero
+    var onTextChange: ((String) -> Void)?
+    var onCommit: ((String) -> Void)?
+    var onCancel: (() -> Void)?
+
+    var isEditingMarkedText: Bool {
+        if let editor = textField.currentEditor() as? NSTextView {
+            return editor.hasMarkedText()
+        }
+        return false
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setupView()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupView()
+    }
+
+    private func setupView() {
+        wantsLayer = false
+        addSubview(textField)
+
+        textField.onCancel = { [weak self] in
+            self?.onCancel?()
+        }
+        textField.onCommit = { [weak self] in
+            guard let self else { return }
+            self.onCommit?(self.textField.currentText())
+        }
+        textField.onTextWidthChange = { [weak self] in
+            guard let self else { return }
+            self.fitField()
+        }
+        textField.onTextChanged = { [weak self] text in
+            guard let self else { return }
+            self.fitField()
+            self.onTextChange?(text)
+        }
+    }
+
+    func applyStyle(
+        fontSize: CGFloat,
+        color: RGBAColor,
+        hasStroke: Bool,
+        hasCallout: Bool
+    ) {
+        textField.applyStyle(
+            fontSize: fontSize,
+            color: color,
+            hasStroke: hasStroke,
+            hasCallout: hasCallout
+        )
+        fitField()
+    }
+
+    func fitField() {
+        textField.fitToOrigin(origin, isFlipped: true)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if textField.frame.contains(point) {
+            return super.hitTest(point)
+        }
+        return nil
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let win = self.window else { return }
+                win.makeFirstResponder(self.textField)
+                self.textField.selectText(nil)
+                self.textField.attachEditorObservers()
+                self.fitField()
+            }
+        }
+    }
+}
+
+/// 在 SwiftUI 画布中宿主 `InlineTextField`，保证与原地编辑文本框体验和样式完全一致。
+///
+/// @author ixxxxoooo
+struct InlineTextFieldHost: NSViewRepresentable {
+    @Binding var text: String
+    var origin: CGPoint
+    var fontSize: CGFloat
+    var color: RGBAColor
+    var hasStroke: Bool
+    var hasCallout: Bool
+    var onCommit: (String) -> Void
+    var onCancel: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeNSView(context: Context) -> InlineTextFieldContainerView {
+        let container = InlineTextFieldContainerView()
+        container.origin = origin
+        container.textField.stringValue = text
+        container.onTextChange = { [weak coordinator = context.coordinator] newText in
+            coordinator?.parent.text = newText
+        }
+        container.onCommit = { [weak coordinator = context.coordinator] committedText in
+            coordinator?.parent.onCommit(committedText)
+        }
+        container.onCancel = { [weak coordinator = context.coordinator] in
+            coordinator?.parent.onCancel()
+        }
+        container.applyStyle(
+            fontSize: fontSize,
+            color: color,
+            hasStroke: hasStroke,
+            hasCallout: hasCallout
+        )
+        return container
+    }
+
+    func updateNSView(_ nsView: InlineTextFieldContainerView, context: Context) {
+        context.coordinator.parent = self
+        nsView.origin = origin
+        nsView.applyStyle(
+            fontSize: fontSize,
+            color: color,
+            hasStroke: hasStroke,
+            hasCallout: hasCallout
+        )
+        if nsView.textField.stringValue != text && !nsView.isEditingMarkedText {
+            nsView.textField.stringValue = text
+            nsView.fitField()
+        }
+    }
+
+    final class Coordinator {
+        var parent: InlineTextFieldHost
+        init(_ parent: InlineTextFieldHost) {
+            self.parent = parent
+        }
     }
 }

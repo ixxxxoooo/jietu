@@ -458,12 +458,21 @@ extension Annotation {
         let local = toLocal(point)
         switch kind {
         case .rectangle(let rect):
-            // 矩形**只画了边框**（渲染器走 `stroke`，中间是透明的），命中判定也只能认边框：
-            // 之前按整块矩形判，于是框中间一按就变成「选中并移动这个框」，
-            // 想在里面再画一个框根本画不上（用户报的就是这个）。
+            if shapeFillMode == .opaque || shapeFillMode == .translucent {
+                return rect.insetBy(dx: -tolerance, dy: -tolerance).contains(local)
+            }
             return Annotation.distanceToRectBorder(local, rect: rect) <= max(tolerance, lineWidth / 2)
         case .ellipse(let rect):
-            // 椭圆同理：只认那一圈线。
+            if shapeFillMode == .opaque || shapeFillMode == .translucent {
+                let rx = rect.width / 2 + tolerance
+                let ry = rect.height / 2 + tolerance
+                guard rx > 0 && ry > 0 else { return false }
+                let cx = rect.midX
+                let cy = rect.midY
+                let dx = local.x - cx
+                let dy = local.y - cy
+                return (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) <= 1.0
+            }
             return Annotation.distanceToEllipseBorder(local, rect: rect)
                 <= max(tolerance, lineWidth / 2)
         case .highlight(let points):

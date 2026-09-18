@@ -78,12 +78,12 @@ struct ShapeFillModePicker: View {
                         color: isSelected ? Theme.Colors.selectionGreen : Theme.Colors.textSecondary,
                         isCircle: isCircle
                     )
-                    .padding(.horizontal, 3)
-                    .padding(.vertical, 2)
+                    .frame(width: 28, height: 24)
                     .background(
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(isSelected ? Theme.Colors.controlSurface : Color.clear)
+                            .fill(isSelected ? Theme.Colors.controlSurface : Color.black.opacity(0.001))
                     )
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(mode.title)

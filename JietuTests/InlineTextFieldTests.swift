@@ -267,4 +267,55 @@ struct InlineTextFieldTests {
         let pickerRect = ShapeFillModePicker(selectedMode: .constant(.none), isCircle: false)
         #expect(pickerRect.isCircle == false, "默认应为矩形图标")
     }
+
+    @Test("InlineTextFieldContainerView 支持样式应用、文本同步与提交取消")
+    func inlineTextFieldContainerBehavior() {
+        let container = InlineTextFieldContainerView()
+        container.origin = CGPoint(x: 50, y: 80)
+        var committedText: String?
+        var cancelled = false
+        var textChanged: String?
+
+        container.onCommit = { text in committedText = text }
+        container.onCancel = { cancelled = true }
+        container.onTextChange = { text in textChanged = text }
+
+        container.textField.stringValue = "你好"
+        container.applyStyle(
+            fontSize: 18,
+            color: .red,
+            hasStroke: true,
+            hasCallout: false
+        )
+
+        #expect(container.textField.font?.pointSize == 18)
+        #expect(container.textField.stringValue == "你好")
+
+        container.textField.onTextChanged?("测试输入")
+        #expect(textChanged == "测试输入")
+
+        container.textField.onCommit?()
+        #expect(committedText == "你好")
+
+        container.textField.onCancel?()
+        #expect(cancelled == true)
+    }
+
+    @Test("填充图形在实心/半透明下点击内部命中，线框模式下仅边缘命中")
+    func filledShapeHitTesting() {
+        let rect = CGRect(x: 10, y: 10, width: 100, height: 100)
+        let strokeRect = Annotation(kind: .rectangle(rect), color: .red, shapeFillMode: .none)
+        let filledRect = Annotation(kind: .rectangle(rect), color: .red, shapeFillMode: .opaque)
+
+        let insideCenter = CGPoint(x: 60, y: 60)
+        let onBorder = CGPoint(x: 10, y: 50)
+
+        // 内部中心点：线框不命中，填充命中
+        #expect(!strokeRect.contains(insideCenter, tolerance: 2))
+        #expect(filledRect.contains(insideCenter, tolerance: 2))
+
+        // 边缘点：两者皆命中
+        #expect(strokeRect.contains(onBorder, tolerance: 4))
+        #expect(filledRect.contains(onBorder, tolerance: 4))
+    }
 }

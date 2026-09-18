@@ -142,6 +142,7 @@ final class OverlayCanvasView: NSView {
     private var redoStack: [Snapshot] = []
     private var eraserStrokes: [EraserStroke] = []
     private var selectedID: UUID?
+    private var hoveredAnnotationID: UUID?
     private var erasing = false
     private var lastErasePoint: CGPoint?
 
@@ -1145,9 +1146,21 @@ final class OverlayCanvasView: NSView {
                 tolerance: Theme.selectionHandleHitTolerance
             ) {
                 SelectionCursor.cursor(for: handle).set()
-            } else if let tool = toolbarModel?.tool {
+                return
+            }
+            let crop = annotationPoint(from: point)
+            let target = selectedAnnotation ?? (hoveredAnnotationID.flatMap { id in annotations.first { $0.id == id } })
+            if let target, let handle = inlineHitHandle(target, at: crop) {
+                SelectionCursor.cursor(forShapeHandle: handle).set()
+                return
+            }
+            if let tool = toolbarModel?.tool {
                 if tool == .text {
-                    NSCursor.iBeam.set()
+                    if inlineAnnotation(at: crop) != nil {
+                        NSCursor.arrow.set()
+                    } else {
+                        NSCursor.iBeam.set()
+                    }
                 } else {
                     NSCursor.arrow.set()
                 }
@@ -1188,6 +1201,14 @@ final class OverlayCanvasView: NSView {
         requestFocusIfNeeded()
         let point = convert(event.locationInWindow, from: nil)
         cursorPoint = point
+        if phase == .annotating {
+            let crop = annotationPoint(from: point)
+            let newHover = inlineAnnotation(at: crop)?.id
+            if newHover != hoveredAnnotationID {
+                hoveredAnnotationID = newHover
+                updateInlineSelectionLayers()
+            }
+        }
         updateHoveredWindow(at: point)
         updateCrosshair()
         updateLoupe()
@@ -1197,6 +1218,8 @@ final class OverlayCanvasView: NSView {
     override func mouseExited(with event: NSEvent) {
         cursorPoint = nil
         hoveredWindow = nil
+        hoveredAnnotationID = nil
+        updateInlineSelectionLayers()
         updateWindowHighlight()
         updateCrosshair()
         updateLoupe()
@@ -1855,7 +1878,9 @@ final class OverlayCanvasView: NSView {
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
 
-        guard phase == .annotating, let selected = selectedAnnotation, inlineEditingTextID == nil else {
+        let target = selectedAnnotation ?? (hoveredAnnotationID.flatMap { id in annotations.first { $0.id == id } })
+
+        guard phase == .annotating, let target, inlineEditingTextID == nil else {
             inlineSelectionBorderLayer.isHidden = true
             inlineHandlesLayer.isHidden = true
             inlineSelectionBorderLayer.path = nil
@@ -1863,7 +1888,7 @@ final class OverlayCanvasView: NSView {
             return
         }
 
-        let corners = selected.rotatedCorners().map { viewPoint($0) }
+        let corners = target.rotatedCorners().map { viewPoint($0) }
         let border = CGMutablePath()
         border.addLines(between: corners)
         border.closeSubpath()
@@ -1872,7 +1897,7 @@ final class OverlayCanvasView: NSView {
 
         let path = CGMutablePath()
         let radius = Self.inlineHandleRadius
-        for (_, point) in inlineHandles(for: selected) {
+        for (_, point) in inlineHandles(for: target) {
             let center = viewPoint(point)
             path.addEllipse(
                 in: CGRect(
@@ -2277,26 +2302,29 @@ final class OverlayCanvasView: NSView {
             return
         }
 
-        // 1) 选中对象 + 命中控制点 → 缩放 / 旋转 / 端点（仅在未选绘制工具或选择模式下）
-        if (tool == nil || tool == .select),
-            let selected = selectedAnnotation,
-            let handle = inlineHitHandle(selected, at: crop)
+        // 1) 选中对象 + 命中控制点 → 缩放 / 旋转 / 端点（非自由涂抹工具下）
+        let activeTarget = selectedAnnotation ?? (hoveredAnnotationID.flatMap { id in annotations.first { $0.id == id } })
+        if tool != .pen, tool != .highlight,
+            let target = activeTarget,
+            let handle = inlineHitHandle(target, at: crop)
         {
+            selectedID = target.id
             pushUndo()
             switch handle {
             case .rotate:
-                let angle = atan2(crop.y - selected.center.y, crop.x - selected.center.x)
-                inlineEditDrag = .rotating(id: selected.id, startAngle: angle, original: selected)
+                let angle = atan2(crop.y - target.center.y, crop.x - target.center.x)
+                inlineEditDrag = .rotating(id: target.id, startAngle: angle, original: target)
             case .arrowStart, .arrowEnd, .arrowControl, .counterLeader:
-                inlineEditDrag = .endpoint(id: selected.id, handle: handle, original: selected)
+                inlineEditDrag = .endpoint(id: target.id, handle: handle, original: target)
             default:
-                inlineEditDrag = .resizing(id: selected.id, handle: handle, original: selected)
+                inlineEditDrag = .resizing(id: target.id, handle: handle, original: target)
             }
+            updateInlineSelectionLayers()
             return
         }
 
-        // 2) 命中已有标注 → 选中并移动（仅在选择模式下，不劫持绘制工具）
-        if (tool == nil || tool == .select), let hit = inlineAnnotation(at: crop) {
+        // 2) 命中已有标注 → 选中并移动（非自由涂抹工具下）
+        if tool != .pen, tool != .highlight, let hit = inlineAnnotation(at: crop) {
             selectedID = hit.id
             if clickCount >= 2, case .text = hit.kind {
                 beginInlineText(at: textOrigin(of: hit), editing: hit)
@@ -2409,7 +2437,7 @@ final class OverlayCanvasView: NSView {
             if let draft = annotationDraft, isValidInlineDraft(draft) {
                 pushUndo()
                 annotations.append(draft)
-                selectedID = nil
+                selectedID = draft.id
                 if case .counter = draft.kind { inlineCounterValue += 1 }
             }
             annotationDraft = nil
@@ -2538,7 +2566,7 @@ final class OverlayCanvasView: NSView {
                 .withText(string)
                 .withTextStroke(model.textHasStroke)
                 .withTextCallout(model.textHasCallout)
-            selectedID = nil
+            selectedID = editingID
         } else {
             let annotation = Annotation(
                 kind: .text(
@@ -2554,7 +2582,7 @@ final class OverlayCanvasView: NSView {
                 textHasCallout: model.textHasCallout
             )
             annotations.append(annotation)
-            selectedID = nil
+            selectedID = annotation.id
         }
         updateAnnotationLayer()
         updateInlineSelectionLayers()

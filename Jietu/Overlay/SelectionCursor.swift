@@ -10,6 +10,22 @@ enum SelectionCursor {
         )
     }
 
+    static func cursor(forShapeHandle handle: ShapeHandle) -> NSCursor {
+        switch handle {
+        case .topLeft: return cursor(for: SelectionHandle.topLeft)
+        case .top: return cursor(for: SelectionHandle.top)
+        case .topRight: return cursor(for: SelectionHandle.topRight)
+        case .right: return cursor(for: SelectionHandle.right)
+        case .bottomRight: return cursor(for: SelectionHandle.bottomRight)
+        case .bottom: return cursor(for: SelectionHandle.bottom)
+        case .bottomLeft: return cursor(for: SelectionHandle.bottomLeft)
+        case .left: return cursor(for: SelectionHandle.left)
+        case .rotate: return NSCursor.arrow
+        case .arrowStart, .arrowEnd, .arrowControl, .lineStart, .lineEnd, .counterLeader:
+            return NSCursor.crosshair
+        }
+    }
+
     private static func position(for handle: SelectionHandle) -> NSCursor.FrameResizePosition {
         switch handle {
         case .topLeft: return .topLeft

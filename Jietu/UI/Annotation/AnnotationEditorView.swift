@@ -125,13 +125,17 @@ struct AnnotationEditorView: View {
     @State private var draft: Annotation?
     @State private var lastErasePoint: CGPoint?
 
+    @State private var hoveredID: UUID?
     @State private var editingTextID: UUID?
 
     /// 内联文字编辑。
     @State private var inlineText = ""
-    @State private var inlineOriginView: CGPoint = .zero
+    @State private var inlineOriginPx: CGPoint = .zero
     @State private var inlineFontSize: CGFloat = 22
-    @FocusState private var inlineFieldFocused: Bool
+
+    private var inlineOriginView: CGPoint {
+        viewPoint(inlineOriginPx)
+    }
 
     @State private var isLiveTextActive = false
     @State private var toolbarHeight: CGFloat = 45
@@ -292,6 +296,15 @@ struct AnnotationEditorView: View {
                     .interpolation(zoom >= 1 ? .none : .high)
                     .frame(width: displayedSize.width, height: displayedSize.height)
                     .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let location):
+                            let px = imagePoint(from: location)
+                            hoveredID = topmostAnnotation(at: px)?.id
+                        case .ended:
+                            hoveredID = nil
+                        }
+                    }
                     .gesture(drawGesture)
                     .simultaneousGesture(
                         SpatialTapGesture(count: 2).onEnded { value in
@@ -308,7 +321,7 @@ struct AnnotationEditorView: View {
                 textEditorOverlay
             } else {
                 ProgressView()
-                    .frame(width: 240, height: 160)
+                .frame(width: 240, height: 160)
             }
         }
         .frame(width: displayedSize.width, height: displayedSize.height)
@@ -324,12 +337,13 @@ struct AnnotationEditorView: View {
         .padding(inline ? 0 : Self.padding)
     }
 
-    /// 选中态：包围盒 + 控制点。
+    /// 选中态 / 悬停态：包围盒 + 控制点。
     private var selectionOverlay: some View {
         Canvas { context, _ in
-            guard let selected = selectedAnnotation else { return }
+            let target = selectedAnnotation ?? (hoveredID.flatMap { id in annotations.first { $0.id == id } })
+            guard let target, editingTextID == nil else { return }
 
-            let corners = selected.rotatedCorners().map(viewPoint)
+            let corners = target.rotatedCorners().map(viewPoint)
             var border = Path()
             border.addLines(corners)
             border.closeSubpath()
@@ -339,7 +353,7 @@ struct AnnotationEditorView: View {
                 style: StrokeStyle(lineWidth: 1.2, dash: [5, 3])
             )
 
-            for (handle, position) in shapHandles(for: selected) {
+            for (handle, position) in shapHandles(for: target) {
                 let center = viewPoint(position)
                 let rect = CGRect(
                     x: center.x - Self.handleRadius,
@@ -478,62 +492,26 @@ struct AnnotationEditorView: View {
         .help(title)
     }
 
-    /// 内联文字编辑：直接在图片原位置输入，不再弹窗。
+    /// 内联文字编辑：复用 InlineTextFieldHost，与原地编辑完全一致（字体、气泡底板、描边、拼音展开与光标对齐）。
     @ViewBuilder
     private var textEditorOverlay: some View {
         if editingTextID != nil {
-            let font = max(10, inlineFontSize * pointsPerPixel)
-            let measured = Annotation.textSize(
-                string: inlineText.isEmpty ? " " : inlineText,
-                fontSize: inlineFontSize
-            )
-            let lum = 0.299 * color.red + 0.587 * color.green + 0.114 * color.blue
-            let contrastColor = lum > 0.65 ? Color.black : Color.white
-            let strokeColor = lum > 0.65 ? Color.black : Color.white
-            let padH: CGFloat = textHasCallout ? max(6, font * 0.35) : 4
-            let padV: CGFloat = textHasCallout ? max(3, font * 0.2) : 2
-            let width = max(28, measured.width * pointsPerPixel + padH * 2 + 8)
-            let height = font * 1.3 + padV * 2 + 4
-
-            TextField("", text: $inlineText)
-                .textFieldStyle(.plain)
-                .font(.system(size: font))
-                .foregroundStyle(textHasCallout ? contrastColor : color.swiftUIColor)
-                .padding(.horizontal, padH)
-                .padding(.vertical, padV)
-                .frame(width: width, height: height)
-                .background(
-                    Group {
-                        if textHasCallout {
-                            RoundedRectangle(cornerRadius: min(8, height / 3), style: .continuous)
-                                .fill(color.swiftUIColor)
-                        } else {
-                            Color.clear
-                        }
-                    }
-                )
-                .overlay(
-                    Group {
-                        if !textHasCallout {
-                            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                .strokeBorder(color.swiftUIColor.opacity(0.45), lineWidth: 1)
-                        }
-                    }
-                )
-                .shadow(
-                    color: (textHasStroke && !textHasCallout) ? strokeColor : Color.clear,
-                    radius: max(1, font * 0.08)
-                )
-                .position(
-                    x: inlineOriginView.x + (width / 2) - (textHasCallout ? padH : 0),
-                    y: inlineOriginView.y + (height / 2) - (textHasCallout ? padV : 0)
-                )
-                .focused($inlineFieldFocused)
-                .onSubmit { commitInlineText() }
-                .onExitCommand { cancelInlineText() }
-                .onAppear {
-                    DispatchQueue.main.async { inlineFieldFocused = true }
+            InlineTextFieldHost(
+                text: $inlineText,
+                origin: inlineOriginView,
+                fontSize: max(10, inlineFontSize * pointsPerPixel),
+                color: color,
+                hasStroke: textHasStroke,
+                hasCallout: textHasCallout,
+                onCommit: { committed in
+                    inlineText = committed
+                    commitInlineText()
+                },
+                onCancel: {
+                    cancelInlineText()
                 }
+            )
+            .frame(width: displayedSize.width, height: displayedSize.height)
         }
     }
 
@@ -939,31 +917,31 @@ struct AnnotationEditorView: View {
             return
         }
 
-        // 绘图模式下（矩形、椭圆、箭头、画笔、高亮笔等），点击直接开始绘制新标注，绝不劫持去拖动已有标注
-        if tool.isDrawing {
+        // 画笔与高亮笔是连续涂抹笔迹，直接开始绘制，不劫持
+        if tool == .pen || tool == .highlight {
             selectedID = nil
             dragMode = .creating(start: startPx)
             return
         }
 
-        // 1) 仅在选择工具下：选中标注的控制点
-        if let selected = selectedAnnotation,
-            let handle = hitHandle(for: selected, at: startView)
-        {
+        // 1) 命中控制点（当前选中或悬停对象）
+        let activeTarget = selectedAnnotation ?? (hoveredID.flatMap { id in annotations.first { $0.id == id } })
+        if let target = activeTarget, let handle = hitHandle(for: target, at: startView) {
+            selectedID = target.id
             pushUndo()
             switch handle {
             case .rotate:
-                let angle = atan2(startPx.y - selected.center.y, startPx.x - selected.center.x)
-                dragMode = .rotating(id: selected.id, startAngle: angle, original: selected)
+                let angle = atan2(startPx.y - target.center.y, startPx.x - target.center.x)
+                dragMode = .rotating(id: target.id, startAngle: angle, original: target)
             case .arrowStart, .arrowEnd, .arrowControl, .counterLeader:
-                dragMode = .endpoint(id: selected.id, handle: handle, original: selected)
+                dragMode = .endpoint(id: target.id, handle: handle, original: target)
             default:
-                dragMode = .resizing(id: selected.id, handle: handle, original: selected)
+                dragMode = .resizing(id: target.id, handle: handle, original: target)
             }
             return
         }
 
-        // 2) 仅在选择工具下：命中已有标注 → 选中并移动
+        // 2) 命中已有标注 → 选中并移动
         if let hit = topmostAnnotation(at: startPx) {
             selectedID = hit.id
             syncStateFromAnnotation(hit)
@@ -972,9 +950,14 @@ struct AnnotationEditorView: View {
             return
         }
 
-        // 3) 选择工具点击空白处 → 取消选中
-        selectedID = nil
-        dragMode = .none
+        // 3) 空白处：若有绘图工具则开始绘制，否则取消选中
+        if tool.isDrawing {
+            selectedID = nil
+            dragMode = .creating(start: startPx)
+        } else {
+            selectedID = nil
+            dragMode = .none
+        }
     }
 
     private func continueDrag(currentPx: CGPoint, currentView: CGPoint) {
@@ -1028,11 +1011,11 @@ struct AnnotationEditorView: View {
             // 文本：落一个空文本对象，随即进入内联编辑（不弹窗）。
             if let draft, case .text(let origin, _, let size) = draft.kind {
                 annotations.append(draft)
-                selectedID = nil
+                selectedID = draft.id
                 editingTextID = draft.id
                 inlineText = ""
                 inlineFontSize = size
-                inlineOriginView = viewPoint(origin)
+                inlineOriginPx = origin
             }
             self.draft = nil
             dragMode = .none
@@ -1044,7 +1027,7 @@ struct AnnotationEditorView: View {
             if let draft, isValid(draft) {
                 pushUndo()
                 annotations.append(draft)
-                selectedID = nil
+                selectedID = draft.id
                 if case .counter = draft.kind { counterValue += 1 }
             }
         case .erasing:
@@ -1274,7 +1257,7 @@ struct AnnotationEditorView: View {
         editingTextID = id
         inlineText = string
         inlineFontSize = size
-        inlineOriginView = viewPoint(origin)
+        inlineOriginPx = origin
     }
 
     /// 提交内联文字：空文本视为取消并删除该对象。
@@ -1283,29 +1266,32 @@ struct AnnotationEditorView: View {
         let trimmed = inlineText.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             annotations.removeAll { $0.id == id }
+            selectedID = nil
         } else if let index = annotations.firstIndex(where: { $0.id == id }) {
             pushUndo()
             annotations[index] = annotations[index]
                 .withText(trimmed)
+                .withFontSize(inlineFontSize)
                 .withColor(color)
                 .withTextStroke(textHasStroke)
                 .withTextCallout(textHasCallout)
+            selectedID = id
         }
         editingTextID = nil
-        selectedID = nil
         inlineText = ""
-        inlineFieldFocused = false
     }
 
     /// 取消内联编辑：新建的空文本对象直接丢弃。
     private func cancelInlineText() {
         if let id = editingTextID {
-            annotations.removeAll { $0.id == id }
+            if let ann = annotations.first(where: { $0.id == id }),
+               case .text(_, let string, _) = ann.kind, string.isEmpty {
+                annotations.removeAll { $0.id == id }
+            }
         }
         editingTextID = nil
         selectedID = nil
         inlineText = ""
-        inlineFieldFocused = false
     }
 
     private func topmostAnnotation(at point: CGPoint) -> Annotation? {
@@ -1466,6 +1452,9 @@ struct AnnotationEditorView: View {
     private var renderedPreview: CGImage? {
         guard let previewBase else { return nil }
         var list = annotations
+        if let editingTextID {
+            list.removeAll { $0.id == editingTextID }
+        }
         // 裁剪框只是预览遮罩，不能烘进底图。
         if let draft, tool != .crop { list.append(draft) }
         let scale = previewBaseScale
