@@ -11,6 +11,96 @@ struct AnnotationRendererTests {
         try #require(PixelSampler.sample(image, atPixel: CGPoint(x: x, y: y)))
     }
 
+    @Test("透明标注层叠回底图 == 一次烘出来的结果（原地预览的两层做法）")
+    func transparentLayerCompositesEqualToOpaqueRender() throws {
+        // 底图给足纹理，模糊 / 马赛克 / 擦除才有东西可作用。
+        let base = TestImage.make(width: 96, height: 72) { x, y in
+            (
+                UInt8((x * 3 + y * 5) % 200 + 40),
+                UInt8((x * 2 + y * 7) % 180 + 30),
+                UInt8((x + y * 3) % 200 + 20)
+            )
+        }
+        var annotations: [Annotation] = [
+            Annotation(kind: .rectangle(CGRect(x: 4, y: 4, width: 30, height: 20)), color: .red, lineWidth: 4, shapeFillMode: .translucent),
+            Annotation(kind: .ellipse(CGRect(x: 40, y: 6, width: 26, height: 18)), color: .blue, lineWidth: 3),
+            Annotation(kind: .line(from: CGPoint(x: 6, y: 40), to: CGPoint(x: 88, y: 46)), color: .green, lineWidth: 5),
+            Annotation(kind: .pen(points: [CGPoint(x: 8, y: 60), CGPoint(x: 24, y: 52), CGPoint(x: 40, y: 64)]), color: .orange, lineWidth: 4),
+            Annotation(kind: .highlight(points: [CGPoint(x: 6, y: 30), CGPoint(x: 60, y: 32)]), color: .yellow, lineWidth: 3),
+            Annotation(kind: .text(origin: CGPoint(x: 8, y: 8), string: "Hi", fontSize: 12), color: .black, lineWidth: 3, textHasStroke: true, textHasCallout: true),
+            Annotation(kind: .counter(center: CGPoint(x: 70, y: 40), value: 1, leader: CGPoint(x: 84, y: 56)), color: .red, lineWidth: 3),
+            Annotation(kind: .pixelate(CGRect(x: 60, y: 4, width: 30, height: 16), block: 6), color: .black),
+            Annotation(kind: .blur(CGRect(x: 30, y: 44, width: 34, height: 22), radius: 5), color: .white),
+            Annotation(kind: .spotlight(CGRect(x: 20, y: 24, width: 40, height: 30)), color: .black, lineWidth: 3),
+            Annotation(kind: .eraser(points: [CGPoint(x: 12, y: 20), CGPoint(x: 26, y: 34)], radius: 4), color: .white, lineWidth: 8),
+        ]
+        for style in [ArrowStyle.tapered, .line, .doubleEnded, .dotTail] {
+            annotations.append(
+                Annotation(
+                    kind: .arrow(from: CGPoint(x: 12, y: 66), to: CGPoint(x: 88, y: 66), control: nil),
+                    color: .red,
+                    lineWidth: 4,
+                    arrowStyle: style
+                )
+            )
+        }
+        annotations.append(
+            Annotation(
+                kind: .arrow(from: CGPoint(x: 30, y: 70), to: CGPoint(x: 90, y: 70), control: CGPoint(x: 60, y: 40)),
+                color: .blue,
+                lineWidth: 4,
+                arrowStyle: .tapered
+            )
+        )
+        let strokes = [EraserStroke(points: [CGPoint(x: 60, y: 60), CGPoint(x: 80, y: 68)], radius: 5)]
+
+        let oneShot = try #require(
+            AnnotationRenderer.render(base: base, annotations: annotations, eraserStrokes: strokes)
+        )
+        let layer = try #require(
+            AnnotationRenderer.render(
+                base: base,
+                annotations: annotations,
+                eraserStrokes: strokes,
+                drawsBase: false
+            )
+        )
+
+        // 自己把「透明标注层」按原样叠回底图 —— 也就是窗口服务器在屏幕上做的事。
+        let width = base.width
+        let height = base.height
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        )
+        context.draw(base, in: CGRect(x: 0, y: 0, width: width, height: height))
+        context.draw(layer, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let composited = try #require(context.makeImage())
+
+        var worst = 0
+        for x in 0..<width {
+            for y in 0..<height {
+                let a = try sample(oneShot, x, y)
+                let b = try sample(composited, x, y)
+                worst = max(
+                    worst,
+                    abs(Int(a.red) - Int(b.red)),
+                    abs(Int(a.green) - Int(b.green)),
+                    abs(Int(a.blue) - Int(b.blue))
+                )
+            }
+        }
+        // 允许 ±2 的舍入差；再大就说明两条路画出来的东西不一样。
+        #expect(worst <= 2, "逐像素最大偏差 \(worst)")
+    }
+
     @Test("无标注时输出与原图同尺寸")
     func renderEmptyKeepsSize() throws {
         let base = TestImage.solidBlack(side: 20)
@@ -168,6 +258,122 @@ struct AnnotationRendererTests {
         // 白线（255）在聚光灯外 → 被压暗到 255 × 0.48 ≈ 122。
         let dimmed = try sample(rendered, 20, 6)
         #expect(dimmed.red >= 100 && dimmed.red <= 145)
+    }
+
+    @Test("drawsBase=false 出的是透明底标注层：标注之外全透明")
+    func transparentAnnotationLayerLeavesBackgroundAlone() throws {
+        let base = TestImage.solidBlack(side: 40)
+        let line = Annotation(
+            kind: .line(from: CGPoint(x: 4, y: 20), to: CGPoint(x: 36, y: 20)),
+            color: .red,
+            lineWidth: 6
+        )
+        let layer = try #require(
+            AnnotationRenderer.render(base: base, annotations: [line], drawsBase: false)
+        )
+        #expect(layer.width == 40 && layer.height == 40)
+
+        // 标注之外必须是透明的（原地预览要靠这一点把底图透出来）。
+        let alpha = try #require(PixelSampler.sample(layer, atPixel: CGPoint(x: 20, y: 4)))
+        #expect(alpha.alpha == 0)
+        // 标注处是不透明的红。
+        let onLine = try sample(layer, 20, 20)
+        #expect(onLine.red >= 200 && onLine.alpha == 255)
+    }
+
+    // MARK: - 箭头
+
+    /// 白底上画红箭头 →「红高、绿低」就是在墨上。
+    private func isInked(_ image: CGImage, _ x: Int, _ y: Int) throws -> Bool {
+        let value = try sample(image, x, y)
+        return value.red > 120 && value.green < 140
+    }
+
+    /// 取样点周围 ±radius 若有墨即算命中（避开抗锯齿边缘的抖）。
+    private func isInked(_ image: CGImage, around point: CGPoint, radius: Int = 2) throws -> Bool {
+        let cx = Int(point.x.rounded())
+        let cy = Int(point.y.rounded())
+        for dx in -radius...radius {
+            for dy in -radius...radius {
+                if try isInked(image, cx + dx, cy + dy) { return true }
+            }
+        }
+        return false
+    }
+
+    private func whiteBase(width: Int = 200, height: Int = 120) -> CGImage {
+        TestImage.make(width: width, height: height) { _, _ in (255, 255, 255) }
+    }
+
+    @Test("弯箭头真的沿曲线画（以前控制点只在命中判定里生效，画出来还是直杆）")
+    func curvedTaperedArrowFollowsTheCurve() throws {
+        let from = CGPoint(x: 20, y: 100)
+        let to = CGPoint(x: 180, y: 100)
+        let control = CGPoint(x: 100, y: 20)
+        let annotation = Annotation(
+            kind: .arrow(from: from, to: to, control: control),
+            color: .red,
+            lineWidth: 6
+        )
+        let rendered = try #require(
+            AnnotationRenderer.render(base: whiteBase(), annotations: [annotation])
+        )
+        // 曲线中点（二次曲线公式）在墨上。
+        #expect(try isInked(rendered, around: Annotation.quadPoint(from, control, to, 0.5)))
+        // 起终点连线的中点不在墨上 —— 画的确实是曲线，不是直杆。
+        #expect(!(try isInked(rendered, around: CGPoint(x: 100, y: 100), radius: 3)))
+    }
+
+    @Test("描边类箭头（直箭头 / 双向 / 圆点）同样沿曲线走")
+    func curvedStrokedArrowFollowsTheCurve() throws {
+        let from = CGPoint(x: 20, y: 100)
+        let to = CGPoint(x: 180, y: 100)
+        let control = CGPoint(x: 100, y: 20)
+        for style in [ArrowStyle.line, .doubleEnded, .dotTail] {
+            let annotation = Annotation(
+                kind: .arrow(from: from, to: to, control: control),
+                color: .red,
+                lineWidth: 6,
+                arrowStyle: style
+            )
+            let rendered = try #require(
+                AnnotationRenderer.render(base: whiteBase(), annotations: [annotation])
+            )
+            // 沿曲线取几个参数点，至少要有两处在墨上（端点附近会让给箭头，故不取 t=0/1）。
+            var hits = 0
+            for step in [0.3, 0.4, 0.5, 0.6, 0.7] {
+                if try isInked(rendered, around: Annotation.quadPoint(from, control, to, CGFloat(step))) {
+                    hits += 1
+                }
+            }
+            #expect(hits >= 2, "style=\(style.rawValue) 曲线上只有 \(hits) 处着墨")
+            #expect(
+                !(try isInked(rendered, around: CGPoint(x: 100, y: 100), radius: 3)),
+                "style=\(style.rawValue) 连线上不该有墨"
+            )
+        }
+    }
+
+    @Test("渐宽箭头是「细尾 + 后掠宽头」：头比杆粗得多，尾部仍然细")
+    func taperedArrowHasWideSweptHead() throws {
+        let annotation = Annotation(
+            kind: .arrow(from: CGPoint(x: 20, y: 60), to: CGPoint(x: 200, y: 60), control: nil),
+            color: .red,
+            lineWidth: 6
+        )
+        let rendered = try #require(
+            AnnotationRenderer.render(
+                base: whiteBase(width: 240, height: 120),
+                annotations: [annotation]
+            )
+        )
+        // 线宽 6 → 头宽 45（半宽 22.5）、头长 39，头根在 x≈161。离轴线 18px 的头部在墨上。
+        #expect(try isInked(rendered, around: CGPoint(x: 165, y: 42)))
+        #expect(try isInked(rendered, around: CGPoint(x: 165, y: 78)))
+        // 同样离轴线 18px，但在尾部（那儿只有 3px 粗）——不在墨上。
+        #expect(!(try isInked(rendered, around: CGPoint(x: 40, y: 42), radius: 2)))
+        // 轴线本身当然在墨上。
+        #expect(try isInked(rendered, around: CGPoint(x: 100, y: 60), radius: 1))
     }
 
     @Test("直线按线宽画出实心笔迹")

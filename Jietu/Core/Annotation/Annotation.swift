@@ -478,8 +478,15 @@ extension Annotation {
         case .pixelate(let rect, _):
             return rect.contains(local)
         case .arrow(let from, let to, let control):
-            return Annotation.distanceToCurve(local, from: from, to: to, control: control)
+            if Annotation.distanceToCurve(local, from: from, to: to, control: control)
                 <= max(tolerance, lineWidth)
+            {
+                return true
+            }
+            // 箭头头比杆宽得多（渐宽箭头的头宽是线宽的 7.5 倍），只按「离杆多远」判的话
+            // 外侧的翼点不到。这里再拿一个以箭尖为心的圆近似整个头，半径取头宽的一半。
+            let headHalf = min(max(11, lineWidth * 3.75), hypot(to.x - from.x, to.y - from.y))
+            return Annotation.distance(local, to) <= max(tolerance, headHalf)
         case .line(let from, let to):
             return Annotation.distanceToSegment(local, from, to) <= max(tolerance, lineWidth)
         case .pen(let points):

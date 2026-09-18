@@ -11,6 +11,8 @@ enum PixelSampler {
         let red: UInt8
         let green: UInt8
         let blue: UInt8
+        /// 不透明度。截图都是不透明的，只有「透明底的标注图层」才会用到它。
+        let alpha: UInt8
 
         var hexString: String {
             String(format: "#%02X%02X%02X", red, green, blue)
@@ -40,6 +42,6 @@ enum PixelSampler {
         else { return nil }
 
         context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-        return Sample(red: buffer[0], green: buffer[1], blue: buffer[2])
+        return Sample(red: buffer[0], green: buffer[1], blue: buffer[2], alpha: buffer[3])
     }
 }

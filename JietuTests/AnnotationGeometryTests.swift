@@ -103,6 +103,19 @@ struct AnnotationGeometryTests {
         #expect(resized.localBounds == CGRect(x: 100, y: 100, width: 300, height: 200))
     }
 
+    @Test("箭头外侧的翼也能点中：头比杆宽，命中不能只量「离杆多远」")
+    func arrowHeadWingsAreClickable() {
+        let annotation = Annotation(
+            kind: .arrow(from: CGPoint(x: 20, y: 60), to: CGPoint(x: 200, y: 60), control: nil),
+            color: .red,
+            lineWidth: 6
+        )
+        // 距箭尖 21px、离轴线 15px：落在头的翼上（头宽 45 → 半宽 22.5）。
+        #expect(annotation.contains(CGPoint(x: 185, y: 75)))
+        // 同样离轴线 15px，但靠近尾部——那儿只有 6px 粗的杆，不该命中。
+        #expect(!annotation.contains(CGPoint(x: 60, y: 75)))
+    }
+
     @Test("旋转后角点绕中心转动")
     func rotate() {
         let rotated = rectAnnotation().rotated(by: .pi / 2)

@@ -49,10 +49,14 @@ struct HistoryItem: Identifiable, Sendable {
         calendar: Calendar = .current
     ) -> String {
         let time = Self.timeOnlyFormatter.string(from: date)
-        if calendar.isDateInToday(date) {
+        // 「今天 / 昨天」按传进来的 `now` 判，别用 `isDateInToday`：那个看的是**真实时钟**，
+        // 于是这个「now 可注入」的纯函数其实测不出今天 / 昨天（单测在午夜前后会翻车）。
+        if calendar.isDate(date, inSameDayAs: now) {
             return "今天 " + time
         }
-        if calendar.isDateInYesterday(date) {
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+            calendar.isDate(date, inSameDayAs: yesterday)
+        {
             return "昨天 " + time
         }
         if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
