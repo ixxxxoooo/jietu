@@ -120,8 +120,6 @@ struct AnnotationEditorView: View {
     @State private var ocrText = ""
     @State private var isOCRPresented = false
     @State private var isRecognizing = false
-    /// 是否开启实况文本（由工具栏 OCR 按钮触发）。
-    @State private var isLiveTextActive = false
     @State private var showColor = false
     @State private var showWidth = false
     /// 子工具栏实测尺寸（用来把它居中到按钮下）。
@@ -230,6 +228,9 @@ struct AnnotationEditorView: View {
         .onChange(of: currentDefaults) { _, newValue in
             onDefaultsChange?(newValue)
         }
+        .sheet(isPresented: $isOCRPresented) {
+            OCRResultView(text: ocrText) { isOCRPresented = false }
+        }
     }
 
     /// 当前样式的快照，用于回写「记住上次用的样式」。
@@ -279,10 +280,6 @@ struct AnnotationEditorView: View {
                             handleDoubleClick(at: value.location)
                         }
                     )
-                if isLiveTextActive {
-                    LiveTextOverlay(image: currentBase)
-                        .frame(width: displayedSize.width, height: displayedSize.height)
-                }
                 selectionOverlay
                 selectionShortcuts
                 cropOverlay
@@ -535,19 +532,11 @@ struct AnnotationEditorView: View {
             separator
 
             iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
-            iconButton(
-                "识别文字",
-                symbol: "text.viewfinder",
-                tint: isLiveTextActive ? Theme.Colors.brand : Theme.Colors.textSecondary,
-                isSelected: isLiveTextActive
-            ) {
-                if isLiveTextActive {
-                    isLiveTextActive = false
-                } else {
-                    isLiveTextActive = true
-                    tool = .select
-                }
-            }
+            // 识别期间压暗：首次识别要装模型（这台机器上量到过十几秒），
+            // 没有反馈的话用户只会以为点坏了。
+            iconButton("识别文字", symbol: "text.viewfinder") { exportOCR() }
+                .disabled(isRecognizing)
+                .opacity(isRecognizing ? 0.4 : 1)
             iconButton("保存", symbol: "square.and.arrow.down") { exportToSave() }
             iconButton("钉图", symbol: "pin") { exportToPin() }
         }
@@ -723,8 +712,6 @@ struct AnnotationEditorView: View {
                 }
                 if item.isDrawing {
                     selectedID = nil
-                    // 切到绘制类工具时关闭实况文本，避免抢手势。
-                    isLiveTextActive = false
                 }
             }
         ) {
@@ -1287,11 +1274,18 @@ struct AnnotationEditorView: View {
         onPin(rendered, canvasGlobalFrame)
     }
 
+    /// 识别整张图上的文字：Vision 认字 → 结果弹窗（非空时顺手写进剪贴板）。
+    ///
+    /// 走 `OCRService`（Vision）而不是 VisionKit 的实况文本叠加层：实况文本在识别资产
+    /// 还没就绪时会**静默返回空结果**（这台机器上第一次用就是这样），界面上看不出发生了什么，
+    /// 用户还会以为功能坏了；而且它要求用户自己悬停、拖选，拿不到「一键出文本」。
+    /// 钉图的「翻译」走的也是这条 Vision 路线。
     private func exportOCR() {
         guard let rendered = renderedImage(), !isRecognizing else { return }
         isRecognizing = true
         Task { @MainActor in
             let text = await OCRService.recognizeText(in: rendered)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             isRecognizing = false
             ocrText = text
             if !text.isEmpty {
@@ -1447,9 +1441,11 @@ struct OCRResultView: View {
                     )
             }
             HStack {
-                Text("已复制到剪贴板")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                if !text.isEmpty {
+                    Text("已复制到剪贴板")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button("复制") {
                     let pasteboard = NSPasteboard.general
