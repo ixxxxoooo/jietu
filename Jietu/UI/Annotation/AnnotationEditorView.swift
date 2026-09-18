@@ -117,9 +117,7 @@ struct AnnotationEditorView: View {
     @FocusState private var inlineFieldFocused: Bool
 
 
-    @State private var ocrText = ""
-    @State private var isOCRPresented = false
-    @State private var isRecognizing = false
+    @State private var isLiveTextActive = false
     @State private var showColor = false
     @State private var showWidth = false
     /// 子工具栏实测尺寸（用来把它居中到按钮下）。
@@ -228,9 +226,6 @@ struct AnnotationEditorView: View {
         .onChange(of: currentDefaults) { _, newValue in
             onDefaultsChange?(newValue)
         }
-        .sheet(isPresented: $isOCRPresented) {
-            OCRResultView(text: ocrText) { isOCRPresented = false }
-        }
     }
 
     /// 当前样式的快照，用于回写「记住上次用的样式」。
@@ -248,50 +243,22 @@ struct AnnotationEditorView: View {
 
     private var canvasArea: some View {
         GeometryReader { geo in
-            ZStack {
-                ScrollView([.horizontal, .vertical]) {
-                    canvas
-                        .frame(width: displayedSize.width, height: displayedSize.height)
-                        .frame(minWidth: geo.size.width, minHeight: geo.size.height)
-                }
-                .onAppear {
-                    availableSize = geo.size
-                    initializeZoomIfNeeded()
-                }
-                .onChange(of: geo.size) { _, newValue in
-                    availableSize = newValue
-                    if !hasUserZoomed {
-                        zoom = inline ? 1 : min(1, fitFactor(for: newValue))
-                    }
-                }
-
-                if isRecognizing {
-                    ZStack {
-                        Color.black.opacity(0.12)
-                            .contentShape(Rectangle())
-                        ocrLoadingHUD
-                    }
-                    .transition(.opacity)
+            ScrollView([.horizontal, .vertical]) {
+                canvas
+                    .frame(width: displayedSize.width, height: displayedSize.height)
+                    .frame(minWidth: geo.size.width, minHeight: geo.size.height)
+            }
+            .onAppear {
+                availableSize = geo.size
+                initializeZoomIfNeeded()
+            }
+            .onChange(of: geo.size) { _, newValue in
+                availableSize = newValue
+                if !hasUserZoomed {
+                    zoom = inline ? 1 : min(1, fitFactor(for: newValue))
                 }
             }
         }
-    }
-
-    /// 识别中在画布中央浮现的毛玻璃 HUD。
-    @ViewBuilder
-    private var ocrLoadingHUD: some View {
-        HStack(spacing: Theme.Spacing.md) {
-            ProgressView()
-                .controlSize(.small)
-            Text("正在识别文字…")
-                .font(Theme.Typography.bar)
-                .foregroundStyle(Theme.Colors.textPrimary)
-        }
-        .padding(.horizontal, Theme.Spacing.xl)
-        .padding(.vertical, Theme.Spacing.lg)
-        .floatingSurface(cornerRadius: Theme.Radius.menuPanel)
-        .shadow(color: Color.black.opacity(0.18), radius: 10, y: 4)
-        .transition(.opacity.combined(with: .scale(scale: 0.94)))
     }
 
     private var canvas: some View {
@@ -308,6 +275,10 @@ struct AnnotationEditorView: View {
                             handleDoubleClick(at: value.location)
                         }
                     )
+                if isLiveTextActive {
+                    LiveTextOverlay(image: renderedImage() ?? currentBase)
+                        .frame(width: displayedSize.width, height: displayedSize.height)
+                }
                 selectionOverlay
                 selectionShortcuts
                 cropOverlay
@@ -560,11 +531,19 @@ struct AnnotationEditorView: View {
             separator
 
             iconButton("复制", symbol: "doc.on.doc") { exportToCopy() }
-            // 识别期间压暗：首次识别要装模型（这台机器上量到过十几秒），
-            // 没有反馈的话用户只会以为点坏了。
-            iconButton("识别文字", symbol: "text.viewfinder") { exportOCR() }
-                .disabled(isRecognizing)
-                .opacity(isRecognizing ? 0.4 : 1)
+            iconButton(
+                "识别文字",
+                symbol: "text.viewfinder",
+                tint: isLiveTextActive ? Theme.Colors.brand : Theme.Colors.textSecondary,
+                isSelected: isLiveTextActive
+            ) {
+                if isLiveTextActive {
+                    isLiveTextActive = false
+                } else {
+                    isLiveTextActive = true
+                    tool = .select
+                }
+            }
             iconButton("保存", symbol: "square.and.arrow.down") { exportToSave() }
             iconButton("钉图", symbol: "pin") { exportToPin() }
         }
@@ -740,6 +719,7 @@ struct AnnotationEditorView: View {
                 }
                 if item.isDrawing {
                     selectedID = nil
+                    isLiveTextActive = false
                 }
             }
         ) {
@@ -1302,32 +1282,6 @@ struct AnnotationEditorView: View {
         onPin(rendered, canvasGlobalFrame)
     }
 
-    /// 识别整张图上的文字：Vision 认字 → 结果弹窗（非空时顺手写进剪贴板）。
-    ///
-    /// 走 `OCRService`（Vision）而不是 VisionKit 的实况文本叠加层：实况文本在识别资产
-    /// 还没就绪时会**静默返回空结果**（这台机器上第一次用就是这样），界面上看不出发生了什么，
-    /// 用户还会以为功能坏了；而且它要求用户自己悬停、拖选，拿不到「一键出文本」。
-    /// 钉图的「翻译」走的也是这条 Vision 路线。
-    private func exportOCR() {
-        guard let rendered = renderedImage(), !isRecognizing else { return }
-        withAnimation(.easeOut(duration: Theme.Duration.enter)) {
-            isRecognizing = true
-        }
-        Task { @MainActor in
-            let text = await OCRService.recognizeText(in: rendered)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            withAnimation(.easeIn(duration: Theme.Duration.exit)) {
-                isRecognizing = false
-            }
-            ocrText = text
-            if !text.isEmpty {
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(text, forType: .string)
-            }
-            isOCRPresented = true
-        }
-    }
 
     // MARK: - Preview rendering
 
@@ -1444,55 +1398,6 @@ extension RGBAColor {
     }
 }
 
-/// OCR 结果弹窗：只读文本 + 复制 / 关闭。
-///
-/// @author ixxxxoooo
-struct OCRResultView: View {
-    let text: String
-    var onClose: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("文字识别结果", systemImage: "text.viewfinder")
-                    .font(.system(size: 13, weight: .semibold))
-                Spacer()
-            }
-            if text.isEmpty {
-                Text("没有识别到文字")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                TextEditor(text: .constant(text))
-                    .font(.system(size: 12, design: .monospaced))
-                    .frame(minWidth: 460, minHeight: 260)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-                    )
-            }
-            HStack {
-                if !text.isEmpty {
-                    Text("已复制到剪贴板")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("复制") {
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(text, forType: .string)
-                }
-                .disabled(text.isEmpty)
-                Button("关闭") { onClose() }
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(18)
-        .frame(width: 520, height: 380)
-    }
-}
 
 
 /// 编辑器里颜色 / 粗细按钮的锚点，供悬浮子工具栏定位。
