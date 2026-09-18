@@ -33,6 +33,8 @@ struct BarButton<Label: View>: View {
     /// 可选快捷键。
     var key: KeyEquivalent?
     var modifiers: EventModifiers = .command
+    /// 提示气泡朝向。
+    var tooltipPlacement: TooltipPlacement = .top
     let action: () -> Void
     @ViewBuilder var label: Label
 
@@ -51,6 +53,7 @@ struct BarButton<Label: View>: View {
         .onHover { hovered = $0 }
         .animation(.easeOut(duration: Theme.Duration.hover), value: hovered)
         .keyboardShortcut(if: key, modifiers: modifiers)
+        .tooltip(help, placement: tooltipPlacement)
         .helpIfPresent(help)
     }
 
@@ -74,6 +77,7 @@ struct BarIconButton: View {
     var help: String?
     var key: KeyEquivalent?
     var modifiers: EventModifiers = .command
+    var tooltipPlacement: TooltipPlacement = .top
     let action: () -> Void
 
     var body: some View {
@@ -83,6 +87,7 @@ struct BarIconButton: View {
             help: help ?? title,
             key: key,
             modifiers: modifiers,
+            tooltipPlacement: tooltipPlacement,
             action: action
         ) {
             Image(systemName: systemImage)

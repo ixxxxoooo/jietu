@@ -121,7 +121,6 @@ struct InlineMainToolbar: View {
                     model.showWidth = false
                 }
             }
-            .help("滚动长图：这块区域接着往下滚成一张长图")
             .modifier(
                 OptionsAnchorReporter(
                     isExpanded: model.showScroll, space: Self.space, model: model))
@@ -130,7 +129,6 @@ struct InlineMainToolbar: View {
             BarIconButton(title: "录屏", systemImage: "record.circle") {
                 model.onRecord?()
             }
-            .help("录这块区域：收掉遮罩、上红框，点「开始」才真开录")
 
             BarIconButton(title: "保存", systemImage: "square.and.arrow.down") {
                 model.onSave?()
@@ -170,7 +168,11 @@ struct InlineMainToolbar: View {
     }
 
     private var colorButton: some View {
-        BarButton(chrome: .rounded, isSelected: model.showColor) {
+        BarButton(
+            chrome: .rounded,
+            isSelected: model.showColor,
+            help: "颜色"
+        ) {
             model.showColor.toggle()
             if model.showColor { model.showWidth = false }
         } label: {
@@ -180,7 +182,6 @@ struct InlineMainToolbar: View {
                 .overlay(Circle().strokeBorder(Theme.Colors.border, lineWidth: 1))
                 .frame(width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
         }
-        .help("颜色")
         .modifier(
             OptionsAnchorReporter(
                 isExpanded: model.showColor, space: Self.space, model: model))
@@ -188,9 +189,10 @@ struct InlineMainToolbar: View {
 
     private var widthButton: some View {
         BarIconButton(
-            title: "线条粗细",
+            title: model.tool == .eraser ? "橡皮大小" : "线条粗细",
             systemImage: "lineweight",
-            isSelected: model.showWidth
+            isSelected: model.showWidth,
+            help: model.tool == .eraser ? "橡皮大小" : "线条粗细"
         ) {
             model.showWidth.toggle()
             if model.showWidth { model.showColor = false }
@@ -201,7 +203,11 @@ struct InlineMainToolbar: View {
     }
 
     private func toolButton(_ item: AnnotationTool) -> some View {
-        BarButton(chrome: .rounded, isSelected: model.tool == item) {
+        BarButton(
+            chrome: .rounded,
+            isSelected: model.tool == item,
+            help: item.title
+        ) {
             model.tool = item
             if item.isDrawing { model.isLiveTextActive = false }
         } label: {
@@ -213,7 +219,6 @@ struct InlineMainToolbar: View {
                 .frame(
                     width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
         }
-        .help(item.title)
     }
 }
 
@@ -270,14 +275,20 @@ struct InlineOptionsToolbar: View {
                     Text("谁来滚")
                         .font(Theme.Typography.bar)
                         .foregroundStyle(Theme.Colors.textSecondary)
-                    scrollChoice("手动滚动", systemImage: "hand.draw") {
+                    scrollChoice(
+                        "手动滚动",
+                        systemImage: "hand.draw",
+                        help: "手动滚动：点完自己用鼠标或滚轮往下滚"
+                    ) {
                         model.onScrollCapture?(.manual)
                     }
-                    .help("点完自己把鼠标放进选区往下滚")
-                    scrollChoice("自动滚动", systemImage: "wand.and.rays") {
+                    scrollChoice(
+                        "自动滚动",
+                        systemImage: "wand.and.rays",
+                        help: "自动滚动：由 Jietu 自动滚轮（需辅助功能权限）"
+                    ) {
                         model.onScrollCapture?(.automatic)
                     }
-                    .help("由 Jietu 自己滚（需要辅助功能权限）")
                 }
             }
             Spacer(minLength: 0)
@@ -290,9 +301,12 @@ struct InlineOptionsToolbar: View {
 
     /// 滚动截图的两个选项：图标 + 文字，点一下就用这个模式开跑。
     private func scrollChoice(
-        _ title: String, systemImage: String, action: @escaping () -> Void
+        _ title: String,
+        systemImage: String,
+        help: String? = nil,
+        action: @escaping () -> Void
     ) -> some View {
-        BarButton(chrome: .rounded, action: action) {
+        BarButton(chrome: .rounded, help: help, action: action) {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: systemImage)
                     .font(Theme.Typography.chip)

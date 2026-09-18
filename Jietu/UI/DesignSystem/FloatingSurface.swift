@@ -17,24 +17,31 @@ struct FloatingSurface<Content: View>: View {
     var showsBorder = true
     /// 描边颜色，默认 `cardStroke`。
     var borderColor: Color = Theme.Colors.cardStroke
+    /// 是否裁剪内容。默认 false，允许浮动控件的 tooltip / 气泡等浮在表面外。
+    var clipsContent = false
 
     @ViewBuilder var content: Content
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        content
+        let surface = content
             .background {
                 ZStack {
                     VisualEffectView(material: material)
                     scrim
                 }
-            }
-            .clipShape(shape)
-            .overlay {
-                if showsBorder {
-                    shape.strokeBorder(borderColor, lineWidth: Theme.Size.hairline)
+                .clipShape(shape)
+                .overlay {
+                    if showsBorder {
+                        shape.strokeBorder(borderColor, lineWidth: Theme.Size.hairline)
+                    }
                 }
             }
+        if clipsContent {
+            surface.clipShape(shape)
+        } else {
+            surface
+        }
     }
 }
 
@@ -42,9 +49,14 @@ extension View {
     /// 把任意视图包成浮动表面（等价于在它外面套一个 `FloatingSurface`）。
     func floatingSurface(
         cornerRadius: CGFloat = Theme.Radius.menuPanel,
-        showsBorder: Bool = true
+        showsBorder: Bool = true,
+        clipsContent: Bool = false
     ) -> some View {
-        FloatingSurface(cornerRadius: cornerRadius, showsBorder: showsBorder) {
+        FloatingSurface(
+            cornerRadius: cornerRadius,
+            showsBorder: showsBorder,
+            clipsContent: clipsContent
+        ) {
             self
         }
     }

@@ -623,11 +623,16 @@ struct AnnotationEditorView: View {
 
     private var model_toolIsEraser: Bool { tool == .eraser }
 
+    private var toolbarTooltipPlacement: TooltipPlacement {
+        inline ? .top : .bottom
+    }
+
     private var colorButton: some View {
         BarButton(
             chrome: .rounded,
             isSelected: showColor,
             help: "颜色",
+            tooltipPlacement: toolbarTooltipPlacement,
             action: {
                 showColor.toggle()
                 if showColor { showWidth = false }
@@ -643,7 +648,12 @@ struct AnnotationEditorView: View {
     }
 
     private var widthButton: some View {
-        iconButton("线条粗细", symbol: "lineweight", isSelected: showWidth) {
+        iconButton(
+            tool == .eraser ? "橡皮大小" : "线条粗细",
+            symbol: "lineweight",
+            isSelected: showWidth,
+            help: tool == .eraser ? "橡皮大小" : "线条粗细"
+        ) {
             showWidth.toggle()
             if showWidth { showColor = false }
         }
@@ -724,6 +734,7 @@ struct AnnotationEditorView: View {
             chrome: .rounded,
             isSelected: tool == item,
             help: item.title,
+            tooltipPlacement: toolbarTooltipPlacement,
             action: {
                 tool = item
                 if item != .crop {
@@ -762,6 +773,7 @@ struct AnnotationEditorView: View {
             help: help,
             key: key,
             modifiers: modifiers,
+            tooltipPlacement: toolbarTooltipPlacement,
             action: action
         )
     }

@@ -1933,6 +1933,7 @@ final class OverlayCanvasView: NSView {
         // 主工具栏：固定尺寸，永不重算 → 展开选项时也不闪烁。
         let main = NSHostingView(rootView: InlineMainToolbar(model: model))
         main.translatesAutoresizingMaskIntoConstraints = true
+        main.layer?.masksToBounds = false
         addSubview(main)
         mainToolbarHost = main
         layoutToolbars()
@@ -2068,6 +2069,7 @@ final class OverlayCanvasView: NSView {
         else { return }
         let host = NSHostingView(rootView: InlineOptionsToolbar(model: model))
         host.translatesAutoresizingMaskIntoConstraints = true
+        host.layer?.masksToBounds = false
         addSubview(host)
         optionsToolbarHost = host
         layoutToolbars()
