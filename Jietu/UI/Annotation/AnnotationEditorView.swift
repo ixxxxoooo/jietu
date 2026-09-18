@@ -482,36 +482,17 @@ struct AnnotationEditorView: View {
     @ViewBuilder
     private var textEditorOverlay: some View {
         if editingTextID != nil {
-            let font = inlineFontSize * pointsPerPixel
-            let measured = Annotation.textSize(
-                string: inlineText.isEmpty ? "文字" : inlineText,
-                fontSize: inlineFontSize
+            InlineTextEditorHost(
+                text: $inlineText,
+                origin: inlineOriginView,
+                fontSize: inlineFontSize * pointsPerPixel,
+                color: color,
+                hasStroke: textHasStroke,
+                hasCallout: textHasCallout,
+                onCommit: { commitInlineText() },
+                onCancel: { cancelInlineText() }
             )
-            let width = max(90, measured.width * pointsPerPixel + 16)
-            let height = max(24, font * 1.6 + 8)
-
-            // 就地输入：和最终渲染同一套字体 / 颜色，不铺底色，
-            // 只有一圈很细的同色边框标出编辑框（所见即所得）。
-            TextField("文字", text: $inlineText)
-                .textFieldStyle(.plain)
-                .font(.system(size: max(11, font)))
-                .foregroundStyle(color.swiftUIColor)
-                .padding(.horizontal, 6)
-                .frame(width: width, height: height)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .strokeBorder(color.swiftUIColor.opacity(0.45), lineWidth: 1)
-                )
-                .position(
-                    x: inlineOriginView.x + width / 2,
-                    y: inlineOriginView.y + height / 2
-                )
-                .focused($inlineFieldFocused)
-                .onSubmit { commitInlineText() }
-                .onExitCommand { cancelInlineText() }
-                .onAppear {
-                    DispatchQueue.main.async { inlineFieldFocused = true }
-                }
+            .frame(width: displayedSize.width, height: displayedSize.height)
         }
     }
 
@@ -653,8 +634,11 @@ struct AnnotationEditorView: View {
             ColorSwatchesView(selectedColor: $color)
                 .onChange(of: color) { _, val in applyToSelected { $0.withColor(val) } }
             vSeparator
-            ShapeFillModePicker(selectedMode: $shapeFillMode)
-                .onChange(of: shapeFillMode) { _, val in applyToSelected { $0.withShapeFillMode(val) } }
+            ShapeFillModePicker(
+                selectedMode: $shapeFillMode,
+                isCircle: activeOptionsTool == .ellipse
+            )
+            .onChange(of: shapeFillMode) { _, val in applyToSelected { $0.withShapeFillMode(val) } }
         }
     }
 
@@ -1248,7 +1232,11 @@ struct AnnotationEditorView: View {
             annotations.removeAll { $0.id == id }
         } else if let index = annotations.firstIndex(where: { $0.id == id }) {
             pushUndo()
-            annotations[index] = annotations[index].withText(trimmed)
+            annotations[index] = annotations[index]
+                .withText(trimmed)
+                .withColor(color)
+                .withTextStroke(textHasStroke)
+                .withTextCallout(textHasCallout)
         }
         editingTextID = nil
         inlineText = ""

@@ -250,7 +250,10 @@ struct InlineOptionsToolbar: View {
             vSeparator
             ColorSwatchesView(selectedColor: $model.color)
             vSeparator
-            ShapeFillModePicker(selectedMode: $model.shapeFillMode)
+            ShapeFillModePicker(
+                selectedMode: $model.shapeFillMode,
+                isCircle: model.tool == .ellipse
+            )
         }
     }
 

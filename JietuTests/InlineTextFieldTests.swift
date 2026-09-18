@@ -188,4 +188,78 @@ struct InlineTextFieldTests {
         #expect(view.isAnnotationPhase, "点击窗口后应直接进入原地标注态")
         #expect(view.debugSelection != nil, "选区应被置为该窗口矩形")
     }
+
+    @Test("标注特效所见即所得：背景底板、高对比文字反色与内边距")
+    func calloutStyleAndContrast() {
+        let field = InlineTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 24))
+
+        // 1. 深色背景（如深红），文字应选用高对比白色
+        field.applyStyle(
+            fontSize: 16,
+            color: RGBAColor(red: 0.9, green: 0.1, blue: 0.1, alpha: 1.0),
+            hasStroke: false,
+            hasCallout: true
+        )
+        #expect(field.layer?.backgroundColor != nil, "开启标注应有底板背景色")
+        #expect(field.textColor == NSColor.white, "深色背景下文字应为白色")
+        let cell = field.cell as? InlineTextFieldCell
+        #expect(cell != nil)
+        #expect(cell!.paddingH >= 6, "标注特效应包含水平内边距")
+        #expect(cell!.paddingV >= 3, "标注特效应包含垂直内边距")
+
+        // 2. 浅色背景（如亮黄），文字应选用高对比黑色
+        field.applyStyle(
+            fontSize: 16,
+            color: RGBAColor(red: 0.95, green: 0.95, blue: 0.1, alpha: 1.0),
+            hasStroke: false,
+            hasCallout: true
+        )
+        #expect(field.textColor == NSColor.black, "浅色背景下文字应为黑色")
+
+        // 3. 关闭标注：底板背景清除，文字恢复为标注色
+        field.applyStyle(
+            fontSize: 16,
+            color: RGBAColor(red: 0.9, green: 0.1, blue: 0.1, alpha: 1.0),
+            hasStroke: false,
+            hasCallout: false
+        )
+        #expect(field.layer?.backgroundColor == nil, "关闭标注应无底板背景")
+        #expect(cell!.paddingH == 2)
+        #expect(cell!.paddingV == 0)
+    }
+
+    @Test("fitToOrigin 在 Flipped 和非 Flipped 下准确对齐点击原点并计算内边距")
+    func fitToOriginAdjustsForCallout() {
+        let field = InlineTextField(frame: .zero)
+        field.stringValue = "测试文字"
+        field.applyStyle(
+            fontSize: 14,
+            color: .red,
+            hasStroke: false,
+            hasCallout: true
+        )
+
+        let origin = CGPoint(x: 100, y: 200)
+        let cell = field.cell as! InlineTextFieldCell
+        let padH = cell.paddingH
+        let padV = cell.paddingV
+
+        // Flipped（SwiftUI 坐标系）
+        field.fitToOrigin(origin, isFlipped: true)
+        #expect(abs(field.frame.origin.x - (origin.x - padH)) < 0.001)
+        #expect(abs(field.frame.origin.y - (origin.y - padV)) < 0.001)
+
+        // 非 Flipped（AppKit 坐标系）
+        field.fitToOrigin(origin, isFlipped: false)
+        #expect(abs(field.frame.origin.x - (origin.x - padH)) < 0.001)
+        #expect(field.frame.origin.y < origin.y)
+    }
+
+    @Test("圆圈工具下 ShapeFillModePicker 支持圆形图标")
+    func shapeFillModePickerCircleSupport() {
+        let pickerCircle = ShapeFillModePicker(selectedMode: .constant(.opaque), isCircle: true)
+        #expect(pickerCircle.isCircle == true, "应支持圆形填充模式图标")
+        let pickerRect = ShapeFillModePicker(selectedMode: .constant(.none), isCircle: false)
+        #expect(pickerRect.isCircle == false, "默认应为矩形图标")
+    }
 }
