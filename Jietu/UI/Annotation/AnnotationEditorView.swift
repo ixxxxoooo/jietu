@@ -279,11 +279,6 @@ struct AnnotationEditorView: View {
                             handleDoubleClick(at: value.location)
                         }
                     )
-                    .overlay(
-                        Rectangle()
-                            .strokeBorder(Color.black.opacity(0.25), lineWidth: 1)
-                            .allowsHitTesting(false)
-                    )
                 if isLiveTextActive {
                     LiveTextOverlay(image: currentBase)
                         .frame(width: displayedSize.width, height: displayedSize.height)
