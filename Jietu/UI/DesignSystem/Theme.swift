@@ -253,7 +253,7 @@ enum Theme {
 
     /// 选区外压暗程度。
     static let overlayDimAlpha: CGFloat = 0.45
-    /// 截图选框线条宽（粗体线条）。
+    /// 截图选框虚线宽（粗体线条）。
     static let selectionBorderWidth: CGFloat = 2.5
     /// 选框控制点直径。
     static let selectionHandleSize: CGFloat = 10

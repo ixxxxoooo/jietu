@@ -414,10 +414,10 @@ final class OverlayCanvasView: NSView {
         windowHighlightLayer.frame = bounds
         root.addSublayer(windowHighlightLayer)
 
-        // 绿色选框（粗体实线）。
+        // 绿色选框（粗体虚线）。
         configureBorderLayer(selectionBorderOuterLayer, color: NSColor(Theme.selectionGreen))
         selectionBorderOuterLayer.lineWidth = Theme.selectionBorderWidth
-        selectionBorderOuterLayer.lineDashPattern = nil
+        selectionBorderOuterLayer.lineDashPattern = [6, 4]
         configureBorderLayer(selectionBorderInnerLayer, color: .clear)
         root.addSublayer(selectionBorderOuterLayer)
         root.addSublayer(selectionBorderInnerLayer)
