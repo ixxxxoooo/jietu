@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpQuickAccess()
         setUpLaunchAtLogin()
         notifier.requestAuthorizationIfNeeded()
+        OCRService.warmUp()
 
         #if DEBUG
         // 需要**完整接线**的自检：就地工具栏的「滚动截图」要真的把会话跑起来。
