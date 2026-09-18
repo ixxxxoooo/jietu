@@ -248,22 +248,50 @@ struct AnnotationEditorView: View {
 
     private var canvasArea: some View {
         GeometryReader { geo in
-            ScrollView([.horizontal, .vertical]) {
-                canvas
-                    .frame(width: displayedSize.width, height: displayedSize.height)
-                    .frame(minWidth: geo.size.width, minHeight: geo.size.height)
-            }
-            .onAppear {
-                availableSize = geo.size
-                initializeZoomIfNeeded()
-            }
-            .onChange(of: geo.size) { _, newValue in
-                availableSize = newValue
-                if !hasUserZoomed {
-                    zoom = inline ? 1 : min(1, fitFactor(for: newValue))
+            ZStack {
+                ScrollView([.horizontal, .vertical]) {
+                    canvas
+                        .frame(width: displayedSize.width, height: displayedSize.height)
+                        .frame(minWidth: geo.size.width, minHeight: geo.size.height)
+                }
+                .onAppear {
+                    availableSize = geo.size
+                    initializeZoomIfNeeded()
+                }
+                .onChange(of: geo.size) { _, newValue in
+                    availableSize = newValue
+                    if !hasUserZoomed {
+                        zoom = inline ? 1 : min(1, fitFactor(for: newValue))
+                    }
+                }
+
+                if isRecognizing {
+                    ZStack {
+                        Color.black.opacity(0.12)
+                            .contentShape(Rectangle())
+                        ocrLoadingHUD
+                    }
+                    .transition(.opacity)
                 }
             }
         }
+    }
+
+    /// 识别中在画布中央浮现的毛玻璃 HUD。
+    @ViewBuilder
+    private var ocrLoadingHUD: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            ProgressView()
+                .controlSize(.small)
+            Text("正在识别文字…")
+                .font(Theme.Typography.bar)
+                .foregroundStyle(Theme.Colors.textPrimary)
+        }
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.lg)
+        .floatingSurface(cornerRadius: Theme.Radius.menuPanel)
+        .shadow(color: Color.black.opacity(0.18), radius: 10, y: 4)
+        .transition(.opacity.combined(with: .scale(scale: 0.94)))
     }
 
     private var canvas: some View {
@@ -1282,11 +1310,15 @@ struct AnnotationEditorView: View {
     /// 钉图的「翻译」走的也是这条 Vision 路线。
     private func exportOCR() {
         guard let rendered = renderedImage(), !isRecognizing else { return }
-        isRecognizing = true
+        withAnimation(.easeOut(duration: Theme.Duration.enter)) {
+            isRecognizing = true
+        }
         Task { @MainActor in
             let text = await OCRService.recognizeText(in: rendered)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            isRecognizing = false
+            withAnimation(.easeIn(duration: Theme.Duration.exit)) {
+                isRecognizing = false
+            }
             ocrText = text
             if !text.isEmpty {
                 let pasteboard = NSPasteboard.general
