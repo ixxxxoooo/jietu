@@ -11,3 +11,8 @@ xcuserdata/
 
 # macOS
 .DS_Store
+
+# 本机工具运行态（ZCode 插件写的，按机器 / 会话变，别进仓库）
+# .mimosa：安全扫描插件的 hook 状态与报告；.v2c：video2code 插件的缓存指针
+.mimosa/
+.v2c/
