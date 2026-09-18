@@ -34,6 +34,10 @@ final class OverlayCoordinator {
     /// 原地标注的默认样式（present 时传给工具栏；改动后经 `onAnnotationDefaultsChange` 回报）。
     var annotationDefaults: AnnotationDefaults = .standard
     var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)?
+    /// 撤销 / 重做的快捷键。
+    ///
+    /// 用闭包取而不是存一份值：设置页改完不必重启，下一次遮罩起来就是新键位。
+    var editorShortcutsProvider: (() -> EditorShortcuts)?
 
     /// 遮罩的用途：普通截图 / 专选窗口截图 / 只要一块选区（滚动长图起步用）。
     enum Purpose {
@@ -97,7 +101,8 @@ final class OverlayCoordinator {
                 displayIndex: index + 1,
                 displayCount: session.snapshots.count,
                 inlineMode: inlineMode,
-                annotationDefaults: annotationDefaults
+                annotationDefaults: annotationDefaults,
+                editorShortcuts: editorShortcutsProvider?() ?? .standard
             )
             controller.onCancel = { [weak self] in
                 self?.finish(.cancelled, reason: "canvas:cancel")

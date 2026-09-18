@@ -13,6 +13,8 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
     private let anchor: CGRect?
     /// 标注默认样式：开窗时用，改完回写。
     private let annotationDefaults: AnnotationDefaults
+    /// 撤销 / 重做的快捷键（设置页配，默认 ⌘Z / ⇧⌘Z）。
+    private let editorShortcuts: EditorShortcuts
     private var window: NSWindow?
     private var previousActivationPolicy: NSApplication.ActivationPolicy = .accessory
 
@@ -24,11 +26,13 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
     init(
         image: CGImage,
         anchor: CGRect? = nil,
-        annotationDefaults: AnnotationDefaults = .standard
+        annotationDefaults: AnnotationDefaults = .standard,
+        editorShortcuts: EditorShortcuts = .standard
     ) {
         self.image = image
         self.anchor = anchor
         self.annotationDefaults = annotationDefaults
+        self.editorShortcuts = editorShortcuts
         super.init()
     }
 
@@ -51,6 +55,7 @@ final class AnnotationEditorWindowController: NSObject, NSWindowDelegate {
             baseImage: image,
             inline: inline,
             defaults: annotationDefaults,
+            editorShortcuts: editorShortcuts,
             onDefaultsChange: { [weak self] updated in
                 self?.onAnnotationDefaultsChange?(updated)
             },

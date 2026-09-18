@@ -24,6 +24,8 @@ final class InlineToolbarModel {
     var optionsAnchorX: CGFloat = 0
     /// 实况文本是否开启（OCR 按钮触发）。
     var isLiveTextActive = false
+    /// 撤销 / 重做的当前快捷键；只用于把组合键显示在 tooltip 里（真正按键由画布处理）。
+    var editorShortcuts: EditorShortcuts = .standard
 
     var onUndo: (() -> Void)?
     var onRedo: (() -> Void)?
@@ -54,6 +56,12 @@ struct InlineMainToolbar: View {
     /// 上报子工具栏锚点用的坐标空间。
     private static let space = "inlineToolbar"
 
+    /// 悬停提示带上当前快捷键；解绑了就只说动作名。
+    private static func shortcutHelp(_ title: String, _ hotkey: Hotkey?) -> String {
+        guard let hotkey, !hotkey.displayString.isEmpty else { return title }
+        return "\(title)（\(hotkey.displayString)）"
+    }
+
     var body: some View {
         HStack(spacing: Theme.Size.toolbarItemSpacing) {
             ForEach(Self.tools) { item in
@@ -66,6 +74,7 @@ struct InlineMainToolbar: View {
                 title: "撤销",
                 systemImage: "arrow.uturn.backward",
                 isSelected: false,
+                help: Self.shortcutHelp("撤销", model.editorShortcuts.undo),
                 action: { model.onUndo?() }
             )
             .disabled(!model.canUndo)
@@ -74,6 +83,7 @@ struct InlineMainToolbar: View {
             BarIconButton(
                 title: "重做",
                 systemImage: "arrow.uturn.forward",
+                help: Self.shortcutHelp("重做", model.editorShortcuts.redo),
                 action: { model.onRedo?() }
             )
             .disabled(!model.canRedo)

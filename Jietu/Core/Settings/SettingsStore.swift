@@ -70,6 +70,8 @@ final class SettingsStore {
         static let hotkeys = "hotkeys.map"
         /// 旧版本只存区域截图一个热键，启动时迁移到 `hotkeys`。
         static let legacyHotkeyAreaCapture = "hotkey.areaCapture"
+        /// 标注编辑器内部的两条快捷键（撤销 / 重做）。
+        static let editorShortcuts = "editor.shortcuts"
         static let appearance = "appearance.theme"
         static let copyToClipboard = "behavior.copyToClipboard"
         static let playShutterSound = "behavior.playShutterSound"
@@ -117,6 +119,19 @@ final class SettingsStore {
     var hotkeyAreaCapture: Hotkey? {
         get { hotkey(for: .areaCapture) }
         set { setHotkey(newValue, for: .areaCapture) }
+    }
+
+    /// 标注编辑器内部的两条快捷键（撤销 / 重做）。
+    ///
+    /// 与 `hotkeys` 的「默认全部为空」相反：这里**出厂就配好**（⌘Z / ⇧⌘Z），
+    /// 用户可以在设置页改，也可以解绑（解绑后不再自动填回默认）。
+    var editorShortcuts: EditorShortcuts {
+        didSet { persistEditorShortcuts() }
+    }
+
+    /// 恢复出厂的那一对（⌘Z / ⇧⌘Z）。
+    func resetEditorShortcuts() {
+        editorShortcuts = .standard
     }
 
     var copyToClipboard: Bool {
@@ -303,6 +318,21 @@ final class SettingsStore {
         } else {
             self.hotkeys = [:]
         }
+
+        if
+            let data = defaults.data(forKey: Key.editorShortcuts),
+            let stored = try? JSONDecoder().decode(EditorShortcuts.self, from: data)
+        {
+            self.editorShortcuts = stored
+        } else {
+            // 首次启动（或数据坏了）落到出厂默认：默认就配好 ⌘Z / ⇧⌘Z，而不是留空。
+            self.editorShortcuts = .standard
+        }
+    }
+
+    private func persistEditorShortcuts() {
+        guard let data = try? JSONEncoder().encode(editorShortcuts) else { return }
+        defaults.set(data, forKey: Key.editorShortcuts)
     }
 
     private func persistHotkeys() {

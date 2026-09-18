@@ -37,12 +37,7 @@ extension Hotkey {
 
     /// 从一次本地键盘事件构造热键；用于设置页录制组合键。
     static func from(event: NSEvent) -> Hotkey? {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        var carbon: UInt32 = 0
-        if flags.contains(.command) { carbon |= UInt32(cmdKey) }
-        if flags.contains(.shift) { carbon |= UInt32(shiftKey) }
-        if flags.contains(.option) { carbon |= UInt32(optionKey) }
-        if flags.contains(.control) { carbon |= UInt32(controlKey) }
+        let carbon = Self.carbonModifiers(from: event.modifierFlags)
         // 至少需要一个修饰键，否则会吞掉正常输入。
         guard carbon != 0 else { return nil }
         // 只认「一个字符」的那种键：菜单的 keyEquivalent 也只能是一个字符。
@@ -53,6 +48,26 @@ extension Hotkey {
             carbonModifiers: carbon,
             menuKeyEquivalent: menuKey
         )
+    }
+
+    /// 一次键盘事件的修饰键（Carbon 位）。
+    static func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
+        let flags = flags.intersection(.deviceIndependentFlagsMask)
+        var carbon: UInt32 = 0
+        if flags.contains(.command) { carbon |= UInt32(cmdKey) }
+        if flags.contains(.shift) { carbon |= UInt32(shiftKey) }
+        if flags.contains(.option) { carbon |= UInt32(optionKey) }
+        if flags.contains(.control) { carbon |= UInt32(controlKey) }
+        return carbon
+    }
+
+    /// 这次按键是不是就是本热键（编辑器内快捷键用）。
+    ///
+    /// 只比**键码 + 修饰键**：`menuKeyEquivalent` 是给菜单显示用的字符，
+    /// 在非美式键盘或老数据上未必对得上，拿它参与比较会漏判。
+    func matches(_ event: NSEvent) -> Bool {
+        UInt32(event.keyCode) == keyCode
+            && Self.carbonModifiers(from: event.modifierFlags) == carbonModifiers
     }
 
     /// 菜单项要用的那个字符：**录制时存下的优先**（非美式键盘上它才准——同一个键码在不同布局上

@@ -24,11 +24,14 @@ struct AnnotationEditorView: View {
     /// 参数二为画布在窗口中的全局坐标（供「原地钉图」定位）。
     var onPin: (CGImage, CGRect) -> Void
     var onClose: () -> Void
+    /// 撤销 / 重做的快捷键（设置页「标注编辑」里配，默认 ⌘Z / ⇧⌘Z）。
+    var editorShortcuts: EditorShortcuts = .standard
 
     init(
         baseImage: CGImage,
         inline: Bool = false,
         defaults: AnnotationDefaults = .standard,
+        editorShortcuts: EditorShortcuts = .standard,
         onDefaultsChange: ((AnnotationDefaults) -> Void)? = nil,
         onCopy: @escaping (CGImage) -> Void,
         onSave: @escaping (CGImage) -> Void,
@@ -38,6 +41,7 @@ struct AnnotationEditorView: View {
         self.baseImage = baseImage
         self.inline = inline
         self.defaults = defaults
+        self.editorShortcuts = editorShortcuts
         self.onDefaultsChange = onDefaultsChange
         self.onCopy = onCopy
         self.onSave = onSave
@@ -506,11 +510,19 @@ struct AnnotationEditorView: View {
 
             separator
 
-            iconButton("撤销", symbol: "arrow.uturn.backward", key: "z", modifiers: .command) { undo() }
-                .disabled(undoStack.isEmpty)
-                .opacity(undoStack.isEmpty ? 0.4 : 1)
             iconButton(
-                "重做", symbol: "arrow.uturn.forward", key: "z", modifiers: [.command, .shift]
+                "撤销", symbol: "arrow.uturn.backward",
+                help: shortcutHelp("撤销", editorShortcuts.undo),
+                key: editorShortcuts.undo?.keyEquivalent,
+                modifiers: editorShortcuts.undo?.eventModifiers ?? .command
+            ) { undo() }
+            .disabled(undoStack.isEmpty)
+            .opacity(undoStack.isEmpty ? 0.4 : 1)
+            iconButton(
+                "重做", symbol: "arrow.uturn.forward",
+                help: shortcutHelp("重做", editorShortcuts.redo),
+                key: editorShortcuts.redo?.keyEquivalent,
+                modifiers: editorShortcuts.redo?.eventModifiers ?? .command
             ) { redo() }
             .disabled(redoStack.isEmpty)
             .opacity(redoStack.isEmpty ? 0.4 : 1)
@@ -737,6 +749,7 @@ struct AnnotationEditorView: View {
         symbol: String,
         tint: Color? = nil,
         isSelected: Bool = false,
+        help: String? = nil,
         key: KeyEquivalent? = nil,
         modifiers: EventModifiers = .command,
         action: @escaping () -> Void
@@ -746,10 +759,17 @@ struct AnnotationEditorView: View {
             systemImage: symbol,
             tint: tint,
             isSelected: isSelected,
+            help: help,
             key: key,
             modifiers: modifiers,
             action: action
         )
+    }
+
+    /// 悬停提示带上当前快捷键；解绑了就只说动作名。
+    private func shortcutHelp(_ title: String, _ hotkey: Hotkey?) -> String {
+        guard let hotkey, !hotkey.displayString.isEmpty else { return title }
+        return "\(title)（\(hotkey.displayString)）"
     }
 
     /// 缩放：缩小 / 百分比 / 放大 / 恢复原始大小（图标，不带文字）。

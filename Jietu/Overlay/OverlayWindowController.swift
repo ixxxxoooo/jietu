@@ -146,7 +146,8 @@ final class OverlayWindowController {
         displayIndex: Int,
         displayCount: Int,
         inlineMode: Bool,
-        annotationDefaults: AnnotationDefaults = .standard
+        annotationDefaults: AnnotationDefaults = .standard,
+        editorShortcuts: EditorShortcuts = .standard
     ) {
         self.snapshot = snapshot
         canvas = OverlayCanvasView(
@@ -157,6 +158,7 @@ final class OverlayWindowController {
         )
         canvas.inlineMode = inlineMode
         canvas.annotationDefaults = annotationDefaults
+        canvas.editorShortcuts = editorShortcuts
 
         // 注意：不要用 `NSWindow(contentRect:...screen:)` 直接传 screen.frame。
         // 实测在缩放/副屏上 AppKit 会把原点乘以 backingScale（523 → 1046），

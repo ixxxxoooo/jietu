@@ -114,6 +114,8 @@ final class OverlayCanvasView: NSView {
     /// 标注默认样式：原地工具栏开出来时用它，改完回报给外部记住。
     var annotationDefaults: AnnotationDefaults = .standard
     var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)?
+    /// 撤销 / 重做的快捷键（设置页配，默认 ⌘Z / ⇧⌘Z）。
+    var editorShortcuts: EditorShortcuts = .standard
 
     /// 滚动长图期间：遮罩只当取景框（压暗 + 绿框），冻结图与其它装饰全部收起，
     /// 这样用户能看见下面**真实页面在滚**。
@@ -1453,6 +1455,18 @@ final class OverlayCanvasView: NSView {
     override func keyDown(with event: NSEvent) {
         guard isInputArmed else { return }
         if phase == .annotating {
+            // 撤销 / 重做走设置页配的那两个组合键（默认 ⌘Z / ⇧⌘Z）。
+            // 正在改文字时不抢：那时 field editor 才是第一响应者，⌘Z 该撤的是打的字。
+            if textField == nil {
+                if let hotkey = editorShortcuts.undo, hotkey.matches(event) {
+                    inlineUndo()
+                    return
+                }
+                if let hotkey = editorShortcuts.redo, hotkey.matches(event) {
+                    inlineRedo()
+                    return
+                }
+            }
             switch event.keyCode {
             case 53: // Esc：直接退出整个截图
                 onCancel?()
@@ -1894,6 +1908,7 @@ final class OverlayCanvasView: NSView {
         model.eraserSize = seed.eraserSize
         model.mosaicBlock = seed.mosaicBlock
         model.blurRadius = seed.blurRadius
+        model.editorShortcuts = editorShortcuts
         model.onConfirm = { [weak self] in self?.confirmInline() }
         model.onCancel = { [weak self] in self?.onCancel?() }
         model.onUndo = { [weak self] in self?.inlineUndo() }

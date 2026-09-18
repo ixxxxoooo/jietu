@@ -70,6 +70,8 @@ struct BarIconButton: View {
     var tint: Color?
     var isSelected = false
     var chrome: BarButtonChrome = .rounded
+    /// 悬停提示；不给就用 `title`。带快捷键的按钮把组合键一起说清楚。
+    var help: String?
     var key: KeyEquivalent?
     var modifiers: EventModifiers = .command
     let action: () -> Void
@@ -78,7 +80,7 @@ struct BarIconButton: View {
         BarButton(
             chrome: chrome,
             isSelected: isSelected,
-            help: title,
+            help: help ?? title,
             key: key,
             modifiers: modifiers,
             action: action
@@ -91,6 +93,28 @@ struct BarIconButton: View {
                     height: Theme.Size.toolbarButtonHeight
                 )
         }
+    }
+}
+
+extension Hotkey {
+    /// SwiftUI `.keyboardShortcut` 要的那个字符；功能键之类取不到字符时为 nil。
+    var keyEquivalent: KeyEquivalent? {
+        guard let menuKey, let character = menuKey.first else { return nil }
+        return KeyEquivalent(character)
+    }
+
+    /// SwiftUI `.keyboardShortcut` 要的修饰键集合。
+    ///
+    /// 从 `cocoaModifiers` 转，而不是直接读 Carbon 位：`Carbon.HIToolbox` 里
+    /// 也有一个 `EventModifiers`，引进来会与 SwiftUI 的这个撞名。
+    var eventModifiers: EventModifiers {
+        var modifiers: EventModifiers = []
+        let flags = cocoaModifiers
+        if flags.contains(.command) { modifiers.insert(.command) }
+        if flags.contains(.shift) { modifiers.insert(.shift) }
+        if flags.contains(.option) { modifiers.insert(.option) }
+        if flags.contains(.control) { modifiers.insert(.control) }
+        return modifiers
     }
 }
 

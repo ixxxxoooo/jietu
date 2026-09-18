@@ -1112,6 +1112,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlays.onAnnotationDefaultsChange = { [weak self] updated in
             self?.settings.annotationDefaults = updated
         }
+        overlays.editorShortcutsProvider = { [weak self] in
+            self?.settings.editorShortcuts ?? .standard
+        }
         // 滚动长图起步：选区不急着交付 —— 鼠标一停住（或一松手）就把
         // 「手动 / 自动」浮到选框下方；在那之前用户还能继续调选区。
         overlays.onSelectionPaused = { [weak self] snapshot, localRect in
@@ -1986,7 +1989,8 @@ struct CaptureRegionTarget {
         let controller = AnnotationEditorWindowController(
             image: image,
             anchor: anchor,
-            annotationDefaults: settings.annotationDefaults
+            annotationDefaults: settings.annotationDefaults,
+            editorShortcuts: settings.editorShortcuts
         )
         controller.onCopy = { rendered in
             CaptureOutput.copyToPasteboard(rendered)
