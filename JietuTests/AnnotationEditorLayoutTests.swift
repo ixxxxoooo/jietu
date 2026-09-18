@@ -36,4 +36,33 @@ struct AnnotationEditorLayoutTests {
     func inlineWindowKeepsToolbarWidth() {
         #expect(AnnotationEditorView.minInlineWidth >= AnnotationEditorView.toolbarMinWidth)
     }
+
+    @Test("初始化时保留扩展属性（箭头样式、填充模式、文字描边与标注）")
+    func editorPreservesExtendedDefaults() {
+        let image = TestImage.solidBlack(side: 64)
+        var defaults = AnnotationDefaults.standard
+        defaults.arrowStyle = .dotTail
+        defaults.shapeFillMode = .translucent
+        defaults.textHasStroke = true
+        defaults.textHasCallout = true
+
+        let view = AnnotationEditorView(
+            baseImage: image,
+            inline: false,
+            defaults: defaults,
+            onDefaultsChange: { _ in },
+            onCopy: { _ in },
+            onSave: { _ in },
+            onPin: { _, _ in },
+            onClose: {}
+        )
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(x: 0, y: 0, width: 1000, height: 600)
+        hosting.layoutSubtreeIfNeeded()
+
+        #expect(view.defaults.arrowStyle == .dotTail)
+        #expect(view.defaults.shapeFillMode == .translucent)
+        #expect(view.defaults.textHasStroke == true)
+        #expect(view.defaults.textHasCallout == true)
+    }
 }

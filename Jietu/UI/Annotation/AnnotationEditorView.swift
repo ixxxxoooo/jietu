@@ -58,6 +58,10 @@ struct AnnotationEditorView: View {
         _mosaicBlock = State(initialValue: defaults.mosaicBlock)
         _blurRadius = State(initialValue: defaults.blurRadius)
         _eraserSize = State(initialValue: defaults.eraserSize)
+        _arrowStyle = State(initialValue: defaults.arrowStyle)
+        _shapeFillMode = State(initialValue: defaults.shapeFillMode)
+        _textHasStroke = State(initialValue: defaults.textHasStroke)
+        _textHasCallout = State(initialValue: defaults.textHasCallout)
     }
 
     @Environment(\.displayScale) private var displayScale
@@ -71,7 +75,6 @@ struct AnnotationEditorView: View {
     @State private var selectedID: UUID?
     /// 「复制样式」暂存的样式，供「粘贴样式」用。
     @State private var styleClipboard: AnnotationStyle?
-    @State private var eraserSize: CGFloat = 28
 
     /// 裁剪后的底图；nil 表示还没裁过，用原始截图。
     @State private var croppedImage: CGImage?
@@ -99,6 +102,11 @@ struct AnnotationEditorView: View {
     @State private var fontSize: CGFloat = 22
     @State private var mosaicBlock: CGFloat = 10
     @State private var blurRadius: CGFloat = 12
+    @State private var eraserSize: CGFloat = 28
+    @State private var arrowStyle: ArrowStyle = .tapered
+    @State private var shapeFillMode: ShapeFillMode = .none
+    @State private var textHasStroke: Bool = false
+    @State private var textHasCallout: Bool = false
     @State private var counterValue = 1
 
     // MARK: - Interaction
@@ -125,12 +133,8 @@ struct AnnotationEditorView: View {
     @State private var inlineFontSize: CGFloat = 22
     @FocusState private var inlineFieldFocused: Bool
 
-
     @State private var isLiveTextActive = false
-    @State private var showColor = false
-    @State private var showWidth = false
-    /// 子工具栏实测尺寸（用来把它居中到按钮下）。
-    @State private var optionsSize: CGSize = .zero
+    @State private var toolbarHeight: CGFloat = 45
 
     // MARK: - Preview / zoom
 
@@ -207,19 +211,22 @@ struct AnnotationEditorView: View {
             }
         }
         .background(inline ? Color.clear : Color(nsColor: .windowBackgroundColor))
-        // 颜色 / 粗细子工具栏：**悬浮**在被点的按钮下方（原地模式上方），
-        // 不占布局、也不会把画布挤下去。
-        .overlayPreferenceValue(OptionsAnchorKey.self) { anchors in
-            GeometryReader { proxy in
-                if let anchor = anchors[showColor ? .color : .width] {
-                    let rect = proxy[anchor]
-                    optionsBar
-                        .fixedSize()
-                        .onGeometryChange(for: CGSize.self) { $0.size } action: { optionsSize = $0 }
-                        .position(
-                            x: optionsBarCenterX(anchorMidX: rect.midX, in: proxy.size),
-                            y: optionsBarCenterY(buttonFrame: rect)
-                        )
+        // 二级选项栏：水平居中悬浮在主工具栏下方（原地模式上方），
+        // 不挤压画布高度，由 floatingSurface 承重。
+        .overlay(alignment: inline ? .bottom : .top) {
+            if activeOptionsTool != nil {
+                VStack(spacing: 0) {
+                    if inline {
+                        optionsBar
+                        Color.clear
+                            .frame(height: toolbarHeight + 8)
+                            .allowsHitTesting(false)
+                    } else {
+                        Color.clear
+                            .frame(height: toolbarHeight + 8)
+                            .allowsHitTesting(false)
+                        optionsBar
+                    }
                 }
             }
         }
@@ -249,23 +256,12 @@ struct AnnotationEditorView: View {
             fontSize: fontSize,
             mosaicBlock: mosaicBlock,
             blurRadius: blurRadius,
-            eraserSize: eraserSize
+            eraserSize: eraserSize,
+            arrowStyle: arrowStyle,
+            shapeFillMode: shapeFillMode,
+            textHasStroke: textHasStroke,
+            textHasCallout: textHasCallout
         )
-    }
-
-    /// 荧光笔走自己的色槽与笔尖粗细，其余工具共用 `color` / `lineWidth`。
-    private var isHighlightTool: Bool { tool == .highlight }
-
-    private var activeColor: Binding<RGBAColor> {
-        isHighlightTool ? $highlightColor : $color
-    }
-
-    private var activeLineWidth: Binding<CGFloat> {
-        isHighlightTool ? $highlightLineWidth : $lineWidth
-    }
-
-    private var activeWidthRange: ClosedRange<CGFloat> {
-        isHighlightTool ? Annotation.highlightWidthRange : 1...24
     }
 
     private var canvasArea: some View {
@@ -521,6 +517,7 @@ struct AnnotationEditorView: View {
 
     private var toolbar: some View {
         mainBar
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { toolbarHeight = $0 }
             // 原地模式窗口是透明的，工具栏得自己兜一层底，否则跟着系统主题切换时看不清。
             .background(inline ? Color(nsColor: .windowBackgroundColor) : Color.clear)
     }
@@ -555,10 +552,7 @@ struct AnnotationEditorView: View {
 
             separator
 
-            colorButton
-            widthButton
-
-            // 缩放紧跟在颜色 / 粗细后面：左边不再留一大片空。
+            // 缩放紧跟在后面：左边不再留一大片空。
             zoomControls
 
             Spacer(minLength: Theme.Spacing.md)
@@ -587,115 +581,191 @@ struct AnnotationEditorView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// 点开颜色 / 粗细后出现的第二行（同样通栏，与窗口风格一致）。
-    @ViewBuilder
-    private var optionsBar: some View {
-        HStack(spacing: Theme.Spacing.xxl) {
-            if showWidth {
-                HStack(spacing: Theme.Spacing.md) {
-                    Text(model_toolIsEraser ? "橡皮" : (isHighlightTool ? "笔尖" : "粗细"))
-                        .font(Theme.Typography.rowSubtitle)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                    if model_toolIsEraser {
-                        Text("\(Int(eraserSize))")
-                            .font(Theme.Typography.numeric)
-                            .frame(width: 22, alignment: .trailing)
-                        Slider(value: $eraserSize, in: 8...120)
-                            .frame(width: 170)
-                    } else {
-                        Text("\(Int(activeLineWidth.wrappedValue))")
-                            .font(Theme.Typography.numeric)
-                            .frame(width: 22, alignment: .trailing)
-                        Slider(value: activeLineWidth, in: activeWidthRange)
-                            .frame(width: 170)
-                            .onChange(of: activeLineWidth.wrappedValue) { _, value in
-                                applyToSelected { $0.withLineWidth(value) }
-                            }
-                    }
-                }
+    // MARK: - Options Toolbar
+
+    /// 当前二级参数栏对应的工具：绘图工具下对应自身；选择工具下若有点中对象，则对应选中的对象类型。
+    private var activeOptionsTool: AnnotationTool? {
+        if tool.isDrawing {
+            switch tool {
+            case .rectangle, .ellipse, .arrow, .line, .pen, .highlight, .text, .counter, .pixelate, .blur, .eraser:
+                return tool
+            case .select, .spotlight, .crop:
+                return nil
             }
-            if showColor {
-                HStack(spacing: Theme.Spacing.lg) {
-                    ForEach(RGBAColor.palette, id: \.self) { swatch in
-                        Button {
-                            activeColor.wrappedValue = swatch
-                            applyToSelected { $0.withColor(swatch) }
-                        } label: {
-                            Circle()
-                                .fill(swatch.swiftUIColor)
-                                .frame(width: 18, height: 18)
-                                .overlay(
-                                    Circle().strokeBorder(
-                                        activeColor.wrappedValue == swatch
-                                            ? Theme.Colors.textPrimary : Theme.Colors.border,
-                                        lineWidth: activeColor.wrappedValue == swatch ? 2 : 1
-                                    )
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            contextualStyleControls
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, Theme.Spacing.xl)
-        .padding(.vertical, Theme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        guard tool == .select, let selected = selectedAnnotation else { return nil }
+        switch selected.kind {
+        case .rectangle: return .rectangle
+        case .ellipse: return .ellipse
+        case .arrow: return .arrow
+        case .line: return .line
+        case .pen: return .pen
+        case .highlight: return .highlight
+        case .text, .callout: return .text
+        case .counter: return .counter
+        case .pixelate: return .pixelate
+        case .blur: return .blur
+        case .eraser: return .eraser
+        case .spotlight: return nil
+        }
     }
 
-    private var model_toolIsEraser: Bool { tool == .eraser }
+    /// 二级子工具栏：居中悬浮在主栏下方/上方，磨砂浮动面板样式。
+    @ViewBuilder
+    private var optionsBar: some View {
+        if let optTool = activeOptionsTool {
+            HStack(spacing: Theme.Spacing.md) {
+                switch optTool {
+                case .rectangle, .ellipse:
+                    shapeOptions
+                case .arrow:
+                    arrowOptions
+                case .line, .pen:
+                    lineOptions
+                case .highlight:
+                    highlightOptions
+                case .text:
+                    textOptions
+                case .counter:
+                    counterOptions
+                case .pixelate, .blur:
+                    mosaicOptions
+                case .eraser:
+                    eraserOptions
+                case .select, .crop, .spotlight:
+                    EmptyView()
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.vertical, 7)
+            .fixedSize()
+            .floatingSurface()
+        }
+    }
+
+    // MARK: - Sub Options
+
+    private var shapeOptions: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            HUDSlider(value: $lineWidth, range: 1...24, step: 1)
+                .onChange(of: lineWidth) { _, val in applyToSelected { $0.withLineWidth(val) } }
+            vSeparator
+            ColorSwatchesView(selectedColor: $color)
+                .onChange(of: color) { _, val in applyToSelected { $0.withColor(val) } }
+            vSeparator
+            ShapeFillModePicker(selectedMode: $shapeFillMode)
+                .onChange(of: shapeFillMode) { _, val in applyToSelected { $0.withShapeFillMode(val) } }
+        }
+    }
+
+    private var arrowOptions: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            HUDSlider(value: $lineWidth, range: 1...24, step: 1)
+                .onChange(of: lineWidth) { _, val in applyToSelected { $0.withLineWidth(val) } }
+            vSeparator
+            ColorSwatchesView(selectedColor: $color)
+                .onChange(of: color) { _, val in applyToSelected { $0.withColor(val) } }
+            vSeparator
+            ArrowStylePicker(selectedStyle: $arrowStyle)
+                .onChange(of: arrowStyle) { _, val in applyToSelected { $0.withArrowStyle(val) } }
+        }
+    }
+
+    private var lineOptions: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            HUDSlider(value: $lineWidth, range: 1...24, step: 1)
+                .onChange(of: lineWidth) { _, val in applyToSelected { $0.withLineWidth(val) } }
+            vSeparator
+            ColorSwatchesView(selectedColor: $color)
+                .onChange(of: color) { _, val in applyToSelected { $0.withColor(val) } }
+        }
+    }
+
+    /// 荧光笔用的是它自己的色槽与笔尖粗细（跟画笔 / 箭头互不影响）。
+    private var highlightOptions: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            HUDSlider(
+                value: $highlightLineWidth,
+                range: Annotation.highlightWidthRange,
+                step: 1
+            )
+            .onChange(of: highlightLineWidth) { _, val in applyToSelected { $0.withLineWidth(val) } }
+            vSeparator
+            ColorSwatchesView(selectedColor: $highlightColor)
+                .onChange(of: highlightColor) { _, val in applyToSelected { $0.withColor(val) } }
+        }
+    }
+
+    private var textOptions: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            HUDSlider(value: $fontSize, range: 12...72, step: 1)
+                .onChange(of: fontSize) { _, val in applyToSelected { $0.withFontSize(val) } }
+            vSeparator
+            ColorSwatchesView(selectedColor: $color)
+                .onChange(of: color) { _, val in applyToSelected { $0.withColor(val) } }
+            vSeparator
+            HUDCheckboxButton(title: "描边", isSelected: textHasStroke) {
+                textHasStroke.toggle()
+                applyToSelected { $0.withTextStroke(textHasStroke) }
+            }
+            HUDCheckboxButton(title: "标注", isSelected: textHasCallout) {
+                textHasCallout.toggle()
+                applyToSelected { $0.withTextCallout(textHasCallout) }
+            }
+        }
+    }
+
+    private var counterOptions: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            HUDSlider(value: $lineWidth, range: 2...16, step: 1)
+                .onChange(of: lineWidth) { _, val in applyToSelected { $0.withLineWidth(val) } }
+            vSeparator
+            ColorSwatchesView(selectedColor: $color)
+                .onChange(of: color) { _, val in applyToSelected { $0.withColor(val) } }
+        }
+    }
+
+    private var mosaicOptions: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            Text("马赛克颗粒度")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.Colors.textSecondary)
+            HUDSlider(
+                value: activeOptionsTool == .pixelate ? $mosaicBlock : $blurRadius,
+                range: 4...40,
+                step: 1
+            )
+            .onChange(of: mosaicBlock) { _, val in
+                if activeOptionsTool == .pixelate {
+                    applyToSelected { $0.withPixelateBlock(val) }
+                }
+            }
+            .onChange(of: blurRadius) { _, val in
+                if activeOptionsTool == .blur {
+                    applyToSelected { $0.withBlurRadius(val) }
+                }
+            }
+        }
+    }
+
+    private var eraserOptions: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            Text("橡皮大小")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.Colors.textSecondary)
+            HUDSlider(value: $eraserSize, range: 8...120, step: 2)
+        }
+    }
+
+    private var vSeparator: some View {
+        Rectangle()
+            .fill(Theme.Colors.separator)
+            .frame(width: Theme.Size.hairline, height: 16)
+            .padding(.horizontal, 2)
+    }
 
     private var toolbarTooltipPlacement: TooltipPlacement {
         inline ? .top : .bottom
-    }
-
-    private var colorButton: some View {
-        BarButton(
-            chrome: .rounded,
-            isSelected: showColor,
-            help: "颜色",
-            tooltipPlacement: toolbarTooltipPlacement,
-            action: {
-                showColor.toggle()
-                if showColor { showWidth = false }
-            }
-        ) {
-            Circle()
-                .fill(activeColor.wrappedValue.swiftUIColor)
-                .frame(width: 14, height: 14)
-                .overlay(Circle().strokeBorder(Theme.Colors.border, lineWidth: 1))
-                .frame(width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
-        }
-        .anchorPreference(key: OptionsAnchorKey.self, value: .bounds) { [.color: $0] }
-    }
-
-    private var widthButton: some View {
-        iconButton(
-            tool == .eraser ? "橡皮大小" : "线条粗细",
-            symbol: "lineweight",
-            isSelected: showWidth,
-            help: tool == .eraser ? "橡皮大小" : "线条粗细"
-        ) {
-            showWidth.toggle()
-            if showWidth { showColor = false }
-        }
-        .anchorPreference(key: OptionsAnchorKey.self, value: .bounds) { [.width: $0] }
-    }
-
-    /// 子工具栏横向居中到被点的按钮，并夹在窗口内。
-    private func optionsBarCenterX(anchorMidX: CGFloat, in container: CGSize) -> CGFloat {
-        let half = max(1, optionsSize.width) / 2
-        return min(max(anchorMidX, half + 8), max(half + 8, container.width - half - 8))
-    }
-
-    /// 非原地：贴在按钮下方；原地模式工具栏在底部，改贴上方。
-    private func optionsBarCenterY(buttonFrame: CGRect) -> CGFloat {
-        let half = max(1, optionsSize.height) / 2
-        let gap = Theme.Spacing.sm
-        return inline
-            ? buttonFrame.minY - gap - half
-            : buttonFrame.maxY + gap + half
     }
 
     private var separator: some View {
@@ -705,50 +775,23 @@ struct AnnotationEditorView: View {
             .padding(.horizontal, Theme.Spacing.xs)
     }
 
-    /// 选中文字 / 马赛克时显示字号 / 块大小。
-    @ViewBuilder
-    private var contextualStyleControls: some View {
-        if let selected = selectedAnnotation {
-            switch selected.kind {
-            case .text:
-                contextualSlider(symbol: "textformat.size", value: $fontSize, range: 10...100) {
-                    newValue in
-                    applyToSelected { $0.withFontSize(newValue) }
-                }
-            case .pixelate:
-                contextualSlider(
-                    symbol: "squareshape.split.3x3", value: $mosaicBlock, range: 4...40
-                ) { newValue in
-                    applyToSelected { $0.withPixelateBlock(newValue) }
-                }
-            case .blur:
-                contextualSlider(symbol: "drop.halffull", value: $blurRadius, range: 2...60) {
-                    newValue in
-                    applyToSelected { $0.withBlurRadius(newValue) }
-                }
-            default:
-                EmptyView()
-            }
+    private func syncStateFromAnnotation(_ hit: Annotation) {
+        if case .highlight = hit.kind {
+            highlightColor = hit.color
+            highlightLineWidth = hit.lineWidth
+        } else {
+            color = hit.color
+            lineWidth = hit.lineWidth
         }
-    }
-
-    /// 选中标注后出现的一个「图标 + 滑块」调节项。
-    private func contextualSlider(
-        symbol: String,
-        value: Binding<CGFloat>,
-        range: ClosedRange<CGFloat>,
-        onChange: @escaping (CGFloat) -> Void
-    ) -> some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            separator
-            Image(systemName: symbol)
-                .font(Theme.Typography.rowSubtitle)
-                .foregroundStyle(Theme.Colors.textSecondary)
-            Slider(value: value, in: range)
-                .frame(width: 90)
-                .onChange(of: value.wrappedValue) { _, newValue in
-                    onChange(newValue)
-                }
+        arrowStyle = hit.arrowStyle
+        shapeFillMode = hit.shapeFillMode
+        textHasStroke = hit.textHasStroke
+        textHasCallout = hit.textHasCallout
+        switch hit.kind {
+        case .pixelate(_, let block): mosaicBlock = block
+        case .blur(_, let radius): blurRadius = radius
+        case .text(_, _, let size), .callout(_, _, _, _, let size): fontSize = size
+        default: break
         }
     }
 
@@ -882,21 +925,7 @@ struct AnnotationEditorView: View {
         // 2) 命中已有标注 → 选中并移动
         if let hit = topmostAnnotation(at: startPx) {
             selectedID = hit.id
-            // 把该类型的参数也同步到选项条，便于直接微调。荧光笔走自己的色槽，
-            // 不能顺手把画笔 / 箭头的颜色改掉。
-            if case .highlight = hit.kind {
-                highlightColor = hit.color
-                highlightLineWidth = hit.lineWidth
-            } else {
-                color = hit.color
-                lineWidth = hit.lineWidth
-            }
-            switch hit.kind {
-            case .pixelate(_, let block): mosaicBlock = block
-            case .blur(_, let radius): blurRadius = radius
-            case .text(_, _, let size), .callout(_, _, _, _, let size): fontSize = size
-            default: break
-            }
+            syncStateFromAnnotation(hit)
             pushUndo()
             dragMode = .moving(id: hit.id, start: startPx, original: hit)
             return
@@ -994,9 +1023,19 @@ struct AnnotationEditorView: View {
         let rect = normalizedRect(start, current)
         switch tool {
         case .rectangle:
-            return Annotation(kind: .rectangle(rect), color: color, lineWidth: lineWidth)
+            return Annotation(
+                kind: .rectangle(rect),
+                color: color,
+                lineWidth: lineWidth,
+                shapeFillMode: shapeFillMode
+            )
         case .ellipse:
-            return Annotation(kind: .ellipse(rect), color: color, lineWidth: lineWidth)
+            return Annotation(
+                kind: .ellipse(rect),
+                color: color,
+                lineWidth: lineWidth,
+                shapeFillMode: shapeFillMode
+            )
         case .highlight:
             // 荧光笔是**涂**出来的一条笔迹，不是拉框（参考 capcap 的高亮笔）。
             return Annotation(
@@ -1009,7 +1048,12 @@ struct AnnotationEditorView: View {
         case .pixelate:
             return Annotation(kind: .pixelate(rect, block: mosaicBlock), color: color, lineWidth: lineWidth)
         case .arrow:
-            return Annotation(kind: .arrow(from: start, to: current, control: nil), color: color, lineWidth: lineWidth)
+            return Annotation(
+                kind: .arrow(from: start, to: current, control: nil),
+                color: color,
+                lineWidth: lineWidth,
+                arrowStyle: arrowStyle
+            )
         case .line:
             return Annotation(kind: .line(from: start, to: current), color: color, lineWidth: lineWidth)
         case .blur:
@@ -1026,7 +1070,9 @@ struct AnnotationEditorView: View {
             return Annotation(
                 kind: .text(origin: start, string: "", fontSize: fontSize),
                 color: color,
-                lineWidth: lineWidth
+                lineWidth: lineWidth,
+                textHasStroke: textHasStroke,
+                textHasCallout: textHasCallout
             )
         case .crop:
             // 借矩形当裁剪框的预览，确认前不会变成标注。
@@ -1155,7 +1201,11 @@ struct AnnotationEditorView: View {
             kind: kind,
             color: shifted.color,
             lineWidth: shifted.lineWidth,
-            rotation: shifted.rotation
+            rotation: shifted.rotation,
+            arrowStyle: shifted.arrowStyle,
+            shapeFillMode: shifted.shapeFillMode,
+            textHasStroke: shifted.textHasStroke,
+            textHasCallout: shifted.textHasCallout
         )
         annotations.append(copy)
         selectedID = copy.id
@@ -1175,8 +1225,7 @@ struct AnnotationEditorView: View {
         pushUndo()
         let styled = style.applied(to: annotations[index])
         annotations[index] = styled
-        color = styled.color
-        lineWidth = styled.lineWidth
+        syncStateFromAnnotation(styled)
     }
 
     /// 进入文字内联编辑。
@@ -1184,6 +1233,7 @@ struct AnnotationEditorView: View {
         guard let annotation = annotations.first(where: { $0.id == id }) else { return }
         guard case .text(let origin, let string, let size) = annotation.kind else { return }
         selectedID = id
+        syncStateFromAnnotation(annotation)
         editingTextID = id
         inlineText = string
         inlineFontSize = size
@@ -1225,6 +1275,7 @@ struct AnnotationEditorView: View {
         let point = imagePoint(from: location)
         guard let hit = topmostAnnotation(at: point) else { return }
         selectedID = hit.id
+        syncStateFromAnnotation(hit)
         if case .text = hit.kind {
             startTextEditing(id: hit.id)
         }
@@ -1479,27 +1530,5 @@ extension RGBAColor {
     /// UI 层的 SwiftUI 颜色桥接。
     var swiftUIColor: Color {
         Color(red: red, green: green, blue: blue, opacity: alpha)
-    }
-}
-
-
-
-/// 编辑器里颜色 / 粗细按钮的锚点，供悬浮子工具栏定位。
-///
-/// @author ixxxxoooo
-enum OptionsAnchor: Hashable {
-    case color
-    case width
-}
-
-/// @author ixxxxoooo
-struct OptionsAnchorKey: PreferenceKey {
-    static var defaultValue: [OptionsAnchor: Anchor<CGRect>] { [:] }
-
-    static func reduce(
-        value: inout [OptionsAnchor: Anchor<CGRect>],
-        nextValue: () -> [OptionsAnchor: Anchor<CGRect>]
-    ) {
-        value.merge(nextValue()) { _, new in new }
     }
 }
