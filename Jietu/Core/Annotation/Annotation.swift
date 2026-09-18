@@ -50,7 +50,10 @@ enum AnnotationTool: String, CaseIterable, Identifiable, Codable {
         case .line: return "line.diagonal"
         case .pen: return "pencil"
         case .highlight: return "highlighter"
-        case .text: return "character.cursor.ibeam"
+        case .text:
+            let isChinese = (Locale.preferredLanguages.first?.hasPrefix("zh") ?? false)
+                || (Locale.current.language.languageCode?.identifier == "zh")
+            return isChinese ? "character.cursor.ibeam.zh" : "character.cursor.ibeam"
         case .pixelate: return "squareshape.split.3x3"
         case .blur: return "drop.halffull"
         case .counter: return "1.circle"

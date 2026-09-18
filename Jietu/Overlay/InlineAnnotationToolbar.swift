@@ -215,23 +215,13 @@ struct InlineMainToolbar: View {
                 if item.isDrawing { model.isLiveTextActive = false }
             }
         } label: {
-            if item == .text {
-                Text("A")
-                    .font(.system(size: Theme.Size.toolbarIconSize, weight: .bold))
-                    .foregroundStyle(
-                        model.tool == item ? Theme.Colors.textPrimary : Theme.Colors.textSecondary
-                    )
-                    .frame(
-                        width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
-            } else {
-                Image(systemName: item.symbolName)
-                    .font(.system(size: Theme.Size.toolbarIconSize, weight: .regular))
-                    .foregroundStyle(
-                        model.tool == item ? Theme.Colors.textPrimary : Theme.Colors.textSecondary
-                    )
-                    .frame(
-                        width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
-            }
+            Image(systemName: item.symbolName)
+                .font(.system(size: Theme.Size.toolbarIconSize, weight: .regular))
+                .foregroundStyle(
+                    model.tool == item ? Theme.Colors.textPrimary : Theme.Colors.textSecondary
+                )
+                .frame(
+                    width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
         }
     }
 }

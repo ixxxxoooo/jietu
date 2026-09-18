@@ -746,21 +746,12 @@ struct AnnotationEditorView: View {
                 }
             }
         ) {
-            if item == .text {
-                Text("A")
-                    .font(.system(size: Theme.Size.toolbarIconSize, weight: .bold))
-                    .foregroundStyle(
-                        tool == item ? Theme.Colors.textPrimary : Theme.Colors.textSecondary
-                    )
-                    .frame(width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
-            } else {
-                Image(systemName: item.symbolName)
-                    .font(.system(size: Theme.Size.toolbarIconSize, weight: .regular))
-                    .foregroundStyle(
-                        tool == item ? Theme.Colors.textPrimary : Theme.Colors.textSecondary
-                    )
-                    .frame(width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
-            }
+            Image(systemName: item.symbolName)
+                .font(.system(size: Theme.Size.toolbarIconSize, weight: .regular))
+                .foregroundStyle(
+                    tool == item ? Theme.Colors.textPrimary : Theme.Colors.textSecondary
+                )
+                .frame(width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
         }
     }
 
