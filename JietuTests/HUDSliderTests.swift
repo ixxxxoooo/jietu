@@ -22,7 +22,7 @@ struct HUDSliderTests {
     @Test("箭头样式包含 4 种类型")
     func arrowStylesCount() {
         #expect(ArrowStyle.allCases.count == 4)
-        #expect(ArrowStyle.allCases == [.standard, .doubleEnded, .tapered, .dotTail])
+        #expect(ArrowStyle.allCases == [.tapered, .doubleEnded, .line, .dotTail])
     }
 
     @Test("形状填充模式包含 3 种类型")

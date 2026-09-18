@@ -14,7 +14,7 @@ final class InlineToolbarModel {
     var eraserSize: CGFloat = 28
     var mosaicBlock: CGFloat = 12
     var blurRadius: CGFloat = 12
-    var arrowStyle: ArrowStyle = .standard
+    var arrowStyle: ArrowStyle = .tapered
     var shapeFillMode: ShapeFillMode = .none
     var textHasStroke: Bool = false
     var textHasCallout: Bool = false

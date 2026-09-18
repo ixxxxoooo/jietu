@@ -15,68 +15,65 @@ struct HUDSlider: View {
     private let thumbHeight: CGFloat = 18
 
     var body: some View {
-        GeometryReader { _ in
-            ZStack(alignment: .leading) {
-                // 楔形轨道底图
-                wedgePath(width: trackWidth, height: trackHeight)
+        ZStack(alignment: .leading) {
+            // 楔形轨道底图
+            wedgePath(width: trackWidth, height: trackHeight)
+                .fill(
+                    Theme.Colors.adaptive(
+                        dark: .srgbInk(1, alpha: 0.85),
+                        light: .srgbInk(0, alpha: 0.92)
+                    )
+                )
+                .frame(width: trackWidth, height: trackHeight)
+
+            // 药丸徽标（Thumb）
+            ZStack {
+                RoundedRectangle(cornerRadius: thumbHeight / 2, style: .continuous)
                     .fill(
                         Theme.Colors.adaptive(
-                            dark: .srgbInk(1, alpha: 0.85),
-                            light: .srgbInk(0, alpha: 0.92)
+                            dark: .srgbInk(0.22, alpha: 0.98),
+                            light: .white
                         )
                     )
-                    .frame(width: trackWidth, height: trackHeight)
-
-                // 药丸徽标（Thumb）
-                ZStack {
-                    RoundedRectangle(cornerRadius: thumbHeight / 2, style: .continuous)
-                        .fill(
-                            Theme.Colors.adaptive(
-                                dark: .srgbInk(0.22, alpha: 0.98),
-                                light: .white
+                    .overlay(
+                        RoundedRectangle(cornerRadius: thumbHeight / 2, style: .continuous)
+                            .strokeBorder(
+                                Theme.Colors.adaptive(
+                                    dark: .srgbInk(1, alpha: 0.18),
+                                    light: .srgbInk(0, alpha: 0.15)
+                                ),
+                                lineWidth: 1
                             )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: thumbHeight / 2, style: .continuous)
-                                .strokeBorder(
-                                    Theme.Colors.adaptive(
-                                        dark: .srgbInk(1, alpha: 0.18),
-                                        light: .srgbInk(0, alpha: 0.15)
-                                    ),
-                                    lineWidth: 1
-                                )
-                        )
-                        .shadow(
-                            color: Color.black.opacity(0.12),
-                            radius: 2,
-                            x: 0,
-                            y: 1
-                        )
+                    )
+                    .shadow(
+                        color: Color.black.opacity(0.12),
+                        radius: 2,
+                        x: 0,
+                        y: 1
+                    )
 
-                    Text("\(Int(round(value)))")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(
-                            Theme.Colors.adaptive(
-                                dark: .white,
-                                light: .black
-                            )
+                Text("\(Int(round(value)))")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(
+                        Theme.Colors.adaptive(
+                            dark: .white,
+                            light: .black
                         )
-                        .lineLimit(1)
-                        .allowsHitTesting(false)
-                }
-                .frame(width: thumbWidth, height: thumbHeight)
-                .offset(x: thumbOffset)
+                    )
+                    .lineLimit(1)
+                    .allowsHitTesting(false)
             }
-            .frame(width: trackWidth, height: thumbHeight, alignment: .center)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { gesture in
-                        updateValue(at: gesture.location.x)
-                    }
-            )
+            .frame(width: thumbWidth, height: thumbHeight)
+            .offset(x: thumbOffset)
         }
         .frame(width: trackWidth, height: thumbHeight)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { gesture in
+                    updateValue(at: gesture.location.x)
+                }
+        )
     }
 
     /// 绘制细到粗楔形轨道
@@ -135,6 +132,8 @@ struct HUDSlider: View {
         let raw = range.lowerBound + progress * (range.upperBound - range.lowerBound)
         let stepped = round(raw / step) * step
         let clamped = min(max(stepped, range.lowerBound), range.upperBound)
-        value = clamped
+        if value != clamped {
+            value = clamped
+        }
     }
 }

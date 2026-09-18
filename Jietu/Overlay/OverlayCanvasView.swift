@@ -1945,6 +1945,15 @@ final class OverlayCanvasView: NSView {
         main.layer?.masksToBounds = false
         addSubview(main)
         mainToolbarHost = main
+
+        // 二级菜单：持久宿主，只靠 SwiftUI 内部响应驱动，避免拖拽滑块/调色时宿主反复重建闪烁
+        let options = NSHostingView(rootView: InlineOptionsToolbar(model: model))
+        options.translatesAutoresizingMaskIntoConstraints = true
+        options.layer?.masksToBounds = false
+        options.isHidden = !model.isSubToolbarVisible
+        addSubview(options)
+        optionsToolbarHost = options
+
         layoutToolbars()
 
         // 监听工具/参数变化以更新选项条与存档。
@@ -2034,23 +2043,19 @@ final class OverlayCanvasView: NSView {
         toolbarModel = nil
     }
 
-    /// 工具/参数/子工具栏开关变化时重建选项条。
+    /// 工具/参数/子工具栏开关变化时重新排版选项条。
     private func observeOptions(_ model: InlineToolbarModel) {
         withObservationTracking {
             _ = model.isSubToolbarVisible
             _ = model.tool
             _ = model.showScroll
             _ = model.isLiveTextActive
-            _ = model.color
-            _ = model.lineWidth
-            _ = model.fontSize
-            _ = model.eraserSize
-            _ = model.mosaicBlock
-            _ = model.blurRadius
-            _ = model.arrowStyle
-            _ = model.shapeFillMode
-            _ = model.textHasStroke
-            _ = model.textHasCallout
+            if self.inlineEditingTextID != nil {
+                _ = model.fontSize
+                _ = model.color
+                _ = model.textHasStroke
+                _ = model.textHasCallout
+            }
         } onChange: { [weak self] in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -2058,8 +2063,9 @@ final class OverlayCanvasView: NSView {
                     self.applyInlineTextStyle(field, model: model)
                     self.fitInlineTextField()
                 }
-                self.rebuildOptionsToolbar()
+                self.optionsToolbarHost?.isHidden = !model.isSubToolbarVisible
                 self.updateLiveTextOverlay()
+                self.layoutToolbars()
                 if self.toolbarModel === model {
                     self.observeOptions(model)
                 }
@@ -2087,16 +2093,7 @@ final class OverlayCanvasView: NSView {
     }
 
     private func rebuildOptionsToolbar() {
-        optionsToolbarHost?.removeFromSuperview()
-        optionsToolbarHost = nil
-
-        guard let model = toolbarModel, model.isSubToolbarVisible
-        else { return }
-        let host = NSHostingView(rootView: InlineOptionsToolbar(model: model))
-        host.translatesAutoresizingMaskIntoConstraints = true
-        host.layer?.masksToBounds = false
-        addSubview(host)
-        optionsToolbarHost = host
+        optionsToolbarHost?.isHidden = !(toolbarModel?.isSubToolbarVisible ?? false)
         layoutToolbars()
     }
 
@@ -2118,9 +2115,14 @@ final class OverlayCanvasView: NSView {
         origin.y = min(origin.y, bounds.maxY - mainSize.height - 8)
         main.frame = CGRect(origin: origin, size: mainSize)
 
-        guard let options = optionsToolbarHost else { return }
+        guard let options = optionsToolbarHost, let model = toolbarModel, model.isSubToolbarVisible else {
+            optionsToolbarHost?.isHidden = true
+            return
+        }
+        options.isHidden = false
         options.layoutSubtreeIfNeeded()
         let size = options.fittingSize
+        guard size.width > 0, size.height > 0 else { return }
         // 居中显示到主工具栏正下方（水平 midX 对齐）
         let x = min(
             max(main.frame.midX - size.width / 2, bounds.minX + 8),

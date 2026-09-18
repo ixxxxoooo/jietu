@@ -104,19 +104,31 @@ struct RGBAColor: Equatable, Hashable, Codable {
 ///
 /// @author ixxxxoooo
 enum ArrowStyle: String, CaseIterable, Identifiable, Codable {
-    case standard
-    case doubleEnded
     case tapered
+    case doubleEnded
+    case line
     case dotTail
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .standard: return "单向箭头"
+        case .tapered: return "渐宽箭头"
         case .doubleEnded: return "双向箭头"
-        case .tapered: return "实心箭头"
+        case .line: return "直箭头"
         case .dotTail: return "圆点箭头"
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        switch raw {
+        case "tapered": self = .tapered
+        case "doubleEnded": self = .doubleEnded
+        case "line", "standard": self = .line
+        case "dotTail": self = .dotTail
+        default: self = .tapered
         }
     }
 }
@@ -282,7 +294,7 @@ struct Annotation: Identifiable, Equatable {
         color: RGBAColor,
         lineWidth: CGFloat = 3,
         rotation: CGFloat = 0,
-        arrowStyle: ArrowStyle = .standard,
+        arrowStyle: ArrowStyle = .tapered,
         shapeFillMode: ShapeFillMode = .none,
         textHasStroke: Bool = false,
         textHasCallout: Bool = false

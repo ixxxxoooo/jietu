@@ -35,7 +35,7 @@ struct AnnotationDefaults: Equatable, Codable {
         mosaicBlock: CGFloat = 10,
         blurRadius: CGFloat = 12,
         eraserSize: CGFloat = 28,
-        arrowStyle: ArrowStyle = .standard,
+        arrowStyle: ArrowStyle = .tapered,
         shapeFillMode: ShapeFillMode = .none,
         textHasStroke: Bool = false,
         textHasCallout: Bool = false
@@ -62,7 +62,7 @@ struct AnnotationDefaults: Equatable, Codable {
         mosaicBlock = try container.decodeIfPresent(CGFloat.self, forKey: .mosaicBlock) ?? 10
         blurRadius = try container.decodeIfPresent(CGFloat.self, forKey: .blurRadius) ?? 12
         eraserSize = try container.decodeIfPresent(CGFloat.self, forKey: .eraserSize) ?? 28
-        arrowStyle = try container.decodeIfPresent(ArrowStyle.self, forKey: .arrowStyle) ?? .standard
+        arrowStyle = try container.decodeIfPresent(ArrowStyle.self, forKey: .arrowStyle) ?? .tapered
         shapeFillMode = try container.decodeIfPresent(ShapeFillMode.self, forKey: .shapeFillMode) ?? .none
         textHasStroke = try container.decodeIfPresent(Bool.self, forKey: .textHasStroke) ?? false
         textHasCallout = try container.decodeIfPresent(Bool.self, forKey: .textHasCallout) ?? false

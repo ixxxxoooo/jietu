@@ -242,7 +242,7 @@ enum AnnotationRenderer {
         from: CGPoint,
         to: CGPoint,
         control: CGPoint?,
-        style: ArrowStyle = .standard,
+        style: ArrowStyle = .tapered,
         lineWidth: CGFloat,
         color: RGBAColor,
         in context: CGContext,
@@ -251,42 +251,117 @@ enum AnnotationRenderer {
         let start = contextPoint(from, imageHeight: imageHeight)
         let end = contextPoint(to, imageHeight: imageHeight)
 
-        var tangentStart: CGPoint
-        var tangentEnd: CGPoint
-        if let control {
-            let c = contextPoint(control, imageHeight: imageHeight)
-            context.move(to: start)
-            context.addQuadCurve(to: end, control: c)
-            context.strokePath()
-            tangentStart = CGPoint(x: c.x - start.x, y: c.y - start.y)
-            tangentEnd = CGPoint(x: end.x - c.x, y: end.y - c.y)
-        } else {
-            context.move(to: start)
-            context.addLine(to: end)
-            context.strokePath()
-            tangentStart = CGPoint(x: end.x - start.x, y: end.y - start.y)
-            tangentEnd = tangentStart
+        context.saveGState()
+        context.setStrokeColor(color.cgColor)
+        context.setFillColor(color.cgColor)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let length = hypot(dx, dy)
+        guard length > 1 else {
+            context.restoreGState()
+            return
         }
 
-        let headLength = max(12, lineWidth * 5)
-        let spread = CGFloat.pi / 7
+        let ux = dx / length
+        let uy = dy / length
+        let nx = -uy
+        let ny = ux
 
-        // 起点修饰：双向箭头 / 圆点起笔
         switch style {
+        case .tapered:
+            // capcap 风格的渐宽实心箭头（7 顶点闭合多边形，尾端圆角微缩，箭身渐宽，头部展翼后收于顶点）
+            let headLength = min(max(lineWidth * 5.0, 18.0), length * 0.46)
+            let headWidth = min(max(lineWidth * 3.4, 14.0), length * 0.40)
+            let neckWidth = min(max(lineWidth * 1.1, 4.0), headWidth * 0.45)
+            let tailWidth = min(max(lineWidth * 0.35, 1.8), neckWidth * 0.5)
+
+            let neckBase = CGPoint(x: end.x - ux * headLength, y: end.y - uy * headLength)
+            let tip = end
+            let rightBarb = CGPoint(x: neckBase.x + nx * (headWidth / 2), y: neckBase.y + ny * (headWidth / 2))
+            let rightNeck = CGPoint(x: neckBase.x + nx * (neckWidth / 2), y: neckBase.y + ny * (neckWidth / 2))
+            let rightTail = CGPoint(x: start.x + nx * (tailWidth / 2), y: start.y + ny * (tailWidth / 2))
+            let leftTail = CGPoint(x: start.x - nx * (tailWidth / 2), y: start.y - ny * (tailWidth / 2))
+            let leftNeck = CGPoint(x: neckBase.x - nx * (neckWidth / 2), y: neckBase.y - ny * (neckWidth / 2))
+            let leftBarb = CGPoint(x: neckBase.x - nx * (headWidth / 2), y: neckBase.y - ny * (headWidth / 2))
+
+            context.beginPath()
+            context.move(to: tip)
+            context.addLine(to: rightBarb)
+            context.addLine(to: rightNeck)
+            context.addLine(to: rightTail)
+            context.addArc(
+                center: start,
+                radius: tailWidth / 2,
+                startAngle: atan2(ny, nx),
+                endAngle: atan2(-ny, -nx),
+                clockwise: false
+            )
+            context.addLine(to: leftNeck)
+            context.addLine(to: leftBarb)
+            context.closePath()
+            context.fillPath()
+
         case .doubleEnded:
-            let startAngle = atan2(-tangentStart.y, -tangentStart.x)
-            for offset in [CGFloat.pi - spread, CGFloat.pi + spread] {
-                let point = CGPoint(
-                    x: start.x + cos(startAngle + offset) * headLength,
-                    y: start.y + sin(startAngle + offset) * headLength
-                )
-                context.move(to: start)
-                context.addLine(to: point)
-            }
+            // 双向实心箭头：主干线 + 两端均为实心闭合三角箭头
+            let headLength = min(max(lineWidth * 3.8, 14.0), length * 0.4)
+            let headWidth = min(max(lineWidth * 3.0, 11.0), length * 0.35)
+
+            let startNeck = CGPoint(x: start.x + ux * (headLength * 0.7), y: start.y + uy * (headLength * 0.7))
+            let endNeck = CGPoint(x: end.x - ux * (headLength * 0.7), y: end.y - uy * (headLength * 0.7))
+
+            context.setLineWidth(lineWidth)
+            context.beginPath()
+            context.move(to: startNeck)
+            context.addLine(to: endNeck)
             context.strokePath()
 
+            // 起点箭头（向后指）
+            let sBarb1 = CGPoint(x: start.x + ux * headLength + nx * (headWidth / 2), y: start.y + uy * headLength + ny * (headWidth / 2))
+            let sBarb2 = CGPoint(x: start.x + ux * headLength - nx * (headWidth / 2), y: start.y + uy * headLength - ny * (headWidth / 2))
+            context.beginPath()
+            context.move(to: start)
+            context.addLine(to: sBarb1)
+            context.addLine(to: sBarb2)
+            context.closePath()
+            context.fillPath()
+
+            // 终点箭头（向前指）
+            let eBarb1 = CGPoint(x: end.x - ux * headLength + nx * (headWidth / 2), y: end.y - uy * headLength + ny * (headWidth / 2))
+            let eBarb2 = CGPoint(x: end.x - ux * headLength - nx * (headWidth / 2), y: end.y - uy * headLength - ny * (headWidth / 2))
+            context.beginPath()
+            context.move(to: end)
+            context.addLine(to: eBarb1)
+            context.addLine(to: eBarb2)
+            context.closePath()
+            context.fillPath()
+
+        case .line:
+            // 直箭头：主干线 + 终点实心闭合三角箭头
+            let headLength = min(max(lineWidth * 3.8, 14.0), length * 0.45)
+            let headWidth = min(max(lineWidth * 3.0, 11.0), length * 0.4)
+            let endNeck = CGPoint(x: end.x - ux * (headLength * 0.7), y: end.y - uy * (headLength * 0.7))
+
+            context.setLineWidth(lineWidth)
+            context.beginPath()
+            context.move(to: start)
+            context.addLine(to: endNeck)
+            context.strokePath()
+
+            let eBarb1 = CGPoint(x: end.x - ux * headLength + nx * (headWidth / 2), y: end.y - uy * headLength + ny * (headWidth / 2))
+            let eBarb2 = CGPoint(x: end.x - ux * headLength - nx * (headWidth / 2), y: end.y - uy * headLength - ny * (headWidth / 2))
+            context.beginPath()
+            context.move(to: end)
+            context.addLine(to: eBarb1)
+            context.addLine(to: eBarb2)
+            context.closePath()
+            context.fillPath()
+
         case .dotTail:
-            let dotRadius = max(4, lineWidth * 1.5)
+            // 圆点实心箭头：起点实心圆点 + 主干线 + 终点实心闭合三角箭头
+            let dotRadius = max(lineWidth * 0.9, 4.0)
             context.fillEllipse(
                 in: CGRect(
                     x: start.x - dotRadius,
@@ -296,42 +371,27 @@ enum AnnotationRenderer {
                 )
             )
 
-        case .standard, .tapered:
-            break
-        }
+            let headLength = min(max(lineWidth * 3.8, 14.0), length * 0.45)
+            let headWidth = min(max(lineWidth * 3.0, 11.0), length * 0.4)
+            let endNeck = CGPoint(x: end.x - ux * (headLength * 0.7), y: end.y - uy * (headLength * 0.7))
 
-        // 终点箭头：普通 V 箭头 / 实心三角形
-        let endAngle = atan2(tangentEnd.y, tangentEnd.x)
-        switch style {
-        case .standard, .doubleEnded, .dotTail:
-            for offset in [CGFloat.pi - spread, CGFloat.pi + spread] {
-                let point = CGPoint(
-                    x: end.x + cos(endAngle + offset) * headLength,
-                    y: end.y + sin(endAngle + offset) * headLength
-                )
-                context.move(to: end)
-                context.addLine(to: point)
-            }
+            context.setLineWidth(lineWidth)
+            context.beginPath()
+            context.move(to: start)
+            context.addLine(to: endNeck)
             context.strokePath()
 
-        case .tapered:
-            let triLength = max(14, lineWidth * 5.5)
-            let triSpread = CGFloat.pi / 6.5
-            let p1 = CGPoint(
-                x: end.x + cos(endAngle + CGFloat.pi - triSpread) * triLength,
-                y: end.y + sin(endAngle + CGFloat.pi - triSpread) * triLength
-            )
-            let p2 = CGPoint(
-                x: end.x + cos(endAngle + CGFloat.pi + triSpread) * triLength,
-                y: end.y + sin(endAngle + CGFloat.pi + triSpread) * triLength
-            )
+            let eBarb1 = CGPoint(x: end.x - ux * headLength + nx * (headWidth / 2), y: end.y - uy * headLength + ny * (headWidth / 2))
+            let eBarb2 = CGPoint(x: end.x - ux * headLength - nx * (headWidth / 2), y: end.y - uy * headLength - ny * (headWidth / 2))
             context.beginPath()
             context.move(to: end)
-            context.addLine(to: p1)
-            context.addLine(to: p2)
+            context.addLine(to: eBarb1)
+            context.addLine(to: eBarb2)
             context.closePath()
             context.fillPath()
         }
+
+        context.restoreGState()
     }
 
     private static func drawPen(_ points: [CGPoint], in context: CGContext, imageHeight: Int) {
