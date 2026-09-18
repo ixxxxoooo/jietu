@@ -1100,10 +1100,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         overlays.onSaveImage = { [weak self] image in
             guard let self else { return }
-            // 遮罩窗在最上层，保存面板会被挡住：先隐藏，存完再恢复。
+            // 遮罩窗在最上层，保存面板会被挡住：先隐藏。
             self.overlays.setOverlayHidden(true)
-            self.saveAs(image)
-            self.overlays.setOverlayHidden(false)
+            let saved = self.saveAs(image, ensuresHistory: true)
+            if saved {
+                // 保存完毕等同于确认，播放提示音、写入剪贴板，收起遮罩不再回到之前的区域截图状态。
+                if self.settings.playShutterSound {
+                    CaptureOutput.playShutterSound()
+                }
+                self.copyToClipboard(image)
+                self.overlays.finishFromSave()
+            } else {
+                // 用户在保存面板中点了取消：恢复遮罩继续编辑。
+                self.overlays.setOverlayHidden(false)
+            }
         }
         overlays.onPinImage = { image, screenRect in
             PinWindowController.pin(image: image, on: NSScreen.main, targetFrame: screenRect)
@@ -2025,7 +2035,8 @@ struct CaptureRegionTarget {
     }
 
     /// 「存储为…」：弹系统保存面板让用户选择位置。
-    private func saveAs(_ image: CGImage) {
+    @discardableResult
+    private func saveAs(_ image: CGImage, ensuresHistory: Bool = false) -> Bool {
         let panel = NSSavePanel()
         panel.directoryURL = settings.saveDirectory
         panel.canCreateDirectories = true
@@ -2036,7 +2047,7 @@ struct CaptureRegionTarget {
         )
         panel.nameFieldStringValue = "\(base).\(settings.saveFormat.fileExtension)"
 
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
         do {
             let data: Data?
             switch settings.saveFormat {
@@ -2045,9 +2056,14 @@ struct CaptureRegionTarget {
             }
             guard let data else { throw CaptureOutputError.encodingFailed }
             try data.write(to: url, options: .atomic)
+            if ensuresHistory {
+                recordHistory(image)
+            }
             didSave(to: url)
+            return true
         } catch {
             logger.error("save failed: \(error.localizedDescription)")
+            return false
         }
     }
 

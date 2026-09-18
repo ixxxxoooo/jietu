@@ -1491,6 +1491,14 @@ final class OverlayCanvasView: NSView {
                     inlineRedo()
                     return
                 }
+                if event.modifierFlags.intersection([.command, .shift, .control, .option]) == .command,
+                    event.charactersIgnoringModifiers?.lowercased() == "s"
+                {
+                    if let image = currentAnnotatedImage() {
+                        onSaveImage?(image)
+                        return
+                    }
+                }
             }
             switch event.keyCode {
             case 53: // Esc：直接退出整个截图

@@ -130,7 +130,12 @@ struct InlineMainToolbar: View {
                 model.onRecord?()
             }
 
-            BarIconButton(title: "保存", systemImage: "square.and.arrow.down") {
+            BarIconButton(
+                title: "保存",
+                systemImage: "square.and.arrow.down",
+                help: "保存 (⌘S)",
+                key: "s"
+            ) {
                 model.onSave?()
             }
             BarIconButton(title: "钉图", systemImage: "pin") {

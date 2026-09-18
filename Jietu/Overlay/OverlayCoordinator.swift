@@ -191,6 +191,11 @@ final class OverlayCoordinator {
         finish(.cancelled, reason: "external")
     }
 
+    /// 保存成功后收起遮罩并结束截图（等同于确认，不再返回区域截图选区）。
+    func finishFromSave() {
+        finish(.cancelled, reason: "save-complete")
+    }
+
     private func commit(snapshot: DisplaySnapshot, localRect: CGRect) {
         guard let image = CaptureOutput.crop(snapshot, toLocalRect: localRect) else {
             logger.error("crop produced empty image")
