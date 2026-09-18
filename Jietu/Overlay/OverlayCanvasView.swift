@@ -1149,18 +1149,14 @@ final class OverlayCanvasView: NSView {
     }()
 
     private func updateCursor(at point: CGPoint) {
-        if isWindowOnlyMode {
-            Self.cameraCursor.set()
-            return
-        }
-        if let selection, let handle = SelectionGeometry.handle(
-            at: point,
-            in: selection,
-            tolerance: Theme.selectionHandleHitTolerance
-        ) {
-            SelectionCursor.cursor(for: handle).set()
-        } else if phase == .annotating {
-            if let tool = toolbarModel?.tool {
+        if phase == .annotating {
+            if let selection, let handle = SelectionGeometry.handle(
+                at: point,
+                in: selection,
+                tolerance: Theme.selectionHandleHitTolerance
+            ) {
+                SelectionCursor.cursor(for: handle).set()
+            } else if let tool = toolbarModel?.tool {
                 if tool == .text {
                     NSCursor.iBeam.set()
                 } else if tool.isDrawing {
@@ -1171,6 +1167,18 @@ final class OverlayCanvasView: NSView {
             } else {
                 NSCursor.arrow.set()
             }
+            return
+        }
+        if isWindowOnlyMode {
+            Self.cameraCursor.set()
+            return
+        }
+        if let selection, let handle = SelectionGeometry.handle(
+            at: point,
+            in: selection,
+            tolerance: Theme.selectionHandleHitTolerance
+        ) {
+            SelectionCursor.cursor(for: handle).set()
         } else {
             NSCursor.crosshair.set()
         }
@@ -1182,6 +1190,7 @@ final class OverlayCanvasView: NSView {
     }
 
     override func resetCursorRects() {
+        if phase == .annotating { return }
         addCursorRect(bounds, cursor: isWindowOnlyMode ? Self.cameraCursor : .crosshair)
     }
 
@@ -1410,9 +1419,25 @@ final class OverlayCanvasView: NSView {
                     Self.rememberedSelection[snapshot.displayID] = selection
                     notifySelectionChanged()
                     firePauseSignal()
-                } else {
-                    onWindowSelected?(hoveredWindow)
+                    return
                 }
+                if inlineMode {
+                    let rect = DisplayGeometry.localRect(
+                        fromCGRect: hoveredWindow.frameInCGPoints,
+                        screen: screen
+                    ).intersection(canvasBounds)
+                    guard !rect.isEmpty else {
+                        interaction = .idle
+                        return
+                    }
+                    selection = rect
+                    interaction = .settled
+                    Self.rememberedSelection[snapshot.displayID] = selection
+                    updateAllLayers()
+                    enterAnnotating()
+                    return
+                }
+                onWindowSelected?(hoveredWindow)
                 return
             }
             interaction = .idle
@@ -1568,6 +1593,8 @@ final class OverlayCanvasView: NSView {
         annotationLayer.isHidden = true
         CATransaction.commit()
         showToolbar()
+        window?.invalidateCursorRects(for: self)
+        updateCursor(at: cursorPoint ?? .zero)
     }
 
     private func exitAnnotating() {
@@ -1592,6 +1619,8 @@ final class OverlayCanvasView: NSView {
         phase = .selecting
         onInlineEditingChanged?(false)
         updateAllLayers()
+        window?.invalidateCursorRects(for: self)
+        updateCursor(at: cursorPoint ?? .zero)
     }
 
     /// 标注态里拖动选区边缘：改选区的同时，把标注 / 橡皮笔迹按**新原点**平移，
@@ -2565,6 +2594,12 @@ final class OverlayCanvasView: NSView {
         if phase == .annotating {
             confirmInline()
             return
+        }
+        if selection == nil, let windowRect = hoveredWindowLocalRect {
+            selection = windowRect
+            updateAllLayers()
+            interaction = .settled
+            Self.rememberedSelection[snapshot.displayID] = windowRect
         }
         guard let selection, selection.width >= 1, selection.height >= 1 else { return }
         if inlineMode {

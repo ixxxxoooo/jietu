@@ -106,4 +106,86 @@ struct InlineTextFieldTests {
 
         field.detachEditorObservers()
     }
+
+    @Test("窗口模式下点击窗口直接截取并进入原地编辑")
+    func windowClickEntersInlineAnnotating() {
+        let screen = NSScreen.screens.first ?? NSScreen.main!
+        let snapshot = DisplaySnapshot(
+            displayID: screen.jietu_displayID ?? 1,
+            screenFrameInPoints: screen.frame,
+            nominalScaleFactor: 2,
+            image: TestImage.solidBlack(side: 100)
+        )
+        let localWindowRect = CGRect(x: 50, y: 50, width: 400, height: 300)
+        let cgWindowRect = DisplayGeometry.cgRect(fromLocal: localWindowRect, screen: screen)
+        let windowInfo = WindowInfo(
+            windowID: 42,
+            ownerPID: 100,
+            ownerName: "Finder",
+            title: "Documents",
+            layer: 0,
+            frameInCGPoints: cgWindowRect
+        )
+        let session = CaptureSession(snapshots: [snapshot], windows: [windowInfo])
+        let view = OverlayCanvasView(
+            snapshot: snapshot,
+            session: session,
+            displayIndex: 1,
+            displayCount: 1
+        )
+        let window = NSWindow(
+            contentRect: screen.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = view
+        view.inlineMode = true
+        view.isWindowOnlyMode = true
+        view.armInput(after: 0)
+
+        // 模拟鼠标移动到窗口内部以选中 hoveredWindow
+        let point = CGPoint(x: 100, y: 100)
+        view.mouseMoved(with: NSEvent.mouseEvent(
+            with: .mouseMoved,
+            location: point,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 0,
+            pressure: 0
+        )!)
+
+        // 模拟点击
+        let downEvent = NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: point,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 1
+        )!
+        let upEvent = NSEvent.mouseEvent(
+            with: .leftMouseUp,
+            location: point,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 0
+        )!
+
+        view.mouseDown(with: downEvent)
+        view.mouseUp(with: upEvent)
+
+        #expect(view.isAnnotationPhase, "点击窗口后应直接进入原地标注态")
+        #expect(view.debugSelection != nil, "选区应被置为该窗口矩形")
+    }
 }

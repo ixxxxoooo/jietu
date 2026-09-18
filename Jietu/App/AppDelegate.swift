@@ -1262,7 +1262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 overlays.present(
                     session: CaptureSession(snapshots: snapshots, windows: windows),
-                    inlineMode: false
+                    inlineMode: settings.editorMode == .inline
                 )
             } catch {
                 presentCaptureFailure(error)
