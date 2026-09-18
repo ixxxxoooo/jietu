@@ -39,7 +39,14 @@ enum AnnotationRenderer {
         context.draw(base, in: CGRect(x: 0, y: 0, width: width, height: height))
 
         var mosaicCache: [Int: CGImage] = [:]
+        var spotlights: [CGRect] = []
         for annotation in annotations {
+            // 聚光灯是**整幅**效果（压暗的是框外的一切，包括别的标注），
+            // 所以先跳过，等所有标注画完再统一合一层。
+            if case .spotlight(let rect) = annotation.kind {
+                spotlights.append(rect)
+                continue
+            }
             draw(
                 annotation,
                 base: base,
@@ -58,6 +65,9 @@ enum AnnotationRenderer {
             for stroke in eraserStrokes {
                 drawEraser(stroke.points, radius: stroke.radius, base: base, in: context, imageHeight: height)
             }
+        }
+        if !spotlights.isEmpty {
+            drawSpotlight(spotlights, in: context, imageHeight: height)
         }
 
         return context.makeImage()
@@ -132,13 +142,12 @@ enum AnnotationRenderer {
                     context.strokeEllipse(in: cRect)
                 }
 
-            case .highlight(let rect):
-                context.saveGState()
-                context.setFillColor(
-                    annotation.color.cgColor.copy(alpha: 0.35) ?? color
-                )
-                context.fill(contextRect(rect, imageHeight: imageHeight))
-                context.restoreGState()
+            case .highlight(let points):
+                drawHighlight(points, color: annotation.color, brushWidth: annotation.highlightBrushWidth, in: context, imageHeight: imageHeight)
+
+            case .spotlight:
+                // 见 `render`：所有聚光灯合成一层，最后统一画。
+                break
 
             case .arrow(let from, let to, let control):
                 drawArrow(
@@ -409,6 +418,147 @@ enum AnnotationRenderer {
             context.addLine(to: contextPoint(point, imageHeight: imageHeight))
         }
         context.strokePath()
+    }
+
+    /// 荧光笔：一条半透明的粗笔迹。
+    ///
+    /// 两处照 capcap 的高亮笔来做：
+    /// 1. 笔迹按「中点二次曲线」平滑，急转弯处不会是硬折角；
+    /// 2. 整条笔迹先以**不透明**画进一个透明层，再让整层按 `highlightAlpha` 合成 ——
+    ///    这样自己叠自己（来回涂、拐弯重叠）不会越涂越深。
+    private static func drawHighlight(
+        _ points: [CGPoint],
+        color: RGBAColor,
+        brushWidth: CGFloat,
+        in context: CGContext,
+        imageHeight: Int
+    ) {
+        guard !points.isEmpty, brushWidth > 0 else { return }
+        // 鼠标停住时会一直上报同一个点，先并掉：既省事，也避免「单击」被当成一条零长笔迹。
+        let cgPoints = Annotation.deduplicated(points.map { contextPoint($0, imageHeight: imageHeight) })
+        guard let first = cgPoints.first else { return }
+        let opaque = color.cgColor.copy(alpha: 1) ?? color.cgColor
+
+        context.saveGState()
+        context.setStrokeColor(opaque)
+        context.setFillColor(opaque)
+        context.setLineWidth(brushWidth)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+        context.setAlpha(Annotation.highlightAlpha)
+        context.beginTransparencyLayer(auxiliaryInfo: nil)
+
+        if cgPoints.count == 1 {
+            // 单击 = 笔尖按下的一个圆点。
+            let radius = brushWidth / 2
+            context.fillEllipse(
+                in: CGRect(x: first.x - radius, y: first.y - radius, width: radius * 2, height: radius * 2)
+            )
+        } else {
+            context.addPath(smoothedPolyline(cgPoints))
+            context.strokePath()
+        }
+
+        context.endTransparencyLayer()
+        context.setAlpha(1)
+        context.restoreGState()
+    }
+
+    /// 中点二次曲线平滑：每个原始点当控制点，锚点取相邻两点的中点。
+    /// 与 capcap 的 `NSBezierPath.smoothed(through:)` 是同一套算法。
+    ///
+    /// 入参需先经 `deduplicated`（相邻重复点会让中点重合）。
+    private static func smoothedPolyline(_ raw: [CGPoint]) -> CGPath {
+        let path = CGMutablePath()
+        guard let first = raw.first else { return path }
+        path.move(to: first)
+        guard raw.count > 1 else { return path }
+        if raw.count == 2 {
+            path.addLine(to: raw[1])
+            return path
+        }
+
+        // 注意「退化二次曲线」：当相邻两个中点重合（笔迹原路折返）时，这条曲线的起点
+        // 与终点是同一个点，CoreGraphics 遇到这种段会**整条路径都不画**（笔迹凭空消失）。
+        // 折返时改画「走到折返点再折回来」，笔迹照样盖住用户画到的最远处。
+        func mid(_ a: CGPoint, _ b: CGPoint) -> CGPoint {
+            CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+        }
+
+        var cursor = first
+        let firstAnchor = mid(raw[0], raw[1])
+        path.addLine(to: firstAnchor)
+        cursor = firstAnchor
+
+        for index in 1..<(raw.count - 1) {
+            let control = raw[index]
+            let anchor = mid(raw[index], raw[index + 1])
+            if Annotation.isSamePoint(cursor, anchor) {
+                guard !Annotation.isSamePoint(cursor, control) else { continue }
+                path.addLine(to: control)
+                cursor = control
+            } else {
+                path.addQuadCurve(to: anchor, control: control)
+                cursor = anchor
+            }
+        }
+        let last = raw[raw.count - 1]
+        if !Annotation.isSamePoint(cursor, last) {
+            path.addLine(to: last)
+        }
+        return path
+    }
+
+    /// 聚光灯：整幅压暗，只留窗口内清晰。
+    ///
+    /// 用一张灰度遮罩（窗口处为黑、其余为白）走 `clip(to:mask:)` 再铺一层黑，
+    /// 而不是「先铺黑、再用 `.clear` 抠洞」：抠洞会把已经画好的底图与标注一起抹掉；
+    /// 遮罩是取并集，多个窗口重叠时也不会互相抵消。
+    private static func drawSpotlight(_ rects: [CGRect], in context: CGContext, imageHeight: Int) {
+        let bounds = CGRect(x: 0, y: 0, width: context.width, height: context.height)
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let holes = rects.map { contextRect($0, imageHeight: imageHeight) }
+        guard
+            let mask = spotlightMask(width: context.width, height: context.height, holes: holes)
+        else { return }
+
+        context.saveGState()
+        context.clip(to: bounds, mask: mask)
+        context.setFillColor(
+            CGColor(srgbRed: 0, green: 0, blue: 0, alpha: Annotation.spotlightDimAlpha)
+        )
+        context.fill(bounds)
+        context.restoreGState()
+    }
+
+    /// 聚光灯遮罩：白 = 压暗，黑 = 透出（窗口）。
+    private static func spotlightMask(width: Int, height: Int, holes: [CGRect]) -> CGImage? {
+        guard width > 0, height > 0 else { return nil }
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceGray(),
+                bitmapInfo: CGImageAlphaInfo.none.rawValue
+            )
+        else { return nil }
+
+        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(bounds)
+        context.setFillColor(CGColor(gray: 0, alpha: 1))
+        for hole in holes {
+            guard hole.width > 0, hole.height > 0 else { continue }
+            let radius = min(Annotation.spotlightCornerRadius, hole.width / 2, hole.height / 2)
+            context.addPath(
+                CGPath(roundedRect: hole, cornerWidth: radius, cornerHeight: radius, transform: nil)
+            )
+            context.fillPath()
+        }
+        return context.makeImage()
     }
 
     private static func drawText(

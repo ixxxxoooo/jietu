@@ -54,13 +54,37 @@ struct AnnotationGeometryTests {
         #expect(!annotation.contains(CGPoint(x: 105, y: 105)))
     }
 
-    @Test("实心标注仍然整块命中：高亮 / 模糊 / 马赛克")
+    @Test("实心标注仍然整块命中：模糊 / 马赛克 / 聚光灯")
     func filledShapesHitWholeArea() {
         let rect = CGRect(x: 100, y: 100, width: 200, height: 100)
         let center = CGPoint(x: 200, y: 150)
-        #expect(Annotation(kind: .highlight(rect), color: .red, lineWidth: 4).contains(center))
         #expect(Annotation(kind: .blur(rect, radius: 12), color: .red, lineWidth: 4).contains(center))
         #expect(Annotation(kind: .pixelate(rect, block: 12), color: .red, lineWidth: 4).contains(center))
+        #expect(Annotation(kind: .spotlight(rect), color: .red, lineWidth: 4).contains(center))
+        // 聚光灯的「窗口」就是它唯一的抓手，窗口外不命中。
+        #expect(!Annotation(kind: .spotlight(rect), color: .red, lineWidth: 4).contains(CGPoint(x: 20, y: 20)))
+    }
+
+    @Test("荧光笔只认笔迹：笔刷扫过的地方命中，框内空白不命中")
+    func highlightHitsStrokeOnly() {
+        // 笔尖粗细 2 → 笔迹宽 12，笔迹沿 y = 150 横着涂。
+        let annotation = Annotation(
+            kind: .highlight(points: [CGPoint(x: 100, y: 150), CGPoint(x: 300, y: 150)]),
+            color: .yellow,
+            lineWidth: 2
+        )
+        #expect(annotation.contains(CGPoint(x: 200, y: 150)))
+        #expect(annotation.contains(CGPoint(x: 200, y: 154)))
+        #expect(!annotation.contains(CGPoint(x: 200, y: 170)))
+        #expect(!annotation.contains(CGPoint(x: 200, y: 130)))
+    }
+
+    @Test("聚光灯不支持旋转：转角度对「整幅压暗的窗口」没有意义")
+    func spotlightDoesNotRotate() {
+        let spotlight = Annotation(kind: .spotlight(CGRect(x: 0, y: 0, width: 10, height: 10)), color: .black)
+        let marker = Annotation(kind: .highlight(points: [CGPoint(x: 0, y: 0)]), color: .yellow)
+        #expect(!spotlight.supportsRotation)
+        #expect(marker.supportsRotation)
     }
 
     @Test("平移后包围盒整体移动")

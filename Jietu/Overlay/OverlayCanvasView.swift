@@ -1740,14 +1740,14 @@ final class OverlayCanvasView: NSView {
     /// 草稿是否已经「成形」（用于避免单击时的零尺寸闪烁）。
     private func isMeaningfulDraft(_ annotation: Annotation) -> Bool {
         switch annotation.kind {
-        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _),
+        case .rectangle(let rect), .ellipse(let rect), .spotlight(let rect), .pixelate(let rect, _),
             .blur(let rect, _):
             return rect.width >= 1.5 || rect.height >= 1.5
         case .arrow(let from, let to, _):
             return hypot(to.x - from.x, to.y - from.y) >= 2
         case .line(let from, let to):
             return hypot(to.x - from.x, to.y - from.y) >= 2
-        case .pen(let points):
+        case .pen(let points), .highlight(let points):
             return points.count >= 2
         case .counter, .callout, .eraser:
             return true
@@ -1816,7 +1816,7 @@ final class OverlayCanvasView: NSView {
         var handles: [(ShapeHandle, CGPoint)] = []
         if abs(annotation.rotation) < 0.001 {
             switch annotation.kind {
-            case .rectangle, .ellipse, .highlight, .pixelate, .pen, .text:
+            case .rectangle, .ellipse, .spotlight, .highlight, .pixelate, .pen, .text:
                 handles.append(contentsOf: ShapeGeometry.resizeHandles(for: annotation))
             default:
                 break
@@ -1836,7 +1836,9 @@ final class OverlayCanvasView: NSView {
         default:
             break
         }
-        handles.append((.rotate, ShapeGeometry.rotateHandle(for: annotation, distance: 28)))
+        if annotation.supportsRotation {
+            handles.append((.rotate, ShapeGeometry.rotateHandle(for: annotation, distance: 28)))
+        }
         return handles
     }
 
@@ -1909,6 +1911,8 @@ final class OverlayCanvasView: NSView {
         model.tool = nil
         model.color = seed.color
         model.lineWidth = seed.lineWidth
+        model.highlightColor = seed.highlightColor
+        model.highlightLineWidth = seed.highlightLineWidth
         model.fontSize = seed.fontSize
         model.eraserSize = seed.eraserSize
         model.mosaicBlock = seed.mosaicBlock
@@ -1967,6 +1971,8 @@ final class OverlayCanvasView: NSView {
             _ = model.tool
             _ = model.color
             _ = model.lineWidth
+            _ = model.highlightColor
+            _ = model.highlightLineWidth
             _ = model.fontSize
             _ = model.eraserSize
             _ = model.mosaicBlock
@@ -1983,6 +1989,8 @@ final class OverlayCanvasView: NSView {
                         tool: model.tool ?? self.annotationDefaults.tool,
                         color: model.color,
                         lineWidth: model.lineWidth,
+                        highlightColor: model.highlightColor,
+                        highlightLineWidth: model.highlightLineWidth,
                         fontSize: model.fontSize,
                         mosaicBlock: model.mosaicBlock,
                         blurRadius: model.blurRadius,
@@ -2188,7 +2196,14 @@ final class OverlayCanvasView: NSView {
                 shapeFillMode: model.shapeFillMode
             )
         case .highlight:
-            return Annotation(kind: .highlight(rect), color: model.color, lineWidth: model.lineWidth)
+            // 荧光笔不是「拉一个框涂色」，是拿笔刷沿手指涂一条（参考 capcap 的高亮笔）。
+            return Annotation(
+                kind: .highlight(points: [start, current]),
+                color: model.highlightColor,
+                lineWidth: model.highlightLineWidth
+            )
+        case .spotlight:
+            return Annotation(kind: .spotlight(rect), color: model.color, lineWidth: model.lineWidth)
         case .pixelate:
             return Annotation(kind: .pixelate(rect, block: model.mosaicBlock), color: model.color, lineWidth: model.lineWidth)
         case .blur:
@@ -2217,14 +2232,14 @@ final class OverlayCanvasView: NSView {
 
     private func isValidInlineDraft(_ annotation: Annotation) -> Bool {
         switch annotation.kind {
-        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _),
+        case .rectangle(let rect), .ellipse(let rect), .spotlight(let rect), .pixelate(let rect, _),
             .blur(let rect, _):
             return rect.width >= 3 && rect.height >= 3
         case .arrow(let from, let to, _):
             return hypot(to.x - from.x, to.y - from.y) >= 3
         case .line(let from, let to):
             return hypot(to.x - from.x, to.y - from.y) >= 3
-        case .counter, .callout, .pen, .text, .eraser:
+        case .counter, .callout, .pen, .highlight, .text, .eraser:
             return true
         }
     }
@@ -2329,9 +2344,13 @@ final class OverlayCanvasView: NSView {
         }
 
         if inlineDragging, let model = toolbarModel {
+            // 画笔与荧光笔都是**连续笔迹**：一路把点攒起来，而不是只留起点终点。
             if model.tool == .pen, case .pen(var points) = annotationDraft?.kind {
                 points.append(crop)
                 annotationDraft?.kind = .pen(points: points)
+            } else if model.tool == .highlight, case .highlight(var points) = annotationDraft?.kind {
+                points.append(crop)
+                annotationDraft?.kind = .highlight(points: points)
             } else {
                 annotationDraft = makeInlineDraft(start: inlineStart, current: crop)
             }

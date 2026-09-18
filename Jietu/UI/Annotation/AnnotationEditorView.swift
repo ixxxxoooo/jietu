@@ -52,6 +52,8 @@ struct AnnotationEditorView: View {
         _tool = State(initialValue: defaults.tool)
         _color = State(initialValue: defaults.color)
         _lineWidth = State(initialValue: defaults.lineWidth)
+        _highlightColor = State(initialValue: defaults.highlightColor)
+        _highlightLineWidth = State(initialValue: defaults.highlightLineWidth)
         _fontSize = State(initialValue: defaults.fontSize)
         _mosaicBlock = State(initialValue: defaults.mosaicBlock)
         _blurRadius = State(initialValue: defaults.blurRadius)
@@ -91,6 +93,9 @@ struct AnnotationEditorView: View {
     @State private var tool: AnnotationTool = .rectangle
     @State private var color: RGBAColor = .red
     @State private var lineWidth: CGFloat = 7
+    /// 荧光笔**自己**的颜色与笔尖粗细（参考 capcap：独立色槽，默认黄）。
+    @State private var highlightColor: RGBAColor = .yellow
+    @State private var highlightLineWidth: CGFloat = 6
     @State private var fontSize: CGFloat = 22
     @State private var mosaicBlock: CGFloat = 10
     @State private var blurRadius: CGFloat = 12
@@ -146,10 +151,11 @@ struct AnnotationEditorView: View {
     /// 工具栏**一行放得下**所需的最小宽度：再窄右边的按钮就会被窗口裁掉。
     ///
     /// 数值不是手算的，是让 SwiftUI 自己报的（`NSHostingView.fittingSize`）：
-    /// `Jietu Dev --selftest-editor <目录>` 会打印出来（实测 967）。
+    /// `Jietu Dev --selftest-editor <目录>` 会打印出来（加「聚光灯」按钮前实测 967，
+    /// 一个工具按钮 30 + 间距 4，故 1001）。
     /// 改工具栏（增减按钮 / 改字号）后跑一下这个自检，把这个数改掉；
     /// `JietuTests` 里有一条用例会盯着「工具栏必须放得进这个宽度」。
-    static let toolbarMinWidth: CGFloat = 967
+    static let toolbarMinWidth: CGFloat = 1001
 
     /// 带标题栏的编辑器窗口最小宽度（工具栏之外还要留点余量）。
     static let minWindowWidth: CGFloat = max(900, toolbarMinWidth)
@@ -238,11 +244,28 @@ struct AnnotationEditorView: View {
             tool: tool,
             color: color,
             lineWidth: lineWidth,
+            highlightColor: highlightColor,
+            highlightLineWidth: highlightLineWidth,
             fontSize: fontSize,
             mosaicBlock: mosaicBlock,
             blurRadius: blurRadius,
             eraserSize: eraserSize
         )
+    }
+
+    /// 荧光笔走自己的色槽与笔尖粗细，其余工具共用 `color` / `lineWidth`。
+    private var isHighlightTool: Bool { tool == .highlight }
+
+    private var activeColor: Binding<RGBAColor> {
+        isHighlightTool ? $highlightColor : $color
+    }
+
+    private var activeLineWidth: Binding<CGFloat> {
+        isHighlightTool ? $highlightLineWidth : $lineWidth
+    }
+
+    private var activeWidthRange: ClosedRange<CGFloat> {
+        isHighlightTool ? Annotation.highlightWidthRange : 1...24
     }
 
     private var canvasArea: some View {
@@ -570,7 +593,7 @@ struct AnnotationEditorView: View {
         HStack(spacing: Theme.Spacing.xxl) {
             if showWidth {
                 HStack(spacing: Theme.Spacing.md) {
-                    Text(model_toolIsEraser ? "橡皮" : "粗细")
+                    Text(model_toolIsEraser ? "橡皮" : (isHighlightTool ? "笔尖" : "粗细"))
                         .font(Theme.Typography.rowSubtitle)
                         .foregroundStyle(Theme.Colors.textSecondary)
                     if model_toolIsEraser {
@@ -580,12 +603,12 @@ struct AnnotationEditorView: View {
                         Slider(value: $eraserSize, in: 8...120)
                             .frame(width: 170)
                     } else {
-                        Text("\(Int(lineWidth))")
+                        Text("\(Int(activeLineWidth.wrappedValue))")
                             .font(Theme.Typography.numeric)
                             .frame(width: 22, alignment: .trailing)
-                        Slider(value: $lineWidth, in: 1...24)
+                        Slider(value: activeLineWidth, in: activeWidthRange)
                             .frame(width: 170)
-                            .onChange(of: lineWidth) { _, value in
+                            .onChange(of: activeLineWidth.wrappedValue) { _, value in
                                 applyToSelected { $0.withLineWidth(value) }
                             }
                     }
@@ -595,7 +618,7 @@ struct AnnotationEditorView: View {
                 HStack(spacing: Theme.Spacing.lg) {
                     ForEach(RGBAColor.palette, id: \.self) { swatch in
                         Button {
-                            color = swatch
+                            activeColor.wrappedValue = swatch
                             applyToSelected { $0.withColor(swatch) }
                         } label: {
                             Circle()
@@ -603,9 +626,9 @@ struct AnnotationEditorView: View {
                                 .frame(width: 18, height: 18)
                                 .overlay(
                                     Circle().strokeBorder(
-                                        color == swatch
+                                        activeColor.wrappedValue == swatch
                                             ? Theme.Colors.textPrimary : Theme.Colors.border,
-                                        lineWidth: color == swatch ? 2 : 1
+                                        lineWidth: activeColor.wrappedValue == swatch ? 2 : 1
                                     )
                                 )
                         }
@@ -639,7 +662,7 @@ struct AnnotationEditorView: View {
             }
         ) {
             Circle()
-                .fill(color.swiftUIColor)
+                .fill(activeColor.wrappedValue.swiftUIColor)
                 .frame(width: 14, height: 14)
                 .overlay(Circle().strokeBorder(Theme.Colors.border, lineWidth: 1))
                 .frame(width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
@@ -859,9 +882,15 @@ struct AnnotationEditorView: View {
         // 2) 命中已有标注 → 选中并移动
         if let hit = topmostAnnotation(at: startPx) {
             selectedID = hit.id
-            color = hit.color
-            lineWidth = hit.lineWidth
-            // 把该类型的参数也同步到选项条，便于直接微调。
+            // 把该类型的参数也同步到选项条，便于直接微调。荧光笔走自己的色槽，
+            // 不能顺手把画笔 / 箭头的颜色改掉。
+            if case .highlight = hit.kind {
+                highlightColor = hit.color
+                highlightLineWidth = hit.lineWidth
+            } else {
+                color = hit.color
+                lineWidth = hit.lineWidth
+            }
             switch hit.kind {
             case .pixelate(_, let block): mosaicBlock = block
             case .blur(_, let radius): blurRadius = radius
@@ -893,7 +922,16 @@ struct AnnotationEditorView: View {
             }
             lastErasePoint = currentPx
         case .creating(let start):
-            draft = makeDraft(tool: tool, start: start, current: currentPx)
+            // 画笔与荧光笔都是连续笔迹：点越攒越多，而不是每帧只留起终点。
+            if tool == .pen, case .pen(var points)? = draft?.kind {
+                points.append(currentPx)
+                draft?.kind = .pen(points: points)
+            } else if tool == .highlight, case .highlight(var points)? = draft?.kind {
+                points.append(currentPx)
+                draft?.kind = .highlight(points: points)
+            } else {
+                draft = makeDraft(tool: tool, start: start, current: currentPx)
+            }
         case .moving(let id, let start, let original):
             let delta = CGSize(width: currentPx.x - start.x, height: currentPx.y - start.y)
             update(id: id) { _ in original.translated(by: delta) }
@@ -960,7 +998,14 @@ struct AnnotationEditorView: View {
         case .ellipse:
             return Annotation(kind: .ellipse(rect), color: color, lineWidth: lineWidth)
         case .highlight:
-            return Annotation(kind: .highlight(rect), color: color, lineWidth: lineWidth)
+            // 荧光笔是**涂**出来的一条笔迹，不是拉框（参考 capcap 的高亮笔）。
+            return Annotation(
+                kind: .highlight(points: [start, current]),
+                color: highlightColor,
+                lineWidth: highlightLineWidth
+            )
+        case .spotlight:
+            return Annotation(kind: .spotlight(rect), color: color, lineWidth: lineWidth)
         case .pixelate:
             return Annotation(kind: .pixelate(rect, block: mosaicBlock), color: color, lineWidth: lineWidth)
         case .arrow:
@@ -1203,7 +1248,7 @@ struct AnnotationEditorView: View {
 
         if !rotated {
             switch annotation.kind {
-            case .rectangle, .ellipse, .highlight, .pixelate, .pen, .text, .blur:
+            case .rectangle, .ellipse, .spotlight, .highlight, .pixelate, .pen, .text, .blur:
                 handles.append(contentsOf: ShapeGeometry.resizeHandles(for: annotation))
             default:
                 break
@@ -1226,7 +1271,9 @@ struct AnnotationEditorView: View {
             break
         }
 
-        handles.append((.rotate, ShapeGeometry.rotateHandle(for: annotation, distance: 28)))
+        if annotation.supportsRotation {
+            handles.append((.rotate, ShapeGeometry.rotateHandle(for: annotation, distance: 28)))
+        }
         return handles
     }
 
@@ -1390,14 +1437,14 @@ struct AnnotationEditorView: View {
 
     private func isValid(_ annotation: Annotation) -> Bool {
         switch annotation.kind {
-        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _),
+        case .rectangle(let rect), .ellipse(let rect), .spotlight(let rect), .pixelate(let rect, _),
             .blur(let rect, _):
             return rect.width >= 4 && rect.height >= 4
         case .arrow(let from, let to, _):
             return hypot(to.x - from.x, to.y - from.y) >= 4
         case .line(let from, let to):
             return hypot(to.x - from.x, to.y - from.y) >= 4
-        case .pen(let points):
+        case .pen(let points), .highlight(let points):
             return points.count >= 2
         case .text, .counter, .callout, .eraser:
             return true

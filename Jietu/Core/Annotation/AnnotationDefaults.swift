@@ -11,6 +11,10 @@ struct AnnotationDefaults: Equatable, Codable {
     var tool: AnnotationTool
     var color: RGBAColor
     var lineWidth: CGFloat
+    /// 荧光笔**自己**的颜色与笔尖粗细（参考 capcap：高亮笔有独立色槽，默认黄，
+    /// 来回切工具不会把画笔 / 箭头用的红一起改掉）。
+    var highlightColor: RGBAColor
+    var highlightLineWidth: CGFloat
     var fontSize: CGFloat
     var mosaicBlock: CGFloat
     var blurRadius: CGFloat
@@ -23,7 +27,8 @@ struct AnnotationDefaults: Equatable, Codable {
     static let standard = AnnotationDefaults()
 
     enum CodingKeys: String, CodingKey {
-        case tool, color, lineWidth, fontSize, mosaicBlock, blurRadius, eraserSize
+        case tool, color, lineWidth, highlightColor, highlightLineWidth
+        case fontSize, mosaicBlock, blurRadius, eraserSize
         case arrowStyle, shapeFillMode, textHasStroke, textHasCallout
     }
 
@@ -31,6 +36,8 @@ struct AnnotationDefaults: Equatable, Codable {
         tool: AnnotationTool = .rectangle,
         color: RGBAColor = .red,
         lineWidth: CGFloat = 7,
+        highlightColor: RGBAColor = .yellow,
+        highlightLineWidth: CGFloat = 6,
         fontSize: CGFloat = 22,
         mosaicBlock: CGFloat = 10,
         blurRadius: CGFloat = 12,
@@ -43,6 +50,8 @@ struct AnnotationDefaults: Equatable, Codable {
         self.tool = tool
         self.color = color
         self.lineWidth = lineWidth
+        self.highlightColor = highlightColor
+        self.highlightLineWidth = highlightLineWidth
         self.fontSize = fontSize
         self.mosaicBlock = mosaicBlock
         self.blurRadius = blurRadius
@@ -58,6 +67,8 @@ struct AnnotationDefaults: Equatable, Codable {
         tool = try container.decodeIfPresent(AnnotationTool.self, forKey: .tool) ?? .rectangle
         color = try container.decodeIfPresent(RGBAColor.self, forKey: .color) ?? .red
         lineWidth = try container.decodeIfPresent(CGFloat.self, forKey: .lineWidth) ?? 7
+        highlightColor = try container.decodeIfPresent(RGBAColor.self, forKey: .highlightColor) ?? .yellow
+        highlightLineWidth = try container.decodeIfPresent(CGFloat.self, forKey: .highlightLineWidth) ?? 6
         fontSize = try container.decodeIfPresent(CGFloat.self, forKey: .fontSize) ?? 22
         mosaicBlock = try container.decodeIfPresent(CGFloat.self, forKey: .mosaicBlock) ?? 10
         blurRadius = try container.decodeIfPresent(CGFloat.self, forKey: .blurRadius) ?? 12
@@ -72,11 +83,17 @@ struct AnnotationDefaults: Equatable, Codable {
     var sanitized: AnnotationDefaults {
         var copy = self
         copy.lineWidth = Self.clamp(lineWidth, 1...24, fallback: 7)
+        copy.highlightLineWidth = Self.clamp(
+            highlightLineWidth,
+            Annotation.highlightWidthRange,
+            fallback: 6
+        )
         copy.fontSize = Self.clamp(fontSize, 10...100, fallback: 22)
         copy.mosaicBlock = Self.clamp(mosaicBlock, 4...40, fallback: 10)
         copy.blurRadius = Self.clamp(blurRadius, 2...60, fallback: 12)
         copy.eraserSize = Self.clamp(eraserSize, 8...120, fallback: 28)
         copy.color = color.sanitized
+        copy.highlightColor = highlightColor.sanitized
         return copy
     }
 

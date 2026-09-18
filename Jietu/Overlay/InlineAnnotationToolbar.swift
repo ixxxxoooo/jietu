@@ -10,6 +10,9 @@ final class InlineToolbarModel {
     var tool: AnnotationTool? = nil
     var color: RGBAColor = .red
     var lineWidth: CGFloat = 7
+    /// 荧光笔**自己**的颜色与笔尖粗细（参考 capcap：独立色槽，默认黄）。
+    var highlightColor: RGBAColor = .yellow
+    var highlightLineWidth: CGFloat = 6
     var fontSize: CGFloat = 20
     var eraserSize: CGFloat = 28
     var mosaicBlock: CGFloat = 12
@@ -45,6 +48,9 @@ final class InlineToolbarModel {
         switch tool {
         case .select, .crop:
             return false
+        // 聚光灯没有任何参数可调（压暗程度是固定的），不占一条二级栏。
+        case .spotlight:
+            return false
         case .rectangle, .ellipse, .arrow, .line, .pen, .highlight, .text, .pixelate, .blur, .counter, .eraser:
             return true
         }
@@ -60,7 +66,7 @@ struct InlineMainToolbar: View {
     @Bindable var model: InlineToolbarModel
 
     private static let tools: [AnnotationTool] = [
-        .select, .rectangle, .ellipse, .arrow, .line, .pen, .highlight, .pixelate, .blur,
+        .select, .rectangle, .ellipse, .arrow, .line, .pen, .highlight, .spotlight, .pixelate, .blur,
         .text, .counter, .eraser,
     ]
 
@@ -224,7 +230,7 @@ struct InlineOptionsToolbar: View {
                         mosaicOptions
                     case .eraser:
                         eraserOptions
-                    case .select, .crop:
+                    case .select, .crop, .spotlight:
                         EmptyView()
                     }
                 }
@@ -266,11 +272,16 @@ struct InlineOptionsToolbar: View {
         }
     }
 
+    /// 荧光笔用的是它自己的色槽与笔尖粗细（跟画笔 / 箭头互不影响）。
     private var highlightOptions: some View {
         HStack(spacing: Theme.Spacing.md) {
-            HUDSlider(value: $model.lineWidth, range: 4...40, step: 1)
+            HUDSlider(
+                value: $model.highlightLineWidth,
+                range: Annotation.highlightWidthRange,
+                step: 1
+            )
             vSeparator
-            ColorSwatchesView(selectedColor: $model.color)
+            ColorSwatchesView(selectedColor: $model.highlightColor)
         }
     }
 

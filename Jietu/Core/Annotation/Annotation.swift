@@ -12,7 +12,10 @@ enum AnnotationTool: String, CaseIterable, Identifiable, Codable {
     case arrow
     case line
     case pen
+    /// 荧光笔 / 高亮笔：像真马克笔一样涂一条半透明粗笔迹。
     case highlight
+    /// 聚光灯：压暗框外，只留框内清晰。
+    case spotlight
     case text
     case pixelate
     case blur
@@ -31,7 +34,8 @@ enum AnnotationTool: String, CaseIterable, Identifiable, Codable {
         case .arrow: return "箭头"
         case .line: return "直线"
         case .pen: return "画笔"
-        case .highlight: return "高亮"
+        case .highlight: return "高亮笔"
+        case .spotlight: return "聚光灯"
         case .text: return "文字"
         case .pixelate: return "马赛克"
         case .blur: return "模糊"
@@ -50,6 +54,7 @@ enum AnnotationTool: String, CaseIterable, Identifiable, Codable {
         case .line: return "line.diagonal"
         case .pen: return "pencil"
         case .highlight: return "highlighter"
+        case .spotlight: return "rectangle.inset.filled"
         case .text:
             let isChinese = (Locale.preferredLanguages.first?.hasPrefix("zh") ?? false)
                 || (Locale.current.language.languageCode?.identifier == "zh")
@@ -264,7 +269,10 @@ struct Annotation: Identifiable, Equatable {
         /// 直线（不带箭头）。
         case line(from: CGPoint, to: CGPoint)
         case pen(points: [CGPoint])
-        case highlight(CGRect)
+        /// 荧光笔笔迹：沿 `points` 涂一条半透明粗笔迹（笔宽见 `highlightBrushWidth`）。
+        case highlight(points: [CGPoint])
+        /// 聚光灯：整个画面压暗，只留 `rect` 内清晰。
+        case spotlight(CGRect)
         case text(origin: CGPoint, string: String, fontSize: CGFloat)
         case pixelate(CGRect, block: CGFloat)
         /// 高斯模糊区域。
@@ -330,7 +338,7 @@ extension Annotation {
     /// 未旋转的包围盒。
     var localBounds: CGRect {
         switch kind {
-        case .rectangle(let rect), .ellipse(let rect), .highlight(let rect), .pixelate(let rect, _),
+        case .rectangle(let rect), .ellipse(let rect), .spotlight(let rect), .pixelate(let rect, _),
             .blur(let rect, _):
             return rect
         case .arrow(let from, let to, let control):
@@ -352,7 +360,7 @@ extension Annotation {
                 width: abs(to.x - from.x),
                 height: abs(to.y - from.y)
             )
-        case .pen(let points):
+        case .pen(let points), .highlight(let points):
             guard let first = points.first else { return .zero }
             var minX = first.x
             var minY = first.y
@@ -364,7 +372,11 @@ extension Annotation {
                 maxX = max(maxX, point.x)
                 maxY = max(maxY, point.y)
             }
-            return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+            let box = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+            // 荧光笔的「厚度」也算进包围盒，否则选框会压着笔迹边。
+            guard case .highlight = kind else { return box }
+            let inset = highlightBrushWidth / 2
+            return box.insetBy(dx: -inset, dy: -inset)
         case .text(let origin, let string, let fontSize):
             let size = Annotation.textSize(string: string, fontSize: fontSize)
             let pad = Annotation.textPadding(fontSize: fontSize)
@@ -434,6 +446,13 @@ extension Annotation {
         ].map(toWorld)
     }
 
+    /// 是否支持旋转。聚光灯是**整幅**压暗的窗口，转一个角度没有意义
+    /// （压暗层只认它那个矩形），所以不给旋转手柄。
+    var supportsRotation: Bool {
+        if case .spotlight = kind { return false }
+        return true
+    }
+
     /// 命中测试。`tolerance` 为点选容差（像素）。
     func contains(_ point: CGPoint, tolerance: CGFloat = 6) -> Bool {
         let local = toLocal(point)
@@ -447,8 +466,14 @@ extension Annotation {
             // 椭圆同理：只认那一圈线。
             return Annotation.distanceToEllipseBorder(local, rect: rect)
                 <= max(tolerance, lineWidth / 2)
-        case .highlight(let rect), .blur(let rect, _):
-            // 这两个是**实心**的（高亮铺一层半透明色、模糊作用于整块），整块都算命中。
+        case .highlight(let points):
+            // 荧光笔是一条**笔迹**：只有笔刷扫过的地方算命中，框外的空白不算。
+            return Annotation.distanceToPolyline(local, points: points)
+                <= max(tolerance, highlightBrushWidth / 2)
+        case .spotlight(let rect):
+            return rect.contains(local)
+        case .blur(let rect, _):
+            // 模糊作用于整块，整块都算命中。
             return rect.insetBy(dx: -tolerance, dy: -tolerance).contains(local)
         case .pixelate(let rect, _):
             return rect.contains(local)
@@ -499,11 +524,11 @@ extension Annotation {
         var copy = self
 
         switch kind {
-        case .rectangle, .ellipse, .highlight, .pixelate, .blur:
+        case .rectangle, .ellipse, .spotlight, .pixelate, .blur:
             let box = localBounds
             let newBox = ShapeGeometry.resizedRect(box, handle: handle, to: local, lockAspect: lockAspect)
             copy.replaceRect(newBox)
-        case .pen(let points):
+        case .pen(let points), .highlight(let points):
             guard !points.isEmpty else { break }
             let box = localBounds
             let newBox = ShapeGeometry.resizedRect(box, handle: handle, to: local, lockAspect: false)
@@ -515,7 +540,11 @@ extension Annotation {
                     y: newBox.minY + ($0.y - box.minY) * sy
                 )
             }
-            copy.kind = .pen(points: scaled)
+            if case .pen = kind {
+                copy.kind = .pen(points: scaled)
+            } else {
+                copy.kind = .highlight(points: scaled)
+            }
         case .text(_, let string, let fontSize):
             let box = localBounds
             let newBox = ShapeGeometry.resizedRect(box, handle: handle, to: local, lockAspect: false)
@@ -705,7 +734,8 @@ extension Annotation {
         switch kind {
         case .rectangle(let rect): copy.kind = .rectangle(sr(rect))
         case .ellipse(let rect): copy.kind = .ellipse(sr(rect))
-        case .highlight(let rect): copy.kind = .highlight(sr(rect))
+        case .highlight(let points): copy.kind = .highlight(points: points.map(sp))
+        case .spotlight(let rect): copy.kind = .spotlight(sr(rect))
         case .pixelate(let rect, let block):
             copy.kind = .pixelate(sr(rect), block: max(2, block * factor))
         case .blur(let rect, let radius):
@@ -740,8 +770,8 @@ extension Annotation {
             kind = .rectangle(rect)
         case .ellipse:
             kind = .ellipse(rect)
-        case .highlight:
-            kind = .highlight(rect)
+        case .spotlight:
+            kind = .spotlight(rect)
         case .pixelate:
             if case .pixelate(_, let block) = kind { kind = .pixelate(rect, block: block) }
         case .blur:
@@ -759,7 +789,8 @@ extension Annotation {
         switch kind {
         case .rectangle(let rect): return .rectangle(moveRect(rect))
         case .ellipse(let rect): return .ellipse(moveRect(rect))
-        case .highlight(let rect): return .highlight(moveRect(rect))
+        case .highlight(let points): return .highlight(points: points.map(move))
+        case .spotlight(let rect): return .spotlight(moveRect(rect))
         case .pixelate(let rect, let block): return .pixelate(moveRect(rect), block: block)
         case .blur(let rect, let radius): return .blur(moveRect(rect), radius: radius)
         case .arrow(let from, let to, let control):
@@ -787,6 +818,21 @@ extension Annotation {
 // MARK: - 工具函数
 
 extension Annotation {
+    /// 荧光笔笔刷倍率：用户调的是「笔尖粗细」，落在画面上的笔迹是它的 6 倍，
+    /// 才有一支荧光笔该有的体量（参考 capcap 的 `MarkerAnnotation.brushScale`）。
+    static let highlightBrushScale: CGFloat = 6
+    /// 笔尖粗细的滑块范围（乘上倍率就是实际笔迹宽度）。
+    static let highlightWidthRange: ClosedRange<CGFloat> = 2...10
+    /// 荧光笔的不透明度。整条笔迹先按不透明画进透明层、再整层按这个值合成，
+    /// 所以来回涂、拐弯重叠的地方**不会叠加变深**。
+    static let highlightAlpha: CGFloat = 0.35
+    /// 聚光灯压暗的黑色不透明度与圆角。
+    static let spotlightDimAlpha: CGFloat = 0.52
+    static let spotlightCornerRadius: CGFloat = 6
+
+    /// 荧光笔笔迹的实际涂抹宽度（像素）。
+    var highlightBrushWidth: CGFloat { lineWidth * Annotation.highlightBrushScale }
+
     /// 标注气泡文字框的矩形（含内边距）。
     static func calloutLabelRect(origin: CGPoint, string: String, fontSize: CGFloat) -> CGRect {
         let size = textSize(string: string.isEmpty ? "文字" : string, fontSize: fontSize)
@@ -836,6 +882,20 @@ extension Annotation {
 
     static func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
         hypot(a.x - b.x, a.y - b.y)
+    }
+
+    /// 两个点是否「同一个点」（用于合并重复的轨迹点 / 识别退化线段）。
+    static func isSamePoint(_ a: CGPoint, _ b: CGPoint, tolerance: CGFloat = 0.01) -> Bool {
+        abs(a.x - b.x) < tolerance && abs(a.y - b.y) < tolerance
+    }
+
+    /// 并掉挨在一起的重复轨迹点。
+    static func deduplicated(_ points: [CGPoint]) -> [CGPoint] {
+        var result: [CGPoint] = []
+        for point in points where result.last.map({ !isSamePoint($0, point) }) ?? true {
+            result.append(point)
+        }
+        return result
     }
 
     /// 点到矩形**边框**的距离：边框上为 0，往框里 / 框外都越来越大。

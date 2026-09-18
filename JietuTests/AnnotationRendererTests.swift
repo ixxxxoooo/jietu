@@ -66,19 +66,108 @@ struct AnnotationRendererTests {
         #expect(first.blue == second.blue)
     }
 
-    @Test("高亮是半透明叠加，不会变成纯色")
-    func highlightIsTranslucent() throws {
-        let base = TestImage.solidBlack(side: 20)
+    @Test("荧光笔是半透明笔迹：笔迹正中是混出的中间色，笔迹外是底色")
+    func highlightIsTranslucentStroke() throws {
+        let base = TestImage.solidBlack(side: 40)
         let annotation = Annotation(
-            kind: .highlight(CGRect(x: 0, y: 0, width: 20, height: 20)),
-            color: .yellow
+            kind: .highlight(points: [CGPoint(x: 5, y: 20), CGPoint(x: 35, y: 20)]),
+            color: .yellow,
+            lineWidth: 2
         )
         let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [annotation]))
-        let point = try sample(rendered, 10, 10)
-        // 黑色底 + 黄色半透明 → 混出偏黄的中间色，而不是纯黄。
-        #expect(point.red > 60)
-        #expect(point.green > 60)
-        #expect(point.blue < 80)
+        // 黑色底 + 黄色半透明 → 偏黄的中间色，而不是纯黄。
+        let onStroke = try sample(rendered, 20, 20)
+        #expect(onStroke.red > 60)
+        #expect(onStroke.green > 60)
+        #expect(onStroke.blue < 80)
+        // 笔迹之外仍是原底色。
+        let offStroke = try sample(rendered, 20, 2)
+        #expect(offStroke.red <= 40)
+    }
+
+    @Test("荧光笔画出来的是「笔尖粗细 × 6」的粗笔迹")
+    func highlightBrushIsWide() throws {
+        let brush = Annotation(
+            kind: .highlight(points: [CGPoint(x: 5, y: 20), CGPoint(x: 75, y: 20)]),
+            color: .yellow,
+            lineWidth: 3
+        )
+        #expect(brush.highlightBrushWidth == 18)
+        let base = TestImage.solidBlack(side: 40)
+        let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [brush]))
+        // 笔宽 18 → 中心上下各 8px 在笔迹里，12px 已经在外面。
+        #expect(try sample(rendered, 39, 12).red > 60)
+        #expect(try sample(rendered, 39, 28).red > 60)
+        #expect(try sample(rendered, 39, 6).red <= 40)
+    }
+
+    @Test("荧光笔来回涂同一处不会越涂越深（整条笔迹一层半透明）")
+    func highlightDoesNotCompoundAlpha() throws {
+        let base = TestImage.solidBlack(side: 40)
+        func marker(_ points: [CGPoint]) -> Annotation {
+            Annotation(kind: .highlight(points: points), color: .yellow, lineWidth: 2)
+        }
+        let straight = try #require(
+            AnnotationRenderer.render(base: base, annotations: [marker([CGPoint(x: 5, y: 20), CGPoint(x: 35, y: 20)])])
+        )
+        let backAndForth = try #require(
+            AnnotationRenderer.render(
+                base: base,
+                annotations: [marker([CGPoint(x: 5, y: 20), CGPoint(x: 35, y: 20), CGPoint(x: 5, y: 20)])]
+            )
+        )
+        let once = try sample(straight, 20, 20)
+        let twice = try sample(backAndForth, 20, 20)
+        #expect(abs(Int(once.red) - Int(twice.red)) <= 2)
+        #expect(abs(Int(once.green) - Int(twice.green)) <= 2)
+    }
+
+    @Test("聚光灯：窗口内原样透出，窗口外整幅压暗")
+    func spotlightDimsOutsideWindow() throws {
+        let base = TestImage.make(width: 40, height: 40) { _, _ in (255, 255, 255) }
+        let annotation = Annotation(
+            kind: .spotlight(CGRect(x: 10, y: 10, width: 20, height: 20)),
+            color: .black,
+            lineWidth: 3
+        )
+        let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [annotation]))
+        let inside = try sample(rendered, 20, 20)
+        #expect(inside.red >= 250)
+        // 255 × (1 − 0.52) ≈ 122。
+        let outside = try sample(rendered, 2, 2)
+        #expect(outside.red >= 100 && outside.red <= 145)
+    }
+
+    @Test("聚光灯：多个窗口合成一层，重叠处不会被压两次")
+    func multipleSpotlightsShareOneLayer() throws {
+        let base = TestImage.make(width: 60, height: 40) { _, _ in (255, 255, 255) }
+        let left = Annotation(kind: .spotlight(CGRect(x: 0, y: 0, width: 40, height: 40)), color: .black)
+        let right = Annotation(kind: .spotlight(CGRect(x: 20, y: 0, width: 40, height: 40)), color: .black)
+        let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [left, right]))
+        #expect(try sample(rendered, 10, 20).red >= 250)
+        #expect(try sample(rendered, 30, 20).red >= 250)
+        #expect(try sample(rendered, 50, 20).red >= 250)
+    }
+
+    @Test("聚光灯压在标注之上：框外的标注也一起变暗")
+    func spotlightDimsAnnotationsToo() throws {
+        let base = TestImage.solidBlack(side: 40)
+        let line = Annotation(
+            kind: .line(from: CGPoint(x: 2, y: 6), to: CGPoint(x: 38, y: 6)),
+            color: .white,
+            lineWidth: 4
+        )
+        let window = Annotation(
+            kind: .spotlight(CGRect(x: 10, y: 20, width: 20, height: 16)),
+            color: .black,
+            lineWidth: 3
+        )
+        let rendered = try #require(
+            AnnotationRenderer.render(base: base, annotations: [line, window])
+        )
+        // 白线（255）在聚光灯外 → 被压暗到 255 × 0.48 ≈ 122。
+        let dimmed = try sample(rendered, 20, 6)
+        #expect(dimmed.red >= 100 && dimmed.red <= 145)
     }
 
     @Test("直线按线宽画出实心笔迹")
