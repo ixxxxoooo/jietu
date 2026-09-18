@@ -135,4 +135,33 @@ struct AnnotationRendererTests {
         let outsideAbove = try sample(rendered, 45, 15)
         #expect(outsideAbove.red == 0)
     }
+
+    @Test("中文字符绘制不向上溢出 topLeft 且落在正确范围内")
+    func chineseTextRendersWithinBounds() throws {
+        let base = TestImage.solidBlack(side: 100)
+        let origin = CGPoint(x: 20, y: 30)
+        let annotation = Annotation(
+            kind: .text(origin: origin, string: "对对对", fontSize: 24),
+            color: .white
+        )
+        let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [annotation]))
+
+        // topLeft.y 上方不应有白色文字像素（过去因基线算错会导致字形向上溢出至 y=17）
+        let abovePoint = try sample(rendered, 30, 25)
+        #expect(abovePoint.red == 0)
+
+        // 在文字区域内部应有白色笔画
+        var foundWhite = false
+        for y in 30...55 {
+            for x in 20...80 {
+                let pixel = try sample(rendered, x, y)
+                if pixel.red > 100 {
+                    foundWhite = true
+                    break
+                }
+            }
+            if foundWhite { break }
+        }
+        #expect(foundWhite)
+    }
 }

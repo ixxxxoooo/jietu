@@ -278,7 +278,13 @@ extension Annotation {
             return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
         case .text(let origin, let string, let fontSize):
             let size = Annotation.textSize(string: string, fontSize: fontSize)
-            return CGRect(origin: origin, size: size)
+            let pad = Annotation.textPadding(fontSize: fontSize)
+            return CGRect(
+                x: origin.x - pad.x,
+                y: origin.y - pad.y,
+                width: size.width + pad.x * 2,
+                height: size.height + pad.y * 2
+            )
         case .counter(let center, _, let leader):
             let radius: CGFloat = 12
             var rect = CGRect(
@@ -404,8 +410,17 @@ extension Annotation {
         case .text(_, let string, let fontSize):
             let box = localBounds
             let newBox = ShapeGeometry.resizedRect(box, handle: handle, to: local, lockAspect: false)
-            let ratio = box.height > 0 ? newBox.height / box.height : 1
-            copy.kind = .text(origin: newBox.origin, string: string, fontSize: max(10, fontSize * ratio))
+            let ratio: CGFloat
+            switch handle {
+            case .left, .right:
+                ratio = box.width > 0 ? newBox.width / box.width : 1
+            default:
+                ratio = box.height > 0 ? newBox.height / box.height : 1
+            }
+            let newFontSize = max(10, fontSize * ratio)
+            let pad = Annotation.textPadding(fontSize: newFontSize)
+            let newOrigin = CGPoint(x: newBox.minX + pad.x, y: newBox.minY + pad.y)
+            copy.kind = .text(origin: newOrigin, string: string, fontSize: newFontSize)
         case .arrow, .line, .counter, .callout:
             break
         }
@@ -641,11 +656,22 @@ extension Annotation {
         )
     }
 
+    static func textPadding(fontSize: CGFloat) -> (x: CGFloat, y: CGFloat) {
+        let px = max(6, ceil(fontSize * 0.15))
+        let py = max(4, ceil(fontSize * 0.12))
+        return (px, py)
+    }
+
+    static func systemFont(fontSize: CGFloat) -> CTFont {
+        CTFontCreateUIFontForLanguage(.system, fontSize, nil)
+            ?? CTFontCreateWithName(".AppleSystemUIFont" as CFString, fontSize, nil)
+    }
+
     static func textSize(string: String, fontSize: CGFloat) -> CGSize {
         guard !string.isEmpty, fontSize > 0 else {
             return CGSize(width: 0, height: fontSize * 1.2)
         }
-        let font = CTFontCreateWithName("Helvetica" as CFString, fontSize, nil)
+        let font = systemFont(fontSize: fontSize)
         let attributes: [CFString: Any] = [kCTFontAttributeName: font]
         let attributed = CFAttributedStringCreate(nil, string as CFString, attributes as CFDictionary)!
         let line = CTLineCreateWithAttributedString(attributed)
@@ -653,7 +679,7 @@ extension Annotation {
         var descent: CGFloat = 0
         var leading: CGFloat = 0
         let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
-        return CGSize(width: width, height: ascent + descent)
+        return CGSize(width: ceil(width), height: ceil(ascent + descent))
     }
 
     static func rotate(_ point: CGPoint, around center: CGPoint, by angle: CGFloat) -> CGPoint {

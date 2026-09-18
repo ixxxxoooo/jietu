@@ -475,7 +475,7 @@ struct AnnotationEditorView: View {
             // 只有一圈很细的同色边框标出编辑框（所见即所得）。
             TextField("文字", text: $inlineText)
                 .textFieldStyle(.plain)
-                .font(.custom("Helvetica", size: max(11, font)))
+                .font(.system(size: max(11, font)))
                 .foregroundStyle(color.swiftUIColor)
                 .padding(.horizontal, 6)
                 .frame(width: width, height: height)

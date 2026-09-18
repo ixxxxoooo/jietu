@@ -280,13 +280,17 @@ enum AnnotationRenderer {
         imageHeight: Int
     ) {
         guard !string.isEmpty, fontSize > 0 else { return }
-        let font = CTFontCreateWithName("Helvetica" as CFString, fontSize, nil)
-        let ascent = CTFontGetAscent(font)
+        let font = Annotation.systemFont(fontSize: fontSize)
+        let line = makeLine(string, font: font, color: color)
+        var ascent: CGFloat = 0
+        var descent: CGFloat = 0
+        var leading: CGFloat = 0
+        _ = CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
         context.textPosition = CGPoint(
             x: topLeft.x,
-            y: CGFloat(imageHeight) - topLeft.y - ascent
+            y: CGFloat(imageHeight) - (topLeft.y + ascent)
         )
-        CTLineDraw(makeLine(string, font: font, color: color), context)
+        CTLineDraw(line, context)
     }
 
     private static func drawCallout(
@@ -396,7 +400,7 @@ enum AnnotationRenderer {
         color: RGBAColor,
         context: CGContext
     ) {
-        let font = CTFontCreateWithName("Helvetica" as CFString, fontSize, nil)
+        let font = Annotation.systemFont(fontSize: fontSize)
         let line = makeLine(string, font: font, color: color)
         var ascent: CGFloat = 0
         var descent: CGFloat = 0

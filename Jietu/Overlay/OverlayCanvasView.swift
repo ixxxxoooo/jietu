@@ -1689,6 +1689,9 @@ final class OverlayCanvasView: NSView {
 
         // 草稿要「有实际尺寸」才画；单击产生的零尺寸草稿不显示，避免闪一下。
         var list = annotations
+        if let editingID = inlineEditingTextID {
+            list.removeAll { $0.id == editingID }
+        }
         if let annotationDraft, isMeaningfulDraft(annotationDraft) {
             list.append(annotationDraft)
         }
@@ -1870,7 +1873,7 @@ final class OverlayCanvasView: NSView {
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
 
-        guard phase == .annotating, let selected = selectedAnnotation else {
+        guard phase == .annotating, let selected = selectedAnnotation, inlineEditingTextID == nil else {
             inlineSelectionBorderLayer.isHidden = true
             inlineHandlesLayer.isHidden = true
             inlineSelectionBorderLayer.path = nil
@@ -2407,6 +2410,8 @@ final class OverlayCanvasView: NSView {
             object: field
         )
         window?.makeFirstResponder(field)
+        updateAnnotationLayer()
+        updateInlineSelectionLayers()
     }
 
     /// 写入标注的字号（图像像素）：与提交时用的同一条公式。
@@ -2414,36 +2419,40 @@ final class OverlayCanvasView: NSView {
         max(12, lineWidth * 6)
     }
 
-    /// 字号 / 颜色都跟最终渲染一致（Helvetica + 标注色），这才是「所见即所得」。
+    /// 字号 / 颜色都跟最终渲染一致（系统字体 + 标注色），这才是「所见即所得」。
     private func applyInlineTextStyle(_ field: NSTextField, model: InlineToolbarModel) {
         let scale = max(1, snapshot.effectiveScale)
         let pointSize = Self.inlineTextFontSize(lineWidth: model.lineWidth) / scale
-        field.font = NSFont(name: "Helvetica", size: pointSize)
-            ?? NSFont.systemFont(ofSize: pointSize)
+        let font = NSFont.systemFont(ofSize: pointSize)
+        field.font = font
         let color = NSColor(cgColor: model.color.cgColor) ?? .labelColor
         field.textColor = color
         field.layer?.borderWidth = 1
         field.layer?.cornerRadius = 2
         field.layer?.borderColor = color.withAlphaComponent(0.45).cgColor
-        field.frame.origin = inlineTextFieldOrigin(pointSize: pointSize)
+        field.frame.origin = inlineTextFieldOrigin(font: font)
     }
 
-    /// 编辑框左上角对齐点击位置（AppKit 坐标 y 向上）。
-    private func inlineTextFieldOrigin(pointSize: CGFloat) -> CGPoint {
+    /// 编辑框对齐点击/标注位置：补偿 NSTextFieldCell 2pt 水平内边距，行高精确匹配排版。
+    private func inlineTextFieldOrigin(font: NSFont) -> CGPoint {
         let view = viewPoint(fromAnnotation: inlineTextOrigin)
-        return CGPoint(x: view.x, y: view.y - pointSize * 1.4)
+        let lm = NSLayoutManager()
+        let lineHeight = ceil(lm.defaultLineHeight(for: font))
+        return CGPoint(x: view.x - 2, y: view.y - lineHeight)
     }
 
-    /// 框贴着文字宽度：不然它会吞掉旁边的点击。
+    /// 框贴着文字宽度与行高，保证打字与成图严格像素对齐。
     private func fitInlineTextField() {
         guard let field = textField, let font = field.font else { return }
         let textWidth = (field.stringValue as NSString)
             .size(withAttributes: [.font: font]).width
+        let lm = NSLayoutManager()
+        let lineHeight = ceil(lm.defaultLineHeight(for: font))
         field.frame = CGRect(
             x: field.frame.origin.x,
             y: field.frame.origin.y,
-            width: max(18, textWidth + 8),
-            height: font.pointSize * 1.4
+            width: max(24, ceil(textWidth) + 8),
+            height: lineHeight
         )
     }
 
@@ -2480,18 +2489,19 @@ final class OverlayCanvasView: NSView {
         pushUndo()
         if let editingID, let index = annotations.firstIndex(where: { $0.id == editingID }) {
             annotations[index] = annotations[index].withText(string)
+            selectedID = editingID
         } else {
-            annotations.append(
-                Annotation(
-                    kind: .text(
-                        origin: origin,
-                        string: string,
-                        fontSize: max(12, model.lineWidth * 6)
-                    ),
-                    color: model.color,
-                    lineWidth: model.lineWidth
-                )
+            let annotation = Annotation(
+                kind: .text(
+                    origin: origin,
+                    string: string,
+                    fontSize: max(12, model.lineWidth * 6)
+                ),
+                color: model.color,
+                lineWidth: model.lineWidth
             )
+            annotations.append(annotation)
+            selectedID = annotation.id
         }
         updateAnnotationLayer()
         updateInlineSelectionLayers()
