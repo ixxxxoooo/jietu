@@ -382,8 +382,12 @@ struct AnnotationSettingsPane: View {
 
     private var styleSummary: String {
         let style = settings.annotationDefaults
-        let colorName = Self.colorNames[style.color] ?? "自定义色"
-        return "\(style.tool.title) · \(colorName) · 线宽 \(Int(style.lineWidth)) · 字号 \(Int(style.fontSize))"
+        // 高亮笔有独立色槽与笔尖粗细，摘要得跟着它走，否则显示的是画笔的那套。
+        let isMarker = style.tool == .highlight
+        let color = isMarker ? style.highlightColor : style.color
+        let width = isMarker ? style.highlightLineWidth : style.lineWidth
+        let colorName = Self.colorNames[color] ?? "自定义色"
+        return "\(style.tool.title) · \(colorName) · 线宽 \(Int(width)) · 字号 \(Int(style.fontSize))"
     }
 
     private static let colorNames: [RGBAColor: String] = [
