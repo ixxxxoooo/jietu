@@ -65,10 +65,7 @@ final class InlineToolbarModel {
 struct InlineMainToolbar: View {
     @Bindable var model: InlineToolbarModel
 
-    private static let tools: [AnnotationTool] = [
-        .select, .rectangle, .ellipse, .arrow, .line, .pen, .highlight, .spotlight, .pixelate, .blur,
-        .text, .counter, .eraser,
-    ]
+    private static let tools: [AnnotationTool] = AnnotationTool.allCases.filter { $0 != .crop }
 
     /// 悬停提示带上当前快捷键；解绑了就只说动作名。
     private static func shortcutHelp(_ title: String, _ hotkey: Hotkey?) -> String {

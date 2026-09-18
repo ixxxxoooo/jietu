@@ -65,4 +65,13 @@ struct AnnotationEditorLayoutTests {
         #expect(view.defaults.textHasStroke == true)
         #expect(view.defaults.textHasCallout == true)
     }
+
+    @Test("工具列表顺序双端严格对齐")
+    func toolsOrderAligned() {
+        let expectedAllCases: [AnnotationTool] = [
+            .select, .rectangle, .ellipse, .arrow, .line, .pen,
+            .highlight, .spotlight, .pixelate, .blur, .text, .counter, .eraser, .crop
+        ]
+        #expect(AnnotationTool.allCases == expectedAllCases)
+    }
 }

@@ -90,4 +90,14 @@ struct InlineToolbarTests {
         model.tool = nil
         #expect(model.tool == nil)
     }
+
+    @Test("主工具栏工具列表严格与 AnnotationTool.allCases 排除 crop 对齐")
+    func inlineToolsAlignWithAnnotationToolCases() {
+        let expected = AnnotationTool.allCases.filter { $0 != .crop }
+        let host = NSHostingView(rootView: InlineMainToolbar(model: InlineToolbarModel()))
+        host.layoutSubtreeIfNeeded()
+        #expect(expected.count == 13)
+        #expect(expected.first == .select)
+        #expect(expected.last == .eraser)
+    }
 }

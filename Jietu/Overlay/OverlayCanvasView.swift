@@ -815,18 +815,7 @@ final class OverlayCanvasView: NSView {
     }
 
     private func updateCrosshair() {
-        guard !isScrollCaptureChrome else { return }
-        // 选区定型后收起十字线，避免干扰阅读选框内容。
-        guard let cursorPoint, !isSettled else {
-            crosshairLayer.path = nil
-            return
-        }
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: bounds.minX, y: cursorPoint.y))
-        path.addLine(to: CGPoint(x: bounds.maxX, y: cursorPoint.y))
-        path.move(to: CGPoint(x: cursorPoint.x, y: bounds.minY))
-        path.addLine(to: CGPoint(x: cursorPoint.x, y: bounds.maxY))
-        crosshairLayer.path = path
+        crosshairLayer.path = nil
     }
 
     // MARK: - Loupe
@@ -1145,7 +1134,7 @@ final class OverlayCanvasView: NSView {
             }
             return NSCursor(image: canvas, hotSpot: NSPoint(x: 12, y: 12))
         }
-        return .crosshair
+        return .arrow
     }()
 
     private func updateCursor(at point: CGPoint) {
@@ -1159,8 +1148,6 @@ final class OverlayCanvasView: NSView {
             } else if let tool = toolbarModel?.tool {
                 if tool == .text {
                     NSCursor.iBeam.set()
-                } else if tool.isDrawing {
-                    NSCursor.crosshair.set()
                 } else {
                     NSCursor.arrow.set()
                 }
@@ -1180,7 +1167,7 @@ final class OverlayCanvasView: NSView {
         ) {
             SelectionCursor.cursor(for: handle).set()
         } else {
-            NSCursor.crosshair.set()
+            NSCursor.arrow.set()
         }
     }
 
@@ -1191,7 +1178,7 @@ final class OverlayCanvasView: NSView {
 
     override func resetCursorRects() {
         if phase == .annotating { return }
-        addCursorRect(bounds, cursor: isWindowOnlyMode ? Self.cameraCursor : .crosshair)
+        addCursorRect(bounds, cursor: isWindowOnlyMode ? Self.cameraCursor : .arrow)
     }
 
     // MARK: - Events
@@ -1534,7 +1521,15 @@ final class OverlayCanvasView: NSView {
             case 36, 76: // Return
                 confirmInline()
             case 51, 117: // Delete
-                inlineUndo()
+                if let selectedID {
+                    pushUndo()
+                    annotations.removeAll { $0.id == selectedID }
+                    self.selectedID = nil
+                    updateAnnotationLayer()
+                    updateInlineSelectionLayers()
+                } else {
+                    inlineUndo()
+                }
             default:
                 super.keyDown(with: event)
             }
@@ -2266,6 +2261,7 @@ final class OverlayCanvasView: NSView {
 
         // 橡皮：画笔式擦除（按绘制顺序擦除并恢复底图）。
         if tool == .eraser {
+            guard let selection, selection.contains(point) else { return }
             commitPendingInlineText()
             pushUndo()
             erasing = true
@@ -2281,8 +2277,9 @@ final class OverlayCanvasView: NSView {
             return
         }
 
-        // 1) 选中对象 + 命中控制点 → 缩放 / 旋转 / 端点
-        if let selected = selectedAnnotation,
+        // 1) 选中对象 + 命中控制点 → 缩放 / 旋转 / 端点（仅在未选绘制工具或选择模式下）
+        if (tool == nil || tool == .select),
+            let selected = selectedAnnotation,
             let handle = inlineHitHandle(selected, at: crop)
         {
             pushUndo()
@@ -2298,8 +2295,8 @@ final class OverlayCanvasView: NSView {
             return
         }
 
-        // 2) 命中已有标注 → 选中并移动（不区分当前工具，和编辑窗口一致）
-        if let hit = inlineAnnotation(at: crop) {
+        // 2) 命中已有标注 → 选中并移动（仅在选择模式下，不劫持绘制工具）
+        if (tool == nil || tool == .select), let hit = inlineAnnotation(at: crop) {
             selectedID = hit.id
             if clickCount >= 2, case .text = hit.kind {
                 beginInlineText(at: textOrigin(of: hit), editing: hit)
@@ -2334,6 +2331,9 @@ final class OverlayCanvasView: NSView {
             }
             return
         }
+
+        // 绘制工具必须在选区内点击才能开始绘制！选区外（包括工具栏周围）点击绝不开始绘制。
+        guard let selection, selection.contains(point) else { return }
         guard tool.isDrawing else { return }
 
         commitPendingInlineText()
@@ -2409,7 +2409,7 @@ final class OverlayCanvasView: NSView {
             if let draft = annotationDraft, isValidInlineDraft(draft) {
                 pushUndo()
                 annotations.append(draft)
-                selectedID = draft.id
+                selectedID = nil
                 if case .counter = draft.kind { inlineCounterValue += 1 }
             }
             annotationDraft = nil
@@ -2538,7 +2538,7 @@ final class OverlayCanvasView: NSView {
                 .withText(string)
                 .withTextStroke(model.textHasStroke)
                 .withTextCallout(model.textHasCallout)
-            selectedID = editingID
+            selectedID = nil
         } else {
             let annotation = Annotation(
                 kind: .text(
@@ -2554,7 +2554,7 @@ final class OverlayCanvasView: NSView {
                 textHasCallout: model.textHasCallout
             )
             annotations.append(annotation)
-            selectedID = annotation.id
+            selectedID = nil
         }
         updateAnnotationLayer()
         updateInlineSelectionLayers()

@@ -16,9 +16,9 @@ enum AnnotationTool: String, CaseIterable, Identifiable, Codable {
     case highlight
     /// 聚光灯：压暗框外，只留框内清晰。
     case spotlight
-    case text
     case pixelate
     case blur
+    case text
     case counter
     case eraser
     /// 截后再裁剪：拖一个框，确认后把底图裁掉。
@@ -36,9 +36,9 @@ enum AnnotationTool: String, CaseIterable, Identifiable, Codable {
         case .pen: return "画笔"
         case .highlight: return "高亮笔"
         case .spotlight: return "聚光灯"
-        case .text: return "文字"
         case .pixelate: return "马赛克"
         case .blur: return "模糊"
+        case .text: return "文字"
         case .counter: return "序号"
         case .eraser: return "橡皮"
         case .crop: return "裁剪"
@@ -55,12 +55,12 @@ enum AnnotationTool: String, CaseIterable, Identifiable, Codable {
         case .pen: return "pencil"
         case .highlight: return "highlighter"
         case .spotlight: return "rectangle.inset.filled"
+        case .pixelate: return "squareshape.split.3x3"
+        case .blur: return "drop.halffull"
         case .text:
             let isChinese = (Locale.preferredLanguages.first?.hasPrefix("zh") ?? false)
                 || (Locale.current.language.languageCode?.identifier == "zh")
             return isChinese ? "character.cursor.ibeam.zh" : "character.cursor.ibeam"
-        case .pixelate: return "squareshape.split.3x3"
-        case .blur: return "drop.halffull"
         case .counter: return "1.circle"
         case .eraser: return "eraser"
         case .crop: return "crop"

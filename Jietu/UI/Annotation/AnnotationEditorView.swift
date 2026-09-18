@@ -658,6 +658,7 @@ struct AnnotationEditorView: View {
                     EmptyView()
                 }
             }
+            .id(optTool)
             .padding(.horizontal, Theme.Spacing.lg)
             .padding(.vertical, 7)
             .fixedSize()
@@ -827,13 +828,21 @@ struct AnnotationEditorView: View {
             help: item.title,
             tooltipPlacement: toolbarTooltipPlacement,
             action: {
-                tool = item
-                if item != .crop {
-                    cropRect = nil
-                }
-                if item.isDrawing {
-                    selectedID = nil
-                    isLiveTextActive = false
+                if tool == item {
+                    if item != .select {
+                        tool = .select
+                        selectedID = nil
+                        cropRect = nil
+                    }
+                } else {
+                    tool = item
+                    if item != .crop {
+                        cropRect = nil
+                    }
+                    if item.isDrawing {
+                        selectedID = nil
+                        isLiveTextActive = false
+                    }
                 }
             }
         ) {
@@ -930,7 +939,14 @@ struct AnnotationEditorView: View {
             return
         }
 
-        // 1) 选中标注的控制点
+        // 绘图模式下（矩形、椭圆、箭头、画笔、高亮笔等），点击直接开始绘制新标注，绝不劫持去拖动已有标注
+        if tool.isDrawing {
+            selectedID = nil
+            dragMode = .creating(start: startPx)
+            return
+        }
+
+        // 1) 仅在选择工具下：选中标注的控制点
         if let selected = selectedAnnotation,
             let handle = hitHandle(for: selected, at: startView)
         {
@@ -947,7 +963,7 @@ struct AnnotationEditorView: View {
             return
         }
 
-        // 2) 命中已有标注 → 选中并移动
+        // 2) 仅在选择工具下：命中已有标注 → 选中并移动
         if let hit = topmostAnnotation(at: startPx) {
             selectedID = hit.id
             syncStateFromAnnotation(hit)
@@ -956,13 +972,9 @@ struct AnnotationEditorView: View {
             return
         }
 
-        // 3) 空白处
-        if tool.isDrawing {
-            dragMode = .creating(start: startPx)
-        } else {
-            selectedID = nil
-            dragMode = .none
-        }
+        // 3) 选择工具点击空白处 → 取消选中
+        selectedID = nil
+        dragMode = .none
     }
 
     private func continueDrag(currentPx: CGPoint, currentView: CGPoint) {
@@ -1016,7 +1028,7 @@ struct AnnotationEditorView: View {
             // 文本：落一个空文本对象，随即进入内联编辑（不弹窗）。
             if let draft, case .text(let origin, _, let size) = draft.kind {
                 annotations.append(draft)
-                selectedID = draft.id
+                selectedID = nil
                 editingTextID = draft.id
                 inlineText = ""
                 inlineFontSize = size
@@ -1032,7 +1044,7 @@ struct AnnotationEditorView: View {
             if let draft, isValid(draft) {
                 pushUndo()
                 annotations.append(draft)
-                selectedID = draft.id
+                selectedID = nil
                 if case .counter = draft.kind { counterValue += 1 }
             }
         case .erasing:
@@ -1164,7 +1176,7 @@ struct AnnotationEditorView: View {
     }
 
     private func applyToSelected(_ transform: (Annotation) -> Annotation) {
-        guard let selectedID, let index = annotations.firstIndex(where: { $0.id == selectedID })
+        guard tool == .select, let selectedID, let index = annotations.firstIndex(where: { $0.id == selectedID })
         else { return }
         annotations[index] = transform(annotations[index])
     }
@@ -1280,6 +1292,7 @@ struct AnnotationEditorView: View {
                 .withTextCallout(textHasCallout)
         }
         editingTextID = nil
+        selectedID = nil
         inlineText = ""
         inlineFieldFocused = false
     }
@@ -1290,6 +1303,7 @@ struct AnnotationEditorView: View {
             annotations.removeAll { $0.id == id }
         }
         editingTextID = nil
+        selectedID = nil
         inlineText = ""
         inlineFieldFocused = false
     }
