@@ -187,7 +187,7 @@ final class OverlayCanvasView: NSView {
     private let selectionBorderInnerLayer = CAShapeLayer()
     private let handlesLayer = CAShapeLayer()
     private let crosshairLayer = CAShapeLayer()
-    private let sizeLabelLayer = CATextLayer()
+    private let sizeLabelLayer = PillLabelLayer()
     private let windowLabelLayer = CATextLayer()
     private let hintLayer = CATextLayer()
 
@@ -454,7 +454,11 @@ final class OverlayCanvasView: NSView {
         root.addSublayer(crosshairLayer)
 
 
-        for textLayer in [sizeLabelLayer, windowLabelLayer, hintLayer] {
+        sizeLabelLayer.contentsScale = scale
+        sizeLabelLayer.isHidden = true
+        root.addSublayer(sizeLabelLayer)
+
+        for textLayer in [windowLabelLayer, hintLayer] {
             configurePillTextLayer(textLayer, scale: scale)
             root.addSublayer(textLayer)
         }
@@ -796,19 +800,18 @@ final class OverlayCanvasView: NSView {
             height: (selection.height * snapshot.effectiveScale).rounded()
         )
         let text = "\(Int(pixelSize.width)) × \(Int(pixelSize.height))"
-        let width = max(96, CGFloat(text.count) * 7.2 + 16)
-        let height: CGFloat = 20
+        sizeLabelLayer.set(text: text)
+        let size = sizeLabelLayer.calculateSize()
 
-        // 优先放在选区内部左上；放不下就移到选区上方外侧。
-        var origin = CGPoint(x: selection.minX + 6, y: selection.maxY - height - 6)
-        if selection.width < width + 12 {
-            origin = CGPoint(x: selection.minX, y: selection.maxY + 6)
+        // 默认放在选区上方外侧；若触顶（靠近屏幕顶部）则移到选区内部左上。
+        var origin = CGPoint(x: selection.minX, y: selection.maxY + 6)
+        if origin.y + size.height > bounds.maxY - 2 {
+            origin.y = selection.maxY - size.height - 6
         }
-        origin.x = min(max(origin.x, bounds.minX + 2), bounds.maxX - width - 2)
-        origin.y = min(max(origin.y, bounds.minY + 2), bounds.maxY - height - 2)
+        origin.x = min(max(origin.x, bounds.minX + 2), bounds.maxX - size.width - 2)
+        origin.y = min(max(origin.y, bounds.minY + 2), bounds.maxY - size.height - 2)
 
-        sizeLabelLayer.string = text
-        sizeLabelLayer.frame = CGRect(origin: origin, size: CGSize(width: width, height: height))
+        sizeLabelLayer.frame = CGRect(origin: origin, size: size)
         sizeLabelLayer.isHidden = false
     }
 
@@ -1157,6 +1160,18 @@ final class OverlayCanvasView: NSView {
             tolerance: Theme.selectionHandleHitTolerance
         ) {
             SelectionCursor.cursor(for: handle).set()
+        } else if phase == .annotating {
+            if let tool = toolbarModel?.tool {
+                if tool == .text {
+                    NSCursor.iBeam.set()
+                } else if tool.isDrawing {
+                    NSCursor.crosshair.set()
+                } else {
+                    NSCursor.arrow.set()
+                }
+            } else {
+                NSCursor.arrow.set()
+            }
         } else {
             NSCursor.crosshair.set()
         }
@@ -1281,6 +1296,16 @@ final class OverlayCanvasView: NSView {
                 applyRegionResize(from: selection ?? original, to: updated)
                 return
             }
+            if case .moving(let grabOffset, let original) = interaction {
+                cursorPoint = point
+                let delta = CGSize(
+                    width: point.x - original.minX - grabOffset.width,
+                    height: point.y - original.minY - grabOffset.height
+                )
+                let updated = SelectionGeometry.moved(original, by: delta, clampTo: canvasBounds)
+                applyRegionResize(from: selection ?? original, to: updated)
+                return
+            }
             inlineMouseDragged(point)
             return
         }
@@ -1341,8 +1366,12 @@ final class OverlayCanvasView: NSView {
         guard isInputArmed else { return }
         let point = convert(event.locationInWindow, from: nil)
         if phase == .annotating {
-            // 拖选区边缘收手：回到「已定」状态，不把它当成一次标注。
+            // 拖选区边缘或整体移动收手：回到「已定」状态，不把它当成一次标注。
             if case .resizing = interaction {
+                interaction = .settled
+                return
+            }
+            if case .moving = interaction {
                 interaction = .settled
                 return
             }
@@ -1902,7 +1931,7 @@ final class OverlayCanvasView: NSView {
     private func showToolbar() {
         let seed = annotationDefaults.sanitized
         let model = InlineToolbarModel()
-        model.tool = seed.tool == .crop ? .rectangle : seed.tool
+        model.tool = nil
         model.color = seed.color
         model.lineWidth = seed.lineWidth
         model.eraserSize = seed.eraserSize
@@ -1957,7 +1986,7 @@ final class OverlayCanvasView: NSView {
                 guard let self, self.toolbarModel === model else { return }
                 self.onAnnotationDefaultsChange?(
                     AnnotationDefaults(
-                        tool: model.tool,
+                        tool: model.tool ?? self.annotationDefaults.tool,
                         color: model.color,
                         lineWidth: model.lineWidth,
                         fontSize: self.annotationDefaults.fontSize,
@@ -2135,14 +2164,14 @@ final class OverlayCanvasView: NSView {
     }
 
     private func makeInlineDraft(start: CGPoint, current: CGPoint) -> Annotation? {
-        guard let model = toolbarModel else { return nil }
+        guard let model = toolbarModel, let tool = model.tool else { return nil }
         let rect = CGRect(
             x: min(start.x, current.x),
             y: min(start.y, current.y),
             width: abs(start.x - current.x),
             height: abs(start.y - current.y)
         )
-        switch model.tool {
+        switch tool {
         case .rectangle: return Annotation(kind: .rectangle(rect), color: model.color, lineWidth: model.lineWidth)
         case .ellipse: return Annotation(kind: .ellipse(rect), color: model.color, lineWidth: model.lineWidth)
         case .highlight: return Annotation(kind: .highlight(rect), color: model.color, lineWidth: model.lineWidth)
@@ -2181,7 +2210,7 @@ final class OverlayCanvasView: NSView {
         // 点别处一律先把正在编辑的文字落地。
         commitPendingInlineText()
         let crop = annotationPoint(from: point)
-        let tool = toolbarModel?.tool ?? .rectangle
+        let tool = toolbarModel?.tool
 
         // 橡皮：画笔式擦除（擦到的地方露出底层）。
         if tool == .eraser {
@@ -2227,10 +2256,27 @@ final class OverlayCanvasView: NSView {
             return
         }
 
-        // 3) 空白：清空选中；若当前是绘制工具则开始新标注
+        // 3) 空白：清空选中；若当前未选工具则支持双击完成 / 拖动选框；若选了绘制工具则开始新标注
         selectedID = nil
         inlineEditDrag = .none
         updateInlineSelectionLayers()
+        guard let tool else {
+            if clickCount >= 2 {
+                confirmInline()
+                return
+            }
+            if let selection, selection.contains(point) {
+                pushUndo()
+                interaction = .moving(
+                    grabOffset: CGSize(
+                        width: point.x - selection.minX,
+                        height: point.y - selection.minY
+                    ),
+                    original: selection
+                )
+            }
+            return
+        }
         guard tool.isDrawing else { return }
 
         commitPendingInlineText()
@@ -2531,3 +2577,72 @@ enum LoupeGeometry {
         )
     }
 }
+
+/// 选区尺寸胶囊标签图层：使用 CoreText 绘制单行尺寸文本，上下左右留白精确对称，避免垂直偏心错位。
+nonisolated final class PillLabelLayer: CALayer {
+    private let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+    private var text: String = ""
+    private var textWidth: CGFloat = 0
+
+    override init() {
+        super.init()
+        backgroundColor = NSColor.black.withAlphaComponent(0.68).cgColor
+        cornerRadius = 4
+        masksToBounds = true
+    }
+
+    override init(layer: Any) {
+        super.init(layer: layer)
+        if let other = layer as? PillLabelLayer {
+            self.text = other.text
+            self.textWidth = other.textWidth
+        }
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func action(forKey event: String) -> CAAction? {
+        nil
+    }
+
+    func set(text: String) {
+        guard self.text != text else { return }
+        self.text = text
+        let attr: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white.cgColor,
+        ]
+        let attrString = NSAttributedString(string: text, attributes: attr)
+        let line = CTLineCreateWithAttributedString(attrString)
+        var ascent: CGFloat = 0
+        var descent: CGFloat = 0
+        var leading: CGFloat = 0
+        textWidth = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
+        setNeedsDisplay()
+    }
+
+    func calculateSize() -> CGSize {
+        let paddingH: CGFloat = 7
+        let paddingV: CGFloat = 5
+        let w = ceil(textWidth + paddingH * 2)
+        let h = ceil(font.capHeight + paddingV * 2)
+        return CGSize(width: w, height: h)
+    }
+
+    override func draw(in ctx: CGContext) {
+        guard !text.isEmpty else { return }
+        let attr: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white.cgColor,
+        ]
+        let attrString = NSAttributedString(string: text, attributes: attr)
+        let line = CTLineCreateWithAttributedString(attrString)
+        let y = (bounds.height - font.capHeight) / 2
+        let x = (bounds.width - textWidth) / 2
+        ctx.textPosition = CGPoint(x: x, y: y)
+        CTLineDraw(line, ctx)
+    }
+}
+

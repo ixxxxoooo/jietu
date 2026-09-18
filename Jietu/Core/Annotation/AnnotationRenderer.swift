@@ -501,16 +501,8 @@ enum AnnotationRenderer {
         else { return }
 
         context.saveGState()
-        context.clip(to: contextRect(rect, imageHeight: imageHeight))
-        context.draw(
-            blurred,
-            in: CGRect(
-                x: source.minX,
-                y: CGFloat(imageHeight) - source.maxY,
-                width: source.width,
-                height: source.height
-            )
-        )
+        context.clip(to: target)
+        context.draw(blurred, in: source)
         context.restoreGState()
     }
 

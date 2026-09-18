@@ -115,4 +115,24 @@ struct AnnotationRendererTests {
         #expect(farLeft.red <= 40)
     }
 
+    @Test("局部模糊准确作用于指定子区域且不影响区域外")
+    func blurPartialRectAtOffset() throws {
+        let base = TestImage.make(width: 100, height: 100) { x, _ in
+            (x >= 49 && x <= 50) ? (255, 255, 255) : (0, 0, 0)
+        }
+        let annotation = Annotation(
+            kind: .blur(CGRect(x: 30, y: 30, width: 40, height: 40), radius: 6),
+            color: .white
+        )
+        let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [annotation]))
+
+        let insideBlurred = try sample(rendered, 45, 50)
+        #expect(insideBlurred.red > 20)
+
+        let outsideBelow = try sample(rendered, 45, 85)
+        #expect(outsideBelow.red == 0)
+
+        let outsideAbove = try sample(rendered, 45, 15)
+        #expect(outsideAbove.red == 0)
+    }
 }

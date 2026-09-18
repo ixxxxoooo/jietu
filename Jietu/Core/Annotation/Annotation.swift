@@ -50,7 +50,7 @@ enum AnnotationTool: String, CaseIterable, Identifiable, Codable {
         case .line: return "line.diagonal"
         case .pen: return "pencil"
         case .highlight: return "highlighter"
-        case .text: return "textformat"
+        case .text: return "character.cursor.ibeam"
         case .pixelate: return "squareshape.split.3x3"
         case .blur: return "drop.halffull"
         case .counter: return "1.circle"

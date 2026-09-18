@@ -7,7 +7,7 @@ import SwiftUI
 /// @author ixxxxoooo
 @Observable
 final class InlineToolbarModel {
-    var tool: AnnotationTool = .rectangle
+    var tool: AnnotationTool? = nil
     var color: RGBAColor = .red
     var lineWidth: CGFloat = 7
     var eraserSize: CGFloat = 28
@@ -208,16 +208,30 @@ struct InlineMainToolbar: View {
             isSelected: model.tool == item,
             help: item.title
         ) {
-            model.tool = item
-            if item.isDrawing { model.isLiveTextActive = false }
+            if model.tool == item {
+                model.tool = nil
+            } else {
+                model.tool = item
+                if item.isDrawing { model.isLiveTextActive = false }
+            }
         } label: {
-            Image(systemName: item.symbolName)
-                .font(.system(size: Theme.Size.toolbarIconSize, weight: .regular))
-                .foregroundStyle(
-                    model.tool == item ? Theme.Colors.textPrimary : Theme.Colors.textSecondary
-                )
-                .frame(
-                    width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
+            if item == .text {
+                Text("A")
+                    .font(.system(size: Theme.Size.toolbarIconSize, weight: .bold))
+                    .foregroundStyle(
+                        model.tool == item ? Theme.Colors.textPrimary : Theme.Colors.textSecondary
+                    )
+                    .frame(
+                        width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
+            } else {
+                Image(systemName: item.symbolName)
+                    .font(.system(size: Theme.Size.toolbarIconSize, weight: .regular))
+                    .foregroundStyle(
+                        model.tool == item ? Theme.Colors.textPrimary : Theme.Colors.textSecondary
+                    )
+                    .frame(
+                        width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
+            }
         }
     }
 }

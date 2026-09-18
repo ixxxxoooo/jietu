@@ -70,4 +70,16 @@ struct InlineToolbarTests {
         host.layoutSubtreeIfNeeded()
         #expect(host.fittingSize.height > 0)
     }
+
+    @Test("默认不选择任何工具，重复点击同一工具可取消选择")
+    func defaultNoToolAndCanDeselect() {
+        let model = InlineToolbarModel()
+        #expect(model.tool == nil, "默认不应预选任何工具")
+
+        model.tool = .rectangle
+        #expect(model.tool == .rectangle)
+
+        model.tool = nil
+        #expect(model.tool == nil)
+    }
 }
