@@ -71,6 +71,28 @@ xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
 
 首次运行需授予「屏幕录制」权限；授权后必须**重启 App**（macOS 限制）。
 
+### 打包分发（DMG）
+
+```bash
+bash Scripts/build-dmg.sh
+```
+
+一条命令走完：构建 Release → 校验签名 → 打成 `dist/Jietu-<版本>.dmg` → 挂载复验。
+
+镜像里是 `Jietu.app` 加一个 `/Applications` 软链，拖进去即可安装。脚本会在打包前后各验一次
+签名（`codesign --verify --deep --strict`，挂载后再验一次能同时挡住镜像损坏），
+并核对镜像内的版本号与刚构建的一致；产物是 Debug 渠道（bundle id 带 `.dev`）时直接拒绝打包。
+退出时打印大小与 sha256。
+
+Release 与 Debug 是两个独立渠道（见 AGENTS.md）：产物是 `Jietu.app` /
+`com.ixxxxoooo.jietu`，通用二进制（arm64 + x86_64），与开发用的 `Jietu Dev.app` 互不干扰。
+
+**关于首次打开的拦截**：仓库用的是自签名证书 `Jietu Development`，没有 Developer ID、
+也没做公证，所以别人下载后 Gatekeeper 会拦一次。放行方式二选一：
+
+- 右键 App →「打开」→ 确认；
+- 或先执行 `xattr -dr com.apple.quarantine /Applications/Jietu.app`。
+
 ### 命令行自检（DEBUG-only）
 
 ```bash
