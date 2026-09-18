@@ -253,12 +253,12 @@ enum Theme {
 
     /// 选区外压暗程度。
     static let overlayDimAlpha: CGFloat = 0.45
-    /// 截图选框虚线宽。
-    static let selectionBorderWidth: CGFloat = 1
+    /// 截图选框线条宽（粗体线条）。
+    static let selectionBorderWidth: CGFloat = 2.5
     /// 选框控制点直径。
-    static let selectionHandleSize: CGFloat = 6
+    static let selectionHandleSize: CGFloat = 10
     /// 判定「抓到 handle」的半径，比 handle 本身大，好抓。
-    static let selectionHandleHitTolerance: CGFloat = 9
+    static let selectionHandleHitTolerance: CGFloat = 12
     /// 超过这个位移才算框选，否则算单击。
     static let dragActivationDistance: CGFloat = 3
     /// 小于这个尺寸的框选视为误触。与 `SelectionGeometry.minimumSide` 同源。

@@ -167,7 +167,7 @@ final class OverlayCanvasView: NSView {
     private var toolbarModel: InlineToolbarModel?
     private var mainToolbarHost: NSView?
     private var optionsToolbarHost: NSView?
-    private var textField: NSTextField?
+    private var textField: InlineTextField?
     private var inlineDragging = false
     private var inlineStart: CGPoint = .zero
 
@@ -414,17 +414,17 @@ final class OverlayCanvasView: NSView {
         windowHighlightLayer.frame = bounds
         root.addSublayer(windowHighlightLayer)
 
-        // 绿色虚线选框（参考 CleanShot）。
+        // 绿色选框（粗体实线）。
         configureBorderLayer(selectionBorderOuterLayer, color: NSColor(Theme.selectionGreen))
-        selectionBorderOuterLayer.lineWidth = 1.5
-        selectionBorderOuterLayer.lineDashPattern = [6, 4]
+        selectionBorderOuterLayer.lineWidth = Theme.selectionBorderWidth
+        selectionBorderOuterLayer.lineDashPattern = nil
         configureBorderLayer(selectionBorderInnerLayer, color: .clear)
         root.addSublayer(selectionBorderOuterLayer)
         root.addSublayer(selectionBorderInnerLayer)
 
         handlesLayer.fillColor = NSColor(Theme.selectionGreen).cgColor
         handlesLayer.strokeColor = NSColor.white.cgColor
-        handlesLayer.lineWidth = 1
+        handlesLayer.lineWidth = 1.5
         handlesLayer.frame = bounds
         root.addSublayer(handlesLayer)
 
@@ -2414,7 +2414,7 @@ final class OverlayCanvasView: NSView {
             existing = ""
         }
 
-        let field = NSTextField(frame: .zero)
+        let field = InlineTextField(frame: .zero)
         field.stringValue = existing
         field.isBordered = false
         field.isBezeled = false
@@ -2427,6 +2427,12 @@ final class OverlayCanvasView: NSView {
         field.wantsLayer = true
         field.target = self
         field.action = #selector(handleInlineTextCommit)
+        field.onCancelScreenshot = { [weak self] in
+            self?.onCancel?()
+        }
+        field.onTextWidthChange = { [weak self] in
+            self?.fitInlineTextField()
+        }
         applyInlineTextStyle(field, model: model)
         addSubview(field)
         textField = field
@@ -2439,6 +2445,7 @@ final class OverlayCanvasView: NSView {
             object: field
         )
         window?.makeFirstResponder(field)
+        field.attachEditorObservers()
         updateAnnotationLayer()
         updateInlineSelectionLayers()
     }
@@ -2464,11 +2471,24 @@ final class OverlayCanvasView: NSView {
         return CGPoint(x: view.x - 2, y: view.y - lineHeight)
     }
 
+    /// 获取当前输入框中的完整文本（包括正在输入的拼音 markedText）。
+    private func currentInlineText() -> String {
+        guard let field = textField else { return "" }
+        if let editor = field.currentEditor() as? NSTextView {
+            let str = editor.string
+            if !str.isEmpty {
+                return str
+            }
+        }
+        return field.stringValue
+    }
+
     /// 框贴着文字宽度与行高，保证打字与成图严格像素对齐。
+    /// 支持中文拼音输入时的实时动态宽度自适应。
     private func fitInlineTextField() {
         guard let field = textField, let font = field.font else { return }
-        let textWidth = (field.stringValue as NSString)
-            .size(withAttributes: [.font: font]).width
+        let text = currentInlineText()
+        let textWidth = (text as NSString).size(withAttributes: [.font: font]).width
         let lm = NSLayoutManager()
         let lineHeight = ceil(lm.defaultLineHeight(for: font))
         field.frame = CGRect(
@@ -2489,12 +2509,14 @@ final class OverlayCanvasView: NSView {
 
     private func commitPendingInlineText() {
         guard let field = textField, let model = toolbarModel else { return }
-        let string = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let origin = inlineTextOrigin
-        let editingID = inlineEditingTextID
+        window?.makeFirstResponder(self)
+        field.detachEditorObservers()
         NotificationCenter.default.removeObserver(
             self, name: NSControl.textDidChangeNotification, object: field
         )
+        let string = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let origin = inlineTextOrigin
+        let editingID = inlineEditingTextID
         field.removeFromSuperview()
         textField = nil
         inlineEditingTextID = nil
@@ -2683,6 +2705,117 @@ nonisolated final class PillLabelLayer: CALayer {
         let x = (bounds.width - textWidth) / 2
         ctx.textPosition = CGPoint(x: x, y: y)
         CTLineDraw(line, ctx)
+    }
+}
+
+// MARK: - InlineTextField
+
+/// 就地标注单行文本输入控件。
+///
+/// 特殊交互保障：
+/// 1. Esc 退出截图：正在输入文字时按 Esc 会触发 `onCancelScreenshot` 退出截图；
+///    若输入法正在组合拼音（`hasMarkedText()`），优先让输入法处理（清除本次拼音），拼音清除后再按 Esc 退出截图。
+/// 2. 拼音自适应宽度：中文拼音在未上屏（markedText）阶段不会写入 `stringValue`，
+///    但已存在于 `NSTextView.string` 及 `textStorage` 中。通过监听 `didProcessEditingNotification`
+///    和 `didChangeNotification`，并在每次打字时通知外部根据实时文字（含拼音）宽度调整文本框 frame。
+final class InlineTextField: NSTextField, NSTextFieldDelegate {
+    var onCancelScreenshot: (() -> Void)?
+    var onTextWidthChange: (() -> Void)?
+
+    private var storageObserver: Any?
+    private var textChangeObserver: Any?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        self.delegate = self
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        self.delegate = self
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let result = super.becomeFirstResponder()
+        attachEditorObservers()
+        return result
+    }
+
+    override func selectText(_ sender: Any?) {
+        super.selectText(sender)
+        attachEditorObservers()
+    }
+
+    func attachEditorObservers() {
+        guard let editor = currentEditor() as? NSTextView else { return }
+        if storageObserver == nil, let storage = editor.textStorage {
+            storageObserver = NotificationCenter.default.addObserver(
+                forName: NSTextStorage.didProcessEditingNotification,
+                object: storage,
+                queue: .main
+            ) { [weak self] _ in
+                self?.onTextWidthChange?()
+            }
+        }
+        if textChangeObserver == nil {
+            textChangeObserver = NotificationCenter.default.addObserver(
+                forName: NSText.didChangeNotification,
+                object: editor,
+                queue: .main
+            ) { [weak self] _ in
+                self?.onTextWidthChange?()
+            }
+        }
+    }
+
+    func detachEditorObservers() {
+        if let obs = storageObserver {
+            NotificationCenter.default.removeObserver(obs)
+            storageObserver = nil
+        }
+        if let obs = textChangeObserver {
+            NotificationCenter.default.removeObserver(obs)
+            textChangeObserver = nil
+        }
+    }
+
+    deinit {
+        detachEditorObservers()
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        if let editor = currentEditor() as? NSTextView, editor.hasMarkedText() {
+            super.cancelOperation(sender)
+            return
+        }
+        onCancelScreenshot?()
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.keyCode == 53 { // kVK_Escape
+            if let editor = currentEditor() as? NSTextView, editor.hasMarkedText() {
+                return super.performKeyEquivalent(with: event)
+            }
+            onCancelScreenshot?()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    func control(
+        _ control: NSControl,
+        textView: NSTextView,
+        doCommandBy commandSelector: Selector
+    ) -> Bool {
+        if commandSelector == #selector(NSResponder.cancelOperation(_:)) ||
+            commandSelector == #selector(NSResponder.complete(_:))
+        {
+            if !textView.hasMarkedText() {
+                onCancelScreenshot?()
+                return true
+            }
+        }
+        return false
     }
 }
 
