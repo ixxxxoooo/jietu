@@ -164,4 +164,54 @@ struct AnnotationRendererTests {
         }
         #expect(foundWhite)
     }
+
+    @Test("橡皮擦除恢复底图背景而不是留空")
+    func eraserRestoresBaseImage() throws {
+        let base = TestImage.solidBlack(side: 60)
+        let rect = Annotation(
+            kind: .rectangle(CGRect(x: 10, y: 10, width: 40, height: 40)),
+            color: .red,
+            lineWidth: 6
+        )
+        let eraser = Annotation(
+            kind: .eraser(points: [CGPoint(x: 10, y: 30), CGPoint(x: 50, y: 30)], radius: 10),
+            color: .white
+        )
+        let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [rect, eraser]))
+
+        // 擦除中心应恢复为黑色底图
+        let erasedPoint = try sample(rendered, 10, 30)
+        #expect(erasedPoint.red <= 40)
+
+        // 橡皮未触及的顶部边框依然保留红色
+        let nonErasedPoint = try sample(rendered, 30, 10)
+        #expect(nonErasedPoint.red >= 200)
+    }
+
+    @Test("在擦除区域上绘制的新标注不会被再次擦除")
+    func subsequentAnnotationDrawnOnErasedAreaWorks() throws {
+        let base = TestImage.solidBlack(side: 60)
+        // 1. 先画红色矩形
+        let rect = Annotation(
+            kind: .rectangle(CGRect(x: 10, y: 10, width: 40, height: 40)),
+            color: .red,
+            lineWidth: 6
+        )
+        // 2. 橡皮擦除横跨中间
+        let eraser = Annotation(
+            kind: .eraser(points: [CGPoint(x: 10, y: 30), CGPoint(x: 50, y: 30)], radius: 10),
+            color: .white
+        )
+        // 3. 在擦除后的位置画一条白色横线
+        let line = Annotation(
+            kind: .line(from: CGPoint(x: 5, y: 30), to: CGPoint(x: 55, y: 30)),
+            color: .white,
+            lineWidth: 4
+        )
+        let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [rect, eraser, line]))
+
+        // 之前被擦除的位置现在有了新画的白色线段，且正确显示为白色
+        let newPoint = try sample(rendered, 30, 30)
+        #expect(newPoint.red >= 200 && newPoint.green >= 200 && newPoint.blue >= 200)
+    }
 }

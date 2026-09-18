@@ -198,6 +198,8 @@ struct Annotation: Identifiable, Equatable {
         case counter(center: CGPoint, value: Int, leader: CGPoint?)
         /// 标注气泡：序号圆点 + 箭头 + 可输入说明的文字框。
         case callout(center: CGPoint, value: Int, labelOrigin: CGPoint, string: String, fontSize: CGFloat)
+        /// 橡皮擦除笔迹（恢复底图背景）。
+        case eraser(points: [CGPoint], radius: CGFloat)
     }
 
     let id: UUID
@@ -304,6 +306,24 @@ extension Annotation {
                 height: radius * 2
             )
             return dot.union(Annotation.calloutLabelRect(origin: labelOrigin, string: string, fontSize: fontSize))
+        case .eraser(let points, let radius):
+            guard let first = points.first else { return .zero }
+            var minX = first.x
+            var minY = first.y
+            var maxX = first.x
+            var maxY = first.y
+            for point in points.dropFirst() {
+                minX = min(minX, point.x)
+                minY = min(minY, point.y)
+                maxX = max(maxX, point.x)
+                maxY = max(maxY, point.y)
+            }
+            return CGRect(
+                x: minX - radius,
+                y: minY - radius,
+                width: (maxX - minX) + radius * 2,
+                height: (maxY - minY) + radius * 2
+            )
         }
     }
 
@@ -365,6 +385,8 @@ extension Annotation {
             return Annotation.calloutLabelRect(origin: labelOrigin, string: string, fontSize: fontSize)
                 .insetBy(dx: -tolerance, dy: -tolerance)
                 .contains(local)
+        case .eraser:
+            return false
         }
     }
 }
@@ -421,7 +443,7 @@ extension Annotation {
             let pad = Annotation.textPadding(fontSize: newFontSize)
             let newOrigin = CGPoint(x: newBox.minX + pad.x, y: newBox.minY + pad.y)
             copy.kind = .text(origin: newOrigin, string: string, fontSize: newFontSize)
-        case .arrow, .line, .counter, .callout:
+        case .arrow, .line, .counter, .callout, .eraser:
             break
         }
         return copy
@@ -496,6 +518,9 @@ extension Annotation {
     func withLineWidth(_ width: CGFloat) -> Annotation {
         var copy = self
         copy.lineWidth = width
+        if case .eraser(let points, _) = kind {
+            copy.kind = .eraser(points: points, radius: max(2, width / 2))
+        }
         return copy
     }
 
@@ -591,6 +616,8 @@ extension Annotation {
                 string: string,
                 fontSize: size * factor
             )
+        case .eraser(let points, let radius):
+            copy.kind = .eraser(points: points.map(sp), radius: radius * factor)
         }
         copy.lineWidth = lineWidth * factor
         return copy
@@ -640,6 +667,8 @@ extension Annotation {
                 string: string,
                 fontSize: fontSize
             )
+        case .eraser(let points, let radius):
+            return .eraser(points: points.map(move), radius: radius)
         }
     }
 }

@@ -824,12 +824,17 @@ struct AnnotationEditorView: View {
             commitInlineText()
         }
 
-        // 橡皮：画笔式擦除（优先于选择/绘制）。
+        // 橡皮：画笔式擦除（按绘制顺序擦除并恢复底图）。
         if tool == .eraser {
             pushUndo()
             dragMode = .erasing
             let radius = max(3, (eraserSize / 2) / max(0.0001, pointsPerPixel))
-            eraserStrokes.append(EraserStroke(points: [startPx], radius: radius))
+            let eraserAnnotation = Annotation(
+                kind: .eraser(points: [startPx], radius: radius),
+                color: .white,
+                lineWidth: radius * 2
+            )
+            annotations.append(eraserAnnotation)
             lastErasePoint = startPx
             return
         }
@@ -882,9 +887,9 @@ struct AnnotationEditorView: View {
         case .none:
             break
         case .erasing:
-            if var stroke = eraserStrokes.last {
-                stroke.points.append(currentPx)
-                eraserStrokes[eraserStrokes.count - 1] = stroke
+            if let last = annotations.last, case .eraser(var points, let radius) = last.kind {
+                points.append(currentPx)
+                annotations[annotations.count - 1].kind = .eraser(points: points, radius: radius)
             }
             lastErasePoint = currentPx
         case .creating(let start):
@@ -1394,7 +1399,7 @@ struct AnnotationEditorView: View {
             return hypot(to.x - from.x, to.y - from.y) >= 4
         case .pen(let points):
             return points.count >= 2
-        case .text, .counter, .callout:
+        case .text, .counter, .callout, .eraser:
             return true
         }
     }

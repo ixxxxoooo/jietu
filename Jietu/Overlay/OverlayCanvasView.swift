@@ -129,10 +129,6 @@ final class OverlayCanvasView: NSView {
     private var phase: Phase = .selecting
     /// 是否正处于原地标注阶段（供 Coordinator 判断 Esc 归属）。
     var isAnnotationPhase: Bool { phase == .annotating }
-    private struct EraserStroke {
-        var points: [CGPoint]
-        var radius: CGFloat
-    }
 
     private struct Snapshot {
         let annotations: [Annotation]
@@ -1720,49 +1716,17 @@ final class OverlayCanvasView: NSView {
         CATransaction.commit()
     }
 
-    /// 依次绘制标注，再用「清空」混合模式沿橡皮笔迹擦出透明区域。
+    /// 依次绘制标注（含按先后顺序擦除恢复底图的橡皮）。
     private func compose(
         base: CGImage,
         annotations: [Annotation],
         strokes: [EraserStroke]
     ) -> CGImage? {
-        guard let annotated = AnnotationRenderer.render(base: base, annotations: annotations)
-        else { return nil }
-        guard !strokes.isEmpty else { return annotated }
-
-        let width = annotated.width
-        let height = annotated.height
-        guard
-            let context = CGContext(
-                data: nil,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: 0,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            )
-        else { return annotated }
-        context.draw(annotated, in: CGRect(x: 0, y: 0, width: width, height: height))
-        context.setBlendMode(.clear)
-        context.setLineCap(.round)
-        context.setLineJoin(.round)
-        for stroke in strokes {
-            context.setLineWidth(max(2, stroke.radius * 2))
-            let points = stroke.points.map {
-                CGPoint(x: $0.x, y: CGFloat(height) - $0.y)
-            }
-            guard let first = points.first else { continue }
-            context.beginPath()
-            context.move(to: first)
-            if points.count == 1 {
-                context.addLine(to: first)
-            } else {
-                for point in points.dropFirst() { context.addLine(to: point) }
-            }
-            context.strokePath()
-        }
-        return context.makeImage()
+        AnnotationRenderer.render(
+            base: base,
+            annotations: annotations,
+            eraserStrokes: strokes
+        )
     }
 
     /// 草稿是否已经「成形」（用于避免单击时的零尺寸闪烁）。
@@ -1777,7 +1741,7 @@ final class OverlayCanvasView: NSView {
             return hypot(to.x - from.x, to.y - from.y) >= 2
         case .pen(let points):
             return points.count >= 2
-        case .counter, .callout:
+        case .counter, .callout, .eraser:
             return true
         case .text:
             return false
@@ -2203,7 +2167,7 @@ final class OverlayCanvasView: NSView {
             return hypot(to.x - from.x, to.y - from.y) >= 3
         case .line(let from, let to):
             return hypot(to.x - from.x, to.y - from.y) >= 3
-        case .counter, .callout, .pen, .text:
+        case .counter, .callout, .pen, .text, .eraser:
             return true
         }
     }
@@ -2215,14 +2179,19 @@ final class OverlayCanvasView: NSView {
         let crop = annotationPoint(from: point)
         let tool = toolbarModel?.tool
 
-        // 橡皮：画笔式擦除（擦到的地方露出底层）。
+        // 橡皮：画笔式擦除（按绘制顺序擦除并恢复底图）。
         if tool == .eraser {
             commitPendingInlineText()
             pushUndo()
             erasing = true
             lastErasePoint = crop
             let radius = max(3, (toolbarModel?.eraserSize ?? 28) / 2 * snapshot.effectiveScale)
-            eraserStrokes.append(EraserStroke(points: [crop], radius: radius))
+            let eraserAnnotation = Annotation(
+                kind: .eraser(points: [crop], radius: radius),
+                color: .white,
+                lineWidth: radius * 2
+            )
+            annotations.append(eraserAnnotation)
             updateAnnotationLayer()
             return
         }
@@ -2293,9 +2262,9 @@ final class OverlayCanvasView: NSView {
         let crop = annotationPoint(from: point)
 
         if erasing {
-            if var stroke = eraserStrokes.last {
-                stroke.points.append(crop)
-                eraserStrokes[eraserStrokes.count - 1] = stroke
+            if let last = annotations.last, case .eraser(var points, let radius) = last.kind {
+                points.append(crop)
+                annotations[annotations.count - 1].kind = .eraser(points: points, radius: radius)
             }
             lastErasePoint = crop
             updateAnnotationLayer()

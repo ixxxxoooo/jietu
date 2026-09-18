@@ -55,23 +55,9 @@ enum AnnotationRenderer {
             )
         }
         if !eraserStrokes.isEmpty {
-            context.setBlendMode(.clear)
-            context.setLineCap(.round)
-            context.setLineJoin(.round)
             for stroke in eraserStrokes {
-                context.setLineWidth(max(2, stroke.radius * 2))
-                let points = stroke.points.map { contextPoint($0, imageHeight: height) }
-                guard let first = points.first else { continue }
-                context.beginPath()
-                context.move(to: first)
-                if points.count == 1 {
-                    context.addLine(to: first)
-                } else {
-                    for point in points.dropFirst() { context.addLine(to: point) }
-                }
-                context.strokePath()
+                drawEraser(stroke.points, radius: stroke.radius, base: base, in: context, imageHeight: height)
             }
-            context.setBlendMode(.normal)
         }
 
         return context.makeImage()
@@ -196,6 +182,15 @@ enum AnnotationRenderer {
                     labelOrigin: labelOrigin,
                     string: string,
                     fontSize: fontSize,
+                    in: context,
+                    imageHeight: imageHeight
+                )
+
+            case .eraser(let points, let radius):
+                drawEraser(
+                    points,
+                    radius: radius,
+                    base: base,
                     in: context,
                     imageHeight: imageHeight
                 )
@@ -507,6 +502,47 @@ enum AnnotationRenderer {
         context.saveGState()
         context.clip(to: target)
         context.draw(blurred, in: source)
+        context.restoreGState()
+    }
+
+    private static func drawEraser(
+        _ points: [CGPoint],
+        radius: CGFloat,
+        base: CGImage,
+        in context: CGContext,
+        imageHeight: Int
+    ) {
+        guard !points.isEmpty, radius > 0 else { return }
+        let cgPoints = points.map { contextPoint($0, imageHeight: imageHeight) }
+        guard let first = cgPoints.first else { return }
+        context.saveGState()
+        context.beginPath()
+        if cgPoints.count == 1 {
+            context.addEllipse(in: CGRect(x: first.x - radius, y: first.y - radius, width: radius * 2, height: radius * 2))
+        } else {
+            var hasMovement = false
+            for pt in cgPoints.dropFirst() {
+                if abs(pt.x - first.x) > 0.1 || abs(pt.y - first.y) > 0.1 {
+                    hasMovement = true
+                    break
+                }
+            }
+            if !hasMovement {
+                context.addEllipse(in: CGRect(x: first.x - radius, y: first.y - radius, width: radius * 2, height: radius * 2))
+            } else {
+                context.move(to: first)
+                for pt in cgPoints.dropFirst() {
+                    context.addLine(to: pt)
+                }
+                context.setLineCap(.round)
+                context.setLineJoin(.round)
+                context.setLineWidth(max(2, radius * 2))
+                context.replacePathWithStrokedPath()
+            }
+        }
+        context.clip()
+        context.setBlendMode(.copy)
+        context.draw(base, in: CGRect(x: 0, y: 0, width: base.width, height: imageHeight))
         context.restoreGState()
     }
 
