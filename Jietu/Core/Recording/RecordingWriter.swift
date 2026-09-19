@@ -3,7 +3,7 @@ import Foundation
 
 /// 写 mp4 的那只手：所有方法都在 `RecordingEngine.queue` 上调用（`@unchecked Sendable` 靠这条纪律）。
 ///
-/// 音频走**直写**：SCK 已经把系统声与麦克风混好了（`captureMicrophone`），
+/// 音频走**直写**：上游（单源直写 / `AudioStreamMixer` 双源混合）已经处理好，
 /// 这边只管改时间戳就写进去，不做任何 PCM 转换或手动混音。
 ///
 /// @author ixxxxoooo
@@ -91,7 +91,7 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
         }
     }
 
-    /// 音频（SCK 交付的 CMSampleBuffer，系统声 + 麦克风已混好）。
+    /// 音频（上游已处理好的 CMSampleBuffer：单源直传或双源混合后）。
     func append(audio sampleBuffer: CMSampleBuffer) {
         guard !isPausedNow, sampleBuffer.numSamples > 0, let audioInput else { return }
         let stamp = adjusted(CMSampleBufferGetPresentationTimeStamp(sampleBuffer))

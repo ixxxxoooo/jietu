@@ -120,8 +120,8 @@ final class RecordingEngine {
         configuration.showsCursor = options.showsCursor
         let wantAudio = options.capturesSystemAudio || options.capturesMicrophone
         configuration.capturesAudio = options.capturesSystemAudio
-        // ScreenCaptureKit 原生麦克风混音（macOS 15+）：系统级混音比手动拆帧混合质量高得多，
-        // 不会有杂音、卡顿、速度不一致的问题。
+        // macOS 15+ SCK 原生麦克风采集：系统声走 .audio 输出，麦克风走 .microphone 输出，
+        // 两路分开交付。双源时由 AudioStreamMixer 在同一队列上实时混合。
         configuration.captureMicrophone = options.capturesMicrophone
         configuration.sampleRate = 44_100
         configuration.channelCount = 2
@@ -150,12 +150,20 @@ final class RecordingEngine {
         output.onStopped = { [weak self] error in
             Task { @MainActor in self?.handleStreamStopped(error) }
         }
+        // 两路同时开启时才启用混音器；单路直写更快。
+        if options.capturesSystemAudio && options.capturesMicrophone {
+            output.audioMixer = AudioStreamMixer()
+        }
 
         let stream = SCStream(filter: filter, configuration: configuration, delegate: output)
         do {
             try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: queue)
-            if wantAudio {
+            // .audio = 系统声音，.microphone = 麦克风——SCK 分两路交付，各自需要注册。
+            if options.capturesSystemAudio {
                 try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: queue)
+            }
+            if options.capturesMicrophone {
+                try stream.addStreamOutput(output, type: .microphone, sampleHandlerQueue: queue)
             }
             try await stream.startCapture()
         } catch {
@@ -234,6 +242,10 @@ final class RecordingEngine {
     private func finishCurrentSession() async -> Bool {
         stopTicker()
         await stopStream()
+        // 双源混音器里可能残留一个未配对的样本，排出来写掉。
+        if let remaining = output?.audioMixer?.flush() {
+            writer?.append(audio: remaining)
+        }
         defer { cleanUp() }
         guard let writer else { return false }
         do {
@@ -316,6 +328,9 @@ nonisolated final class RecordingStreamOutput: NSObject, SCStreamOutput, SCStrea
     var onAudioSample: (@Sendable (CMSampleBuffer) -> Void)?
     var onStopped: (@Sendable (Error) -> Void)?
 
+    /// 双源混音器（系统声 + 麦克风同时开启时才赋值；单源时为 nil，直写 Writer）。
+    var audioMixer: AudioStreamMixer?
+
     func stream(
         _ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of type: SCStreamOutputType
@@ -333,9 +348,28 @@ nonisolated final class RecordingStreamOutput: NSObject, SCStreamOutput, SCStrea
             else { return }
             onScreenFrame?(pixelBuffer, CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
         case .audio:
+            // 系统声音（页面里的视频、音乐等）。
             guard sampleBuffer.numSamples > 0 else { return }
-            onAudioSample?(sampleBuffer)
-        default:
+            if let mixer = audioMixer {
+                // 双源：等麦克风配对后混合输出
+                if let mixed = mixer.addSystem(sampleBuffer) {
+                    onAudioSample?(mixed)
+                }
+            } else {
+                onAudioSample?(sampleBuffer)
+            }
+        case .microphone:
+            // 麦克风（SCK 原生采集，与 .audio 分开交付）。
+            guard sampleBuffer.numSamples > 0 else { return }
+            if let mixer = audioMixer {
+                // 双源：等系统声配对后混合输出
+                if let mixed = mixer.addMic(sampleBuffer) {
+                    onAudioSample?(mixed)
+                }
+            } else {
+                onAudioSample?(sampleBuffer)
+            }
+        @unknown default:
             break
         }
     }
