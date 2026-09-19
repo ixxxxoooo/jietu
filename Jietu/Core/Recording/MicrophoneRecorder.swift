@@ -16,7 +16,7 @@ import CoreMedia
 /// 的内部线程触发，调用方把它 dispatch 到录制队列上。
 ///
 /// @author ygw
-final class MicrophoneRecorder {
+nonisolated final class MicrophoneRecorder {
 
     enum RecorderError: LocalizedError {
         case audioUnitUnavailable

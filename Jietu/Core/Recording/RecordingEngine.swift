@@ -192,9 +192,12 @@ final class RecordingEngine {
     /// 启动麦克风录制。失败则降级——录屏不会因为声音而取消。
     private func startMicrophoneRecording(deviceUID: String?) {
         let recorder = MicrophoneRecorder(deviceUID: deviceUID)
-        recorder.onSampleBuffer = { [weak self, weak writer] sampleBuffer in
-            guard let self, let writer else { return }
-            self.queue.async {
+        // 不捕获 self（@MainActor）：AVAudioEngine 的 tap 回调在后台线程触发，
+        // 捕获 MainActor 会导致隔离断言 SIGTRAP。直接捕获 queue 和 writer。
+        let recordingQueue = self.queue
+        recorder.onSampleBuffer = { [weak writer, recordingQueue] sampleBuffer in
+            guard let writer else { return }
+            recordingQueue.async {
                 writer.appendMicrophone(sampleBuffer)
             }
         }
