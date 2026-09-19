@@ -24,6 +24,11 @@ struct GeneralSettingsPane: View {
                     Text(L10n.generalShowNotification)
                     Text(L10n.generalShowNotificationDesc)
                 }
+                .onChange(of: settings.showSaveNotification) { _, enabled in
+                    if enabled {
+                        CaptureNotifier.requestAuthorizationShared()
+                    }
+                }
             } header: {
                 SettingsSectionHeader(title: L10n.generalSectionGeneral)
             } footer: {
@@ -44,11 +49,35 @@ struct GeneralSettingsPane: View {
                 .onChange(of: settings.appearance) { _, newValue in
                     newValue.apply()
                 }
+
+                Picker(selection: $settings.language) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.title).tag(language)
+                    }
+                } label: {
+                    Text(L10n.generalLanguage)
+                    Text(L10n.generalLanguageDesc)
+                }
+                .onChange(of: settings.language) { _, _ in
+                    promptLanguageRelaunch()
+                }
             } header: {
                 SettingsSectionHeader(title: L10n.generalSectionAppearance)
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// 语言切换后菜单栏 / 已打开窗口仍握着旧文案，提示并重启即可全量生效。
+    private func promptLanguageRelaunch() {
+        let alert = NSAlert()
+        alert.messageText = L10n.languageRestartTitle
+        alert.informativeText = L10n.languageRestartBody
+        alert.addButton(withTitle: L10n.languageRestartNow)
+        alert.addButton(withTitle: L10n.languageRestartLater)
+        if alert.runModal() == .alertFirstButtonReturn {
+            ScreenCapturePermission.relaunchApp()
+        }
     }
 }
 

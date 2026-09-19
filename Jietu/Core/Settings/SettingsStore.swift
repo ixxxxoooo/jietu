@@ -15,6 +15,7 @@ final class SettingsStore {
         /// 标注编辑器内部的两条快捷键（撤销 / 重做）。
         static let editorShortcuts = "editor.shortcuts"
         static let appearance = "appearance.theme"
+        static let language = "appearance.language"
         static let copyToClipboard = "behavior.copyToClipboard"
         static let playShutterSound = "behavior.playShutterSound"
         static let saveToDisk = "behavior.saveToDisk"
@@ -83,6 +84,14 @@ final class SettingsStore {
     /// 外观：跟随系统 / 锁定浅色 / 锁定深色。
     var appearance: AppAppearance {
         didSet { defaults.set(appearance.rawValue, forKey: Key.appearance) }
+    }
+
+    /// 界面语言：跟随系统 / 中文 / 英文。
+    var language: AppLanguage {
+        didSet {
+            defaults.set(language.rawValue, forKey: Key.language)
+            language.apply()
+        }
     }
 
     var playShutterSound: Bool {
@@ -213,6 +222,9 @@ final class SettingsStore {
 
         self.appearance =
             defaults.string(forKey: Key.appearance).flatMap(AppAppearance.init) ?? .system
+        let loadedLanguage =
+            defaults.string(forKey: Key.language).flatMap(AppLanguage.init) ?? .system
+        self.language = loadedLanguage
         self.copyToClipboard = defaults.object(forKey: Key.copyToClipboard) as? Bool ?? true
         self.playShutterSound = defaults.object(forKey: Key.playShutterSound) as? Bool ?? true
         self.saveToDisk = defaults.object(forKey: Key.saveToDisk) as? Bool ?? false
@@ -293,6 +305,9 @@ final class SettingsStore {
             // 首次启动（或数据坏了）落到出厂默认：默认就配好 ⌘Z / ⇧⌘Z，而不是留空。
             self.editorShortcuts = .standard
         }
+
+        // 启动时把语言偏好写回 AppleLanguages，保证 L10n / 系统文案一致。
+        loadedLanguage.apply()
     }
 
     /// 出厂默认保存目录：`~/Pictures/Jietu`。

@@ -1,5 +1,11 @@
 <p align="center">
-  <img src="Jietu/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="128" alt="Jietu icon">
+  <a href="README_zh-CN.md">🇨🇳 中文文档</a>
+  &nbsp;·&nbsp;
+  <a href="README.md">🇬🇧 English</a>
+</p>
+
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="Jietu icon">
 </p>
 
 <h1 align="center">Jietu</h1>
@@ -15,7 +21,6 @@
   <img src="https://img.shields.io/badge/platform-macOS%2026%2B-blue?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/Swift-6-orange?style=flat-square" alt="Swift 6">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ixxxxoooo/jietu?style=flat-square" alt="License"></a>
-  <a href="README_zh-CN.md">🇨🇳 中文文档</a>
 </p>
 
 ---
@@ -50,11 +55,7 @@
 - 🎨 **Color picker** — magnifier + hex copy
 - ⌨️ **Global hotkeys** — 8 customizable actions (unbound by default)
 - 🌙 **Theme** — system / light / dark
-- 🌍 **i18n** — English & Simplified Chinese, auto-detected from system language
-
-## 📸 Screenshots
-
-<!-- Add screenshots here when available -->
+- 🌍 **i18n** — English & Simplified Chinese (system language or manual in Settings)
 
 ## 📦 Installation
 
@@ -64,6 +65,7 @@ Download the latest `.dmg` from [Releases](https://github.com/ixxxxoooo/jietu/re
 
 > **First launch note:** The app is self-signed (no Developer ID / notarization). macOS Gatekeeper will block the first launch. To bypass:
 >
+> - Double-click **`Remove Quarantine.command`** inside the DMG (recommended), **or**
 > - Right-click the app → **Open** → Confirm, **or**
 > - Run `xattr -dr com.apple.quarantine /Applications/Jietu.app`
 
@@ -71,6 +73,7 @@ Download the latest `.dmg` from [Releases](https://github.com/ixxxxoooo/jietu/re
 
 1. **Screen Recording** (required) — go to **System Settings › Privacy & Security › Screen Recording**, add Jietu, then **restart the app** (macOS requires a relaunch after granting).
 2. **Accessibility** (optional) — only needed for auto-scroll in Scrolling Capture. Go to **System Settings › Privacy & Security › Accessibility** and add Jietu. No restart required.
+3. **Notifications** (optional) — allow banners so “saved” feedback appears after writing to disk.
 
 ## 🛠 Build from Source
 

@@ -1,5 +1,11 @@
 <p align="center">
-  <img src="Jietu/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="128" alt="Jietu 图标">
+  <a href="README_zh-CN.md">🇨🇳 中文文档</a>
+  &nbsp;·&nbsp;
+  <a href="README.md">🇬🇧 English</a>
+</p>
+
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="Jietu 图标">
 </p>
 
 <h1 align="center">Jietu 截图</h1>
@@ -15,7 +21,6 @@
   <img src="https://img.shields.io/badge/platform-macOS%2026%2B-blue?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/Swift-6-orange?style=flat-square" alt="Swift 6">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ixxxxoooo/jietu?style=flat-square" alt="License"></a>
-  <a href="README.md">🇬🇧 English</a>
 </p>
 
 ---
@@ -50,7 +55,7 @@
 - 🎨 **取色器** — 放大镜取色，直接复制色号
 - ⌨️ **全局热键** — 8 个可自定义动作（默认不绑定）
 - 🌙 **主题** — 跟随系统 / 浅色 / 深色
-- 🌍 **多语言** — 中文与英文，根据系统语言自动切换
+- 🌍 **多语言** — 中文与英文（跟随系统，或在设置里手动切换）
 
 ## 📦 安装
 
@@ -60,6 +65,7 @@
 
 > **首次打开提示**：本应用使用自签名证书（无 Developer ID / 公证），macOS Gatekeeper 会拦截首次启动。放行方式：
 >
+> - 双击 DMG 里的 **`Remove Quarantine.command`**（推荐），**或者**
 > - 右键 App → **打开** → 确认，**或者**
 > - 执行 `xattr -dr com.apple.quarantine /Applications/Jietu.app`
 
@@ -67,6 +73,7 @@
 
 1. **屏幕录制**（必需）— 前往 **系统设置 › 隐私与安全性 › 屏幕录制**，添加 Jietu，然后 **重启应用**（macOS 要求重启后才生效）。
 2. **辅助功能**（可选）— 仅用于滚动长图的自动滚动。前往 **系统设置 › 隐私与安全性 › 辅助功能** 添加 Jietu，无需重启。
+3. **通知**（可选）— 允许横幅，保存到磁盘后才会弹出系统通知。
 
 ## 🛠 从源码构建
 

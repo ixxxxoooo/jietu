@@ -70,6 +70,18 @@ enum L10n {
     static var appearanceLight: String { s("appearance.light") }
     static var appearanceDark: String { s("appearance.dark") }
 
+    // MARK: - 语言
+
+    static var languageSystem: String { s("language.system") }
+    static var languageChinese: String { s("language.chinese") }
+    static var languageEnglish: String { s("language.english") }
+    static var generalLanguage: String { s("general.language") }
+    static var generalLanguageDesc: String { s("general.language_desc") }
+    static var languageRestartTitle: String { s("language.restart_title") }
+    static var languageRestartBody: String { s("language.restart_body") }
+    static var languageRestartNow: String { s("language.restart_now") }
+    static var languageRestartLater: String { s("language.restart_later") }
+
     // MARK: - 截图设置
 
     static var captureSaveToDisk: String { s("capture.save_to_disk") }
@@ -596,9 +608,36 @@ enum L10n {
 
     // MARK: - 内部辅助
 
-    /// 用 CoreFoundation C API 读本地化字符串——`CFBundleCopyLocalizedString` 没有
-    /// `@MainActor` 标注，因此 `CaptureError` 等 `nonisolated` 上下文也能安全调用。
-    static func s(_ key: String) -> String {
+    /// 当前设置里选中的语言（UserDefaults）；无设置则跟随系统。
+    ///
+    /// `nonisolated`：错误类型等非主线程上下文也要读得到。
+    nonisolated private static var preferredLanguageCode: String {
+        let raw = UserDefaults.standard.string(forKey: "appearance.language") ?? AppLanguage.system.rawValue
+        let language = AppLanguage(rawValue: raw) ?? .system
+        return language.resolvedCode
+    }
+
+    /// 用指定 `.lproj` 的 CFBundle 读字符串——不依赖 `@MainActor` 的 `Bundle.main`。
+    nonisolated static func s(_ key: String) -> String {
+        let code = preferredLanguageCode
+        if let path = Bundle.main.path(forResource: code, ofType: "lproj") {
+            let url = URL(fileURLWithPath: path) as CFURL
+            if let cfBundle = CFBundleCreate(nil, url) {
+                let cfResult = CFBundleCopyLocalizedString(
+                    cfBundle,
+                    key as CFString,
+                    key as CFString,
+                    "Localizable" as CFString
+                )
+                if let value = cfResult as String?, value != key {
+                    return value
+                }
+                // 某些环境下 CopyLocalizedString 对子 bundle 直接返回 key，改读文件。
+                if let direct = loadString(key, fromLprojPath: path) {
+                    return direct
+                }
+            }
+        }
         let cfResult = CFBundleCopyLocalizedString(
             CFBundleGetMainBundle(),
             key as CFString,
@@ -608,7 +647,14 @@ enum L10n {
         return cfResult as String? ?? key
     }
 
-    static func sf(_ key: String, _ args: any CVarArg...) -> String {
+    /// 直接从 `Localizable.strings` 解析（CFBundle 对 .lproj 子包偶发失败时的兜底）。
+    nonisolated private static func loadString(_ key: String, fromLprojPath path: String) -> String? {
+        let stringsURL = URL(fileURLWithPath: path).appendingPathComponent("Localizable.strings")
+        guard let dict = NSDictionary(contentsOf: stringsURL) as? [String: String] else { return nil }
+        return dict[key]
+    }
+
+    nonisolated static func sf(_ key: String, _ args: any CVarArg...) -> String {
         String(format: s(key), arguments: args)
     }
 }

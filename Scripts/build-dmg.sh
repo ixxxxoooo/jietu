@@ -56,17 +56,17 @@ trap 'rm -rf "$STAGE"' EXIT
 ditto "$APP" "$STAGE/$APP_NAME.app"
 ln -s /Applications "$STAGE/Applications"
 
-# 在 DMG 内放一份安装说明，下载后打开就能看到。
+# 在 DMG 内放一份安装说明 + 可双击执行的「移除隔离」脚本。
 cat > "$STAGE/README - Installation.txt" <<'INSTALL'
 === Jietu — Installation Guide ===
 
 1. Drag "Jietu.app" into the "Applications" folder (the shortcut is right here).
 
 2. FIRST LAUNCH (self-signed app)
-   macOS Gatekeeper will block the first launch. To bypass:
-     • Right-click Jietu.app → Open → Confirm
-     • OR run in Terminal:
-         xattr -dr com.apple.quarantine /Applications/Jietu.app
+   Double-click "Remove Quarantine.command" in this DMG.
+   Or right-click Jietu.app → Open → Confirm.
+   Or run in Terminal:
+       xattr -dr com.apple.quarantine /Applications/Jietu.app
 
 3. GRANT PERMISSIONS
    • Screen Recording (REQUIRED):
@@ -75,11 +75,35 @@ cat > "$STAGE/README - Installation.txt" <<'INSTALL'
    • Accessibility (optional, for scrolling capture):
        System Settings › Privacy & Security › Accessibility
        → Click "+" → add Jietu (no restart needed)
+   • Notifications (optional):
+       Allow banners so save feedback appears
 
 4. You're all set! Enjoy Jietu.
 
 More info: https://github.com/ixxxxoooo/jietu
 INSTALL
+
+# 双击即可执行：去掉 Gatekeeper 隔离属性（.command 会打开「终端」跑一遍）。
+cat > "$STAGE/Remove Quarantine.command" <<'CMD'
+#!/bin/bash
+# @author ygw
+set -euo pipefail
+APP="/Applications/Jietu.app"
+
+osascript <<'OSA' >/dev/null 2>&1 || true
+tell application "Terminal" to activate
+OSA
+
+if [[ ! -d "$APP" ]]; then
+  osascript -e 'display dialog "请先把 Jietu.app 拖到「应用程序」文件夹，再双击本脚本。\n\nPlease drag Jietu.app into Applications first, then run this script again." buttons {"OK"} default button 1 with title "Jietu"'
+  exit 1
+fi
+
+xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+
+osascript -e 'display dialog "已移除隔离属性，现在可以正常打开 Jietu。\n\nQuarantine removed. You can open Jietu normally now." buttons {"OK"} default button 1 with title "Jietu"'
+CMD
+chmod +x "$STAGE/Remove Quarantine.command"
 
 # ---------- 4/5 打包 ----------
 echo "==> 4/5 打包"

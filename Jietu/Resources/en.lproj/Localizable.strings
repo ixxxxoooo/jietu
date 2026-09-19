@@ -59,6 +59,18 @@
 "appearance.light" = "Light";
 "appearance.dark" = "Dark";
 
+// MARK: - Language
+
+"language.system" = "System";
+"language.chinese" = "简体中文";
+"language.english" = "English";
+"general.language" = "Language";
+"general.language_desc" = "Follow system language, or lock Jietu to Chinese / English.";
+"language.restart_title" = "Restart to Apply Language";
+"language.restart_body" = "Menu bar and open windows need a restart to show the new language.";
+"language.restart_now" = "Restart Now";
+"language.restart_later" = "Later";
+
 // MARK: - Capture Settings
 
 "capture.save_to_disk" = "Auto Save to Disk";

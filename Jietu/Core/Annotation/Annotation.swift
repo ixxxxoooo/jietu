@@ -58,9 +58,12 @@ enum AnnotationTool: String, CaseIterable, Identifiable, Codable {
         case .pixelate: return "squareshape.split.3x3"
         case .blur: return "drop.halffull"
         case .text:
-            let isChinese = (Locale.preferredLanguages.first?.hasPrefix("zh") ?? false)
-                || (Locale.current.language.languageCode?.identifier == "zh")
-            return isChinese ? "character.cursor.ibeam.zh" : "character.cursor.ibeam"
+            let language = AppLanguage(
+                rawValue: UserDefaults.standard.string(forKey: "appearance.language")
+                    ?? AppLanguage.system.rawValue
+            ) ?? .system
+            return language.resolvedCode.hasPrefix("zh")
+                ? "character.cursor.ibeam.zh" : "character.cursor.ibeam"
         case .counter: return "1.circle"
         case .eraser: return "eraser"
         case .crop: return "crop"

@@ -7,33 +7,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
-- Internationalization (i18n) — English & Simplified Chinese, auto-detected from system language
+- Language picker in Settings (System / 简体中文 / English) with restart to apply
+
+### Fixed
+- Save notifications request alert + sound + badge, and re-request when the toggle is enabled
+- README logo path and language switcher placement
+- DMG includes double-clickable `Remove Quarantine.command`
+
+## [0.0.1] — 2026-09-19
+
+### Added
+- Internationalization (i18n) — English & Simplified Chinese
 - English README.md and Chinese README_zh-CN.md
 - GitHub Actions CI/CD — automatic build, test, and release on tag push
 - CONTRIBUTING.md, LICENSE (MIT), CHANGELOG.md
-- Installation instructions in DMG release notes
-
-### Changed
-- All UI strings now go through centralized `L10n` localization layer
-- Info.plist permission descriptions are localized
-
-## [1.0.0] — 2026-09-19
-
-### Added
+- Installation instructions and quarantine-removal script in DMG
 - Area, window, full screen, timed, and scrolling capture
 - Screen recording with system audio + microphone, pause/resume
-- Object-based annotation: rectangle, ellipse, arrow, line, pen, highlighter, spotlight, pixelate, blur, text, counter, eraser, crop
-- Inline editing directly on capture overlay
-- Live Text (OCR) with text selection and copy
-- macOS Translation framework integration
-- Pin to screen with drag-resize and scroll-zoom
-- Color picker with magnifier and hex copy
-- 8 customizable global hotkeys
-- Theme support: system / light / dark
-- Recent history for screenshots and recordings
-- Post-recording trim and GIF export
-- Multi-display support
-- Launch at login
+- Object-based annotation tools
+- Live Text (OCR), Translation, Pin, Color picker
+- Global hotkeys, theme support, recent history
 
-[Unreleased]: https://github.com/ixxxxoooo/jietu/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/ixxxxoooo/jietu/releases/tag/v1.0.0
+[Unreleased]: https://github.com/ixxxxoooo/jietu/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/ixxxxoooo/jietu/releases/tag/v0.0.1
