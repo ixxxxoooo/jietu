@@ -25,7 +25,9 @@ jobs:
       - name: Build Release
         run: |
           xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Release \
-            -destination 'platform=macOS' -derivedDataPath .build build
+            -destination 'platform=macOS' -derivedDataPath .build \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Automatic \
+            build
 
       - name: Verify signature
         run: codesign --verify --deep --strict ".build/Build/Products/Release/Jietu.app"
