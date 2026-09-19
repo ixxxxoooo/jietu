@@ -121,13 +121,6 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
         onTextChanged?(currentText())
     }
 
-    func controlTextDidEndEditing(_ obj: Notification) {
-        if let editor = currentEditor() as? NSTextView, editor.hasMarkedText() {
-            return
-        }
-        onCommit?()
-    }
-
     override func becomeFirstResponder() -> Bool {
         let result = super.becomeFirstResponder()
         attachEditorObservers()
@@ -469,7 +462,7 @@ struct InlineTextFieldHost: NSViewRepresentable {
             hasStroke: hasStroke,
             hasCallout: hasCallout
         )
-        if nsView.textField.stringValue != text && !nsView.isEditingMarkedText {
+        if nsView.textField.currentText() != text && !nsView.isEditingMarkedText {
             nsView.textField.stringValue = text
             nsView.fitField()
         }

@@ -319,15 +319,14 @@ struct InlineTextFieldTests {
         #expect(filledRect.contains(onBorder, tolerance: 4))
     }
 
-    @Test("InlineTextField 结束编辑（失去焦点）自动提交文本")
-    func controlTextDidEndEditingTriggersCommit() {
+    @Test("InlineTextField 回车确认提交文本")
+    func handleActionTriggersCommit() {
         let field = InlineTextField(frame: .zero)
         var committed = false
         field.onCommit = {
             committed = true
         }
-        let notification = Notification(name: NSControl.textDidEndEditingNotification, object: field)
-        field.controlTextDidEndEditing(notification)
+        field.sendAction(field.action, to: field.target)
         #expect(committed == true)
     }
 }

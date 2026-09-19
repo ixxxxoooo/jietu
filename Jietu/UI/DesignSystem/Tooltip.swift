@@ -125,6 +125,7 @@ private struct TooltipModifier: ViewModifier {
                 if let text, !text.isEmpty, isVisible {
                     TooltipView(text: text)
                         .offset(y: placement == .top ? -28 : 28)
+                        .zIndex(9999)
                         .transition(
                             .opacity.combined(
                                 with: .scale(scale: 0.94, anchor: placement == .top ? .bottom : .top)

@@ -205,10 +205,12 @@ struct AnnotationEditorView: View {
                 VStack(spacing: 0) {
                     canvasArea
                     toolbar
+                        .zIndex(100)
                 }
             } else {
                 VStack(spacing: 0) {
                     toolbar
+                        .zIndex(100)
                     Divider()
                     canvasArea
                 }
@@ -232,6 +234,7 @@ struct AnnotationEditorView: View {
                         optionsBar
                     }
                 }
+                .zIndex(50)
             }
         }
         .frame(
