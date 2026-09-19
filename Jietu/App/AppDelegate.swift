@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let capture = CaptureEngine()
     private let overlays = OverlayCoordinator()
     private let quickAccess = QuickAccessPanelController()
+    /// 这次原地编辑是从哪张浮窗卡片进来的：编辑确认后那张旧卡片让位（见 `deliver`）。
+    private var cardBeingEdited: UUID?
     private let notifier = CaptureNotifier()
     private var menuBar: MenuBarController?
     private var onboarding: OnboardingWindowController?
@@ -1069,8 +1071,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickAccess.onSave = { [weak self] image in
             self?.saveAs(image)
         }
-        quickAccess.onAnnotate = { [weak self] image in
-            self?.openInlineEditor(image, allowsCrop: true)
+        quickAccess.onAnnotate = { [weak self] image, cardID in
+            self?.openInlineEditor(image, allowsCrop: true, sourceCard: cardID)
         }
         quickAccess.onPin = { image in
             PinWindowController.pin(image: image, on: NSScreen.main)
@@ -1902,6 +1904,8 @@ struct CaptureRegionTarget {
             // 遮罩被取消（Esc / 右键）：滚动长图还停在「选模式」这一步时，
             // 挂在选框下面的那条模式条也得一起收掉。
             if scrollingSession == nil { dismissScrollingPanel() }
+            // 取消编辑：那张浮窗卡片**留着**（用户没改东西，截图不该凭空消失）。
+            cardBeingEdited = nil
         case .captured(let image, let displayID, let screenRect, let annotated):
             if annotated {
                 // 已在遮罩里原地标注完成，直接走交付流程。
@@ -1994,6 +1998,12 @@ struct CaptureRegionTarget {
 
         quickAccess.autoCloseDelay = settings.quickAccessAutoCloseDelay
         quickAccess.position = settings.quickAccessPosition
+        // 这次编辑是从某张浮窗卡片进来的：旧卡片让位，别让它留着没编辑过的那张
+        // （用户看到的会是「裁了怎么还是原来那张」）。
+        if let card = cardBeingEdited {
+            cardBeingEdited = nil
+            quickAccess.dismiss(card: card, animated: false)
+        }
         quickAccess.present(
             image: image,
             onDisplay: displayID,
@@ -2005,9 +2015,17 @@ struct CaptureRegionTarget {
     ///
     /// - Parameter allowsCrop: 给不给「裁剪」工具。**只有「已有的图片」才给**（浮窗卡片 / 钉图 /
     ///   历史记录）；刚截下来的画面不给——那块区域就是用户刚框出来的，再裁一次像是在重新框选区。
-    private func openInlineEditor(_ image: CGImage, anchor: CGRect? = nil, allowsCrop: Bool) {
+    /// - Parameter sourceCard: 从哪张浮窗卡片进来的（没有就 nil）。编辑确认后那张旧卡片要让位，
+    ///   不然屏幕上留着没编辑过的那张，看着像「裁了没生效」。
+    private func openInlineEditor(
+        _ image: CGImage,
+        anchor: CGRect? = nil,
+        allowsCrop: Bool,
+        sourceCard: UUID? = nil
+    ) {
         guard !overlays.isPresenting else { return }
         guard requireScreenCapturePermission() else { return }
+        cardBeingEdited = sourceCard
 
         // 确定目标屏幕：优先包含 anchor 的屏幕，否则主屏幕
         let targetScreen: NSScreen

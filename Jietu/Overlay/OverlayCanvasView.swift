@@ -355,6 +355,12 @@ final class OverlayCanvasView: NSView {
     /// 自检用：工具栏当前实际显示的工具（第一次截图不给裁剪）。
     var debugVisibleTools: [AnnotationTool] { toolbarModel?.visibleTools ?? [] }
 
+    /// 自检用：等价于点主工具栏的 ✓（确认并交付这张图）。
+    func debugConfirm() { confirmInline() }
+
+    /// 自检用：等价于点「保存 / 钉图」时交出去的那张图。
+    func debugAnnotatedImage() -> CGImage? { currentAnnotatedImage() }
+
     /// 自检用：当前底图与它在屏幕上的 frame。
     var debugRestoredBase: (image: CGImage?, frame: CGRect?) {
         (restoredBaseImage, restoredImageFrame)
@@ -2127,12 +2133,19 @@ final class OverlayCanvasView: NSView {
         return cropSessionFrame ?? cropBaseFrame
     }
 
+    /// 还悬着一个「框好了但没落实」的裁剪（框确实比图小，落实下去会真的改变图）。
+    private var hasPendingCrop: Bool {
+        guard let selection, let frame = cropFrame else { return false }
+        return selection != frame
+    }
+
     private func applyCrop() {
-        if let initial = cropInitialState {
+        // 框和整张图一样大 = 没裁东西，不占撤销位。
+        if hasPendingCrop, let initial = cropInitialState {
             undoStack.append(initial)
             redoStack.removeAll()
-            cropInitialState = nil
         }
+        cropInitialState = nil
         cropSessionFrame = nil
         performCropExecution()
         toolbarModel?.tool = nil
@@ -2210,6 +2223,7 @@ final class OverlayCanvasView: NSView {
 
     /// 当前「已烘焙标注」的成图（用于下载 / 钉图）。
     private func currentAnnotatedImage() -> CGImage? {
+        applyPendingCropIfNeeded()
         commitPendingInlineText()
         guard let selection else { return nil }
         let base: CGImage
@@ -2224,6 +2238,7 @@ final class OverlayCanvasView: NSView {
     }
 
     private func confirmInline() {
+        applyPendingCropIfNeeded()
         guard let selection else {
             cancelInline()
             return
@@ -2242,6 +2257,15 @@ final class OverlayCanvasView: NSView {
         let rect = selection
         exitAnnotating()
         onCommitAnnotated?(final, rect)
+    }
+
+    /// 交出去之前先把「框好了但还没落实」的裁剪落实掉。
+    ///
+    /// 裁剪是「先框、后确认」：用户框完直接点主工具栏的 ✓（或保存 / 钉图）时，
+    /// 若不管这个框，交出去的还是没裁过的原图——看到的就是「裁完怎么还是原来那张」。
+    private func applyPendingCropIfNeeded() {
+        guard hasPendingCrop else { return }
+        applyCrop()
     }
 
     /// 记住选区对应的原图。标注层就直接按它的原始分辨率渲染（见 `updateAnnotationLayer`）。

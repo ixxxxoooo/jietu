@@ -378,8 +378,12 @@ struct QuickAccessTests {
     func clickingCardToAnnotateKeepsCardAlive() {
         let controller = QuickAccessPanelController()
         let image = TestImage.solidBlack(side: 100)
-        var annotated = false
-        controller.onAnnotate = { _ in annotated = true }
+        var annotatedImage: CGImage?
+        var annotatedCard: UUID?
+        controller.onAnnotate = { image, cardID in
+            annotatedImage = image
+            annotatedCard = cardID
+        }
 
         controller.present(
             image: image,
@@ -390,16 +394,43 @@ struct QuickAccessTests {
         #expect(controller.isVisible)
         #expect(controller.panelsForTesting.count == 1)
 
-        // 模拟外部点击卡片触发 onAnnotate
-        controller.onAnnotate?(image)
-        #expect(annotated)
-        // 浮窗依然存在
+        // 模拟外部点击卡片触发 onAnnotate：真实路径会把卡片自己的 id 一起带出去
+        // （编辑确认后要按这个 id 让旧卡片让位）。
+        let card = controller.entryIDsForTesting[0]
+        controller.onAnnotate?(image, card)
+        #expect(annotatedImage != nil)
+        #expect(annotatedCard == card)
+        // 浮窗依然存在：用户取消编辑时那张卡片还得在
         #expect(controller.isVisible)
         #expect(controller.panelsForTesting.count == 1)
 
         // 只有手动关闭或超时才销毁
         controller.dismiss()
         #expect(!controller.isVisible)
+    }
+
+    @Test("原地编辑确认后：按 id 收掉被编辑的那张卡片，别的不动")
+    func dismissEditedCardKeepsOthers() {
+        let controller = QuickAccessPanelController()
+        // 别让自动关闭把卡片收走，否则断言到的是超时那条路。
+        controller.autoCloseDelay = 0
+        let image = TestImage.solidBlack(side: 100)
+        for _ in 0..<2 {
+            controller.present(
+                image: image,
+                onDisplay: CGMainDisplayID(),
+                saveDirectory: FileManager.default.temporaryDirectory
+            )
+        }
+        #expect(controller.panelsForTesting.count == 2)
+
+        let ids = controller.entryIDsForTesting
+        controller.dismiss(card: ids[0], animated: false)
+
+        #expect(controller.panelsForTesting.count == 1, "只收掉被编辑的那张")
+        #expect(controller.entryIDsForTesting == [ids[1]])
+
+        controller.dismiss()
     }
 
     // MARK: - Helpers

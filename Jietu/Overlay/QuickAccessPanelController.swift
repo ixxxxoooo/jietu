@@ -57,7 +57,9 @@ final class QuickAccessPanelController {
 
     var onCopy: ((CGImage) -> Void)?
     var onSave: ((CGImage) -> Void)?
-    var onAnnotate: ((CGImage) -> Void)?
+    /// 卡片上点了「编辑」：把这张图交给原地编辑器，并带上**卡片 id**——
+    /// 编辑确认后那张旧卡片要让位，不然屏幕上会留着一张没编辑过的图，看着像「裁了没生效」。
+    var onAnnotate: ((CGImage, UUID) -> Void)?
     var onPin: ((CGImage) -> Void)?
     /// 视频卡：播放（用默认播放器打开成片）。
     var onPlayVideo: ((URL) -> Void)?
@@ -75,6 +77,9 @@ final class QuickAccessPanelController {
 
     /// 自检用：当前浮窗面板（取 frame 算注入点）。
     var panelsForTesting: [NSPanel] { entries.map(\.panel) }
+
+    /// 自检用：当前卡片的 id（按叠放顺序）。
+    var entryIDsForTesting: [UUID] { entries.map(\.id) }
 
     // MARK: - Present
 
@@ -104,7 +109,7 @@ final class QuickAccessPanelController {
                 self?.onSave?(image)
             },
             onAnnotate: { [weak self] in
-                self?.onAnnotate?(image)
+                self?.onAnnotate?(image, id)
             },
             onPin: { [weak self] in
                 self?.onPin?(image)
@@ -244,6 +249,11 @@ final class QuickAccessPanelController {
         }
         entries.removeAll()
         if hadEntries { onDismiss?() }
+    }
+
+    /// 收掉某一张卡片（原地编辑确认后，被编辑的那张旧卡片让位用）。
+    func dismiss(card id: UUID, animated: Bool = true) {
+        dismissEntry(id, animated: animated)
     }
 
     // MARK: - Layout

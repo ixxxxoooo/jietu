@@ -281,7 +281,7 @@ enum CaptureSelfTest {
                     PinWindowController.pin(image: image, on: screen)
                     fire("钉图")
                 }
-                controller.onAnnotate = { image in
+                controller.onAnnotate = { _, _ in
                     fire("标注")
                 }
                 retainedQuickAccess = controller

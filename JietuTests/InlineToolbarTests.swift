@@ -530,6 +530,45 @@ struct InlineToolbarTests {
         )
     }
 
+    @Test("裁剪：框完直接点 ✓ 也要按这个框裁，不能把没裁的原图交出去")
+    func pendingCropAppliesOnConfirm() throws {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        var committed: CGImage?
+        canvas.onCommitAnnotated = { image, _ in committed = image }
+
+        #expect(canvas.debugSelectTool(.crop))
+        Self.cropDrag(canvas, to: CGRect(x: 300, y: 300, width: 200, height: 135))
+        #expect(canvas.debugRestoredBase.image?.width == 1600, "框悬着的时候底图先不动")
+
+        // 不点「完成裁剪」，直接点主工具栏的 ✓。
+        canvas.debugConfirm()
+
+        let final = try #require(committed)
+        #expect(final.width == 400 && final.height == 270, "交出去的该是裁过的那张（2x → 400×270）")
+    }
+
+    @Test("裁剪：框完直接点保存 / 钉图，交出去的也是裁过的那张")
+    func pendingCropAppliesOnSaveAndPin() throws {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        #expect(canvas.debugSelectTool(.crop))
+        Self.cropDrag(canvas, to: CGRect(x: 300, y: 300, width: 200, height: 135))
+
+        let saved = try #require(canvas.debugAnnotatedImage())
+        #expect(saved.width == 400 && saved.height == 270)
+    }
+
+    @Test("裁剪：框完直接退出编辑器（取消）不该被裁，原图留着")
+    func cancelKeepsUncroppedImage() {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        #expect(canvas.debugSelectTool(.crop))
+        Self.cropDrag(canvas, to: CGRect(x: 300, y: 300, width: 200, height: 135))
+
+        // Esc：取消裁剪（不是退出编辑器）。
+        canvas.keyDown(with: Self.key(53))
+        #expect(canvas.debugRestoredBase.frame == CGRect(x: 100, y: 135, width: 800, height: 600))
+        #expect(canvas.debugRestoredBase.image?.width == 1600, "取消裁剪后底图要还原")
+    }
+
     // MARK: - 就地编辑测试脚手架
 
     /// 造一块普通原地编辑画布：快照底图与画布同比例（`effectiveScale` == `scale`）。
@@ -581,12 +620,27 @@ struct InlineToolbarTests {
         return ctx.makeImage()!
     }
 
+    /// 造一个按键事件（`keyCode` 用 AppKit 的原始码，53 = Esc、36 = Return）。
+    private static func key(_ keyCode: UInt16) -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "",
+            charactersIgnoringModifiers: "",
+            isARepeat: false,
+            keyCode: keyCode
+        )!
+    }
+
     private static func mouse(
         _ type: NSEvent.EventType,
         at point: NSPoint,
         clickCount: Int = 1
-    ) -> NSEvent {
-        NSEvent.mouseEvent(
+    ) -> NSEvent {        NSEvent.mouseEvent(
             with: type,
             location: point,
             modifierFlags: [],
