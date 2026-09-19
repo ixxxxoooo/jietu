@@ -234,7 +234,7 @@ extension AppDelegate {
         }
     }
 
-    /// 落盘后的统一收尾：记入最近截图 + 图标闪烁 + 通知。
+    /// 落盘后的统一收尾：记入最近截图 + 系统通知。
     func didSave(to url: URL) {
         // 历史那条记上「用户的文件在哪」：打开 / 在访达中显示都该落到它上面。
         HistoryStore.shared.attachSavedFile(url, to: HistoryStore.shared.latestID)

@@ -147,7 +147,7 @@ final class SettingsStore {
         didSet { defaults.set(quickAccessPosition.rawValue, forKey: Key.quickAccessPosition) }
     }
 
-    /// 标注编辑方式（原地 / 独立窗口）。
+    /// 截选后流程（立即标注 / 浮窗预览）。
     var editorMode: EditorMode {
         didSet { defaults.set(editorMode.rawValue, forKey: Key.editorMode) }
     }

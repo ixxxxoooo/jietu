@@ -44,7 +44,7 @@ enum EditorShortcut: String, CaseIterable, Identifiable, Codable {
     /// 出厂默认绑定：macOS 惯例的那一对，**不是空的**——设置页里默认就配好。
     ///
     /// 选 ⇧⌘Z 而不是 Windows 味的 ⌘Y 当重做：macOS 上 ⇧⌘Z 才是系统惯例，
-    /// 独立窗口编辑器本来也就是这么绑的，两处保持一致。想换 ⌘Y 在设置页改一下即可。
+    /// 原地编辑器本来也就是这么绑的，保持一致。想换 ⌘Y 在设置页改一下即可。
     var defaultHotkey: Hotkey {
         switch self {
         case .undo:

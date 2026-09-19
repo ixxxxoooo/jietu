@@ -18,7 +18,7 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         Bundle.main.bundleIdentifier != nil
     }
 
-    /// 申请通知权限；被拒绝时静默降级（仍会走菜单栏图标闪烁）。
+    /// 申请通知权限；被拒绝时静默降级（仅通知不可用，不影响其它功能）。
     func requestAuthorizationIfNeeded() {
         guard isAvailable else { return }
         UNUserNotificationCenter.current().delegate = self

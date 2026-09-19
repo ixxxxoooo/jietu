@@ -42,7 +42,7 @@ struct HotkeysSettingsPane: View {
                 SettingsSectionHeader(title: "标注编辑")
             } footer: {
                 Text(
-                    "只在标注编辑器里生效（原地编辑与独立窗口都算），不占用系统级组合键，"
+                    "只在标注编辑器里生效（原地编辑），不占用系统级组合键，"
                         + "所以默认就配好：⌘Z 撤销、⇧⌘Z 重做，也可以改成别的。\n"
                         + "这与上面那组全局热键是两回事——把 ⌘Z 设成全局会抢掉其它 App 的撤销。"
                 )

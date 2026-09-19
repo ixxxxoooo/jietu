@@ -86,7 +86,7 @@ Debug / Release 各自只有一个实例：
 
 ## 标注工具栏规范
 
-标注界面现已**全量统一收敛至原地编辑工具栏**（`InlineAnnotationToolbar.swift`，位于全屏遮罩 `OverlayCanvasView` 的选区下方）：
+标注界面现已**全量统一收敛至原地编辑工具栏**（`Jietu/Overlay/InlineAnnotationToolbar.swift`，位于全屏遮罩 `OverlayCanvasView` 的选区下方）：
 - **单一事实来源（Single Source of Truth）**：已彻底废除独立编辑窗口，截图立即编辑、浮窗卡片点击编辑、钉图编辑、菜单栏历史记录编辑全部走居中原地编辑；
 - **二级菜单居中展开**：点击工具时在主工具栏下方水平居中展开二级参数栏；
 - **设计系统样式**：采用 `.floatingSurface()` 磨砂面板、Theme 墨色 scrim、连续圆角与微投影。
