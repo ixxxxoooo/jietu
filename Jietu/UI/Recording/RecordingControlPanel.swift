@@ -37,6 +37,10 @@ final class RecordingControlPanel {
     /// 待开始态点了音频开关：交给外面改设置并回填状态（录制中点了不生效）。
     var onToggleSystemAudio: (() -> Void)?
     var onToggleMicrophone: (() -> Void)?
+    /// 右键麦克风按钮选择设备：回传设备 UID（nil = 系统默认）。
+    var onSelectMicrophoneDevice: ((String?) -> Void)?
+    /// 当前选中的麦克风设备 UID（用于菜单打勾）。
+    var selectedMicrophoneDeviceUID: String?
 
     private var panel: NSPanel?
     private var content: RecordingControlContentView?
@@ -86,6 +90,10 @@ final class RecordingControlPanel {
         content.onCancel = { [weak self] in self?.onCancel?() }
         content.onToggleSystemAudio = { [weak self] in self?.onToggleSystemAudio?() }
         content.onToggleMicrophone = { [weak self] in self?.onToggleMicrophone?() }
+        content.onSelectMicrophoneDevice = { [weak self] uid in
+            self?.onSelectMicrophoneDevice?(uid)
+        }
+        content.selectedMicrophoneDeviceUID = selectedMicrophoneDeviceUID
         content.setPhase(phase)
         self.content = content
 
@@ -198,6 +206,10 @@ private final class RecordingControlContentView: NSView {
     /// 待开始态点了音频开关：交给外面改设置并回填状态（录制中点了不生效）。
     var onToggleSystemAudio: (() -> Void)?
     var onToggleMicrophone: (() -> Void)?
+    /// 右键麦克风按钮选择设备。
+    var onSelectMicrophoneDevice: ((String?) -> Void)?
+    /// 当前选中的麦克风设备 UID。
+    var selectedMicrophoneDeviceUID: String?
 
     private let glass = NSVisualEffectView()
     private let dot = NSView()
@@ -255,6 +267,7 @@ private final class RecordingControlContentView: NSView {
 
         systemAudioButton.onClick = { [weak self] in self?.onToggleSystemAudio?() }
         micButton.onClick = { [weak self] in self?.onToggleMicrophone?() }
+        micButton.onRightClick = { [weak self] in self?.showMicrophoneDeviceMenu() }
         for button in [systemAudioButton, micButton] { addSubview(button) }
         applySystemAudio()
         applyMicrophone()
@@ -367,7 +380,7 @@ private final class RecordingControlContentView: NSView {
         case .active:
             micButton.symbolName = "mic.fill"
             micButton.iconTint = NSColor(Theme.Colors.success)
-            micButton.toolTip = "麦克风：开（与系统声音混成一条音轨）"
+            micButton.toolTip = "麦克风：开（独立音轨录制）\n右键选择设备"
         case .unavailable:
             micButton.symbolName = "mic.slash"
             micButton.iconTint = NSColor(Theme.Colors.warning)
@@ -389,5 +402,47 @@ private final class RecordingControlContentView: NSView {
         systemAudioButton.toolTip = systemAudio
             ? "系统声音：开（页面里的视频 / 音乐）"
             : "系统声音：关（点一下打开）"
+    }
+
+    /// 右键麦克风按钮：弹出设备选择菜单。
+    private func showMicrophoneDeviceMenu() {
+        let menu = NSMenu(title: "选择麦克风")
+
+        // 「系统默认」选项
+        let defaultItem = NSMenuItem(
+            title: "系统默认麦克风",
+            action: #selector(selectMicrophoneDevice(_:)),
+            keyEquivalent: ""
+        )
+        defaultItem.target = self
+        defaultItem.representedObject = nil as String?
+        defaultItem.state = selectedMicrophoneDeviceUID == nil ? .on : .off
+        menu.addItem(defaultItem)
+
+        // 枚举所有可用输入设备
+        let devices = AudioInputDevices.available()
+        if !devices.isEmpty {
+            menu.addItem(.separator())
+            for device in devices {
+                let item = NSMenuItem(
+                    title: device.name,
+                    action: #selector(selectMicrophoneDevice(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = device.uid
+                item.state = selectedMicrophoneDeviceUID == device.uid ? .on : .off
+                menu.addItem(item)
+            }
+        }
+
+        let point = NSPoint(x: micButton.frame.midX, y: micButton.frame.minY)
+        menu.popUp(positioning: nil, at: point, in: self)
+    }
+
+    @objc private func selectMicrophoneDevice(_ sender: NSMenuItem) {
+        let uid = sender.representedObject as? String
+        selectedMicrophoneDeviceUID = uid
+        onSelectMicrophoneDevice?(uid)
     }
 }

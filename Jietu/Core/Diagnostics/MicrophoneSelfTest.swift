@@ -5,8 +5,8 @@ import Foundation
 
 /// 麦克风权限自检：确认授权状态和系统设置跳转。
 ///
-/// 录屏的麦克风采集已改用 ScreenCaptureKit 原生的 `captureMicrophone`，
-/// 不再需要手动验 AVAudioEngine 链路。这里只验权限。
+/// 录屏的麦克风采集走 AVAudioEngine（MicrophoneRecorder），
+/// 但启动前只需确认权限。这里只验权限。
 ///
 ///   Jietu --selftest-microphone
 ///

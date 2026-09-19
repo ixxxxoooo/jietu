@@ -77,4 +77,15 @@ nonisolated enum VideoEncodingSettings {
             AVEncoderBitRateKey: 128_000,
         ]
     }
+
+    /// 麦克风音频的编码参数（AAC 单声道 44.1kHz）。
+    /// 麦克风通常是单声道输入，单独一轨写入 MP4。
+    static func microphoneOutputSettings() -> [String: Any] {
+        [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVNumberOfChannelsKey: 1,
+            AVSampleRateKey: 44_100,
+            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
+        ]
+    }
 }

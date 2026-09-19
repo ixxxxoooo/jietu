@@ -97,11 +97,12 @@
 
 | 源文件 | 单元测试 | selftest |
 |--------|----------|----------|
-| `AudioMixer.swift` | `AudioMixerTests` | — |
+| `AudioInputDevices.swift` | — | — |
 | `GifExporter.swift` | `GifExporterTests` | — |
 | `MicrophoneCapture.swift` | — | ✅ 录屏（`--selftest-record`） |
+| `MicrophoneRecorder.swift` | — | ✅ 录屏 |
 | `RecordingEngine.swift` | `RecordingTests` | ✅ 录屏 |
-| `RecordingWriter.swift` | `AudioMixerTests`（混音接线） | ✅ 录屏 |
+| `RecordingWriter.swift` | — | ✅ 录屏 |
 | `VideoEncodingSettings.swift` | `RecordingTests` | — |
 | `VideoThumbnail.swift` | — | — |
 | `VideoTrimmer.swift` | `VideoTrimmerTests` | — |

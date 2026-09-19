@@ -6,6 +6,7 @@ final class SettingsStore {
     private enum Key {
         static let recordSystemAudio = "recording.systemAudio"
         static let recordMicrophone = "recording.microphone"
+        static let recordMicrophoneDeviceUID = "recording.microphoneDeviceUID"
         static let recordFrameRate = "recording.frameRate"
         /// 多热键映射（动作 rawValue → 组合键）。
         static let hotkeys = "hotkeys.map"
@@ -122,6 +123,12 @@ final class SettingsStore {
         didSet { defaults.set(recordMicrophone, forKey: Key.recordMicrophone) }
     }
 
+    /// 指定麦克风的 CoreAudio 设备 UID。nil = 系统默认输入。
+    /// 右键麦克风按钮可选择具体设备。
+    var recordMicrophoneDeviceUID: String? {
+        didSet { defaults.set(recordMicrophoneDeviceUID, forKey: Key.recordMicrophoneDeviceUID) }
+    }
+
     /// 录屏帧率（30 / 60）。60 更顺，文件也更大。
     var recordFrameRate: Int {
         didSet { defaults.set(recordFrameRate, forKey: Key.recordFrameRate) }
@@ -218,6 +225,8 @@ final class SettingsStore {
             defaults.object(forKey: Key.recordSystemAudio) as? Bool ?? false
         self.recordMicrophone =
             defaults.object(forKey: Key.recordMicrophone) as? Bool ?? false
+        self.recordMicrophoneDeviceUID =
+            defaults.string(forKey: Key.recordMicrophoneDeviceUID)
         self.recordFrameRate = defaults.object(forKey: Key.recordFrameRate) as? Int ?? 30
         self.recentCapturePaths = defaults.stringArray(forKey: Key.recentCapturePaths) ?? []
         self.saveFormat =

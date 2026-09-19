@@ -43,6 +43,8 @@ final class GlassControlButton: NSControl {
     }
 
     var onClick: (() -> Void)?
+    /// 右键点击回调（用于弹出菜单等）。
+    var onRightClick: (() -> Void)?
 
     /// 开关型按钮（钉图的识别文本）点开后的样子：
     /// - `.glass`：图标换成**居中的绿色对勾**。不用角标——28pt 的圆盘上角标又小又偏，
@@ -356,6 +358,15 @@ final class GlassControlButton: NSControl {
         )
         #endif
         onClick?()
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard bounds.contains(point), onRightClick != nil else {
+            super.rightMouseDown(with: event)
+            return
+        }
+        onRightClick?()
     }
 
     private func animateHover(highlighted: Bool) {

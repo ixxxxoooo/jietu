@@ -13,7 +13,12 @@ import os
 /// - 写帧与时间轴记账全在一条串行队列上，主线程只发指令；
 /// - 暂停 = 丢帧 + 把后续 PTS 整体前移，暂停那段不出现在成片里、也不留空档。
 ///
-/// @author ixxxxoooo
+/// **音频双轨**（参考 capcap）：
+/// - 系统声音走 SCStream `.audio` → `systemAudioInput` 轨；
+/// - 麦克风走独立的 `MicrophoneRecorder`（AVAudioEngine）→ `microphoneInput` 轨；
+/// - 两轨独立写入 mp4，播放器同时播放；不做手动 PCM 混音。
+///
+/// @author ygw
 @MainActor
 final class RecordingEngine {
     struct Options {
@@ -23,6 +28,8 @@ final class RecordingEngine {
         var capturesSystemAudio = false
         /// 录麦克风（权限由调用方先申请；没设备 / 起不来会自动降级成无麦克风）。
         var capturesMicrophone = false
+        /// 指定麦克风的 CoreAudio UID（nil = 系统默认输入）。
+        var microphoneDeviceUID: String?
         var showsCursor = true
     }
 
@@ -64,11 +71,12 @@ final class RecordingEngine {
     private var stream: SCStream?
     private var output: RecordingStreamOutput?
     private var writer: RecordingWriter?
+    private var microphoneRecorder: MicrophoneRecorder?
     private var ticker: Timer?
 
     private(set) var isRunning = false
     private(set) var isPaused = false
-    /// 这次录制麦克风**真的**启用了没（SCK `captureMicrophone` 是否成功开启）。
+    /// 这次录制麦克风**真的**启用了没。
     ///
     /// 调用方拿它做用户可见的反馈：开关开着却没启用（多半是没授权）必须说出来，
     /// 否则用户录完才发现没声音。
@@ -118,11 +126,8 @@ final class RecordingEngine {
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.scalesToFit = false
         configuration.showsCursor = options.showsCursor
-        let wantAudio = options.capturesSystemAudio || options.capturesMicrophone
+        // 系统声走 SCStream `.audio`；麦克风不走 SCK——走独立的 MicrophoneRecorder。
         configuration.capturesAudio = options.capturesSystemAudio
-        // macOS 15+ SCK 原生麦克风采集：系统声走 .audio 输出，麦克风走 .microphone 输出，
-        // 两路分开交付。双源时由 AudioStreamMixer 在同一队列上实时混合。
-        configuration.captureMicrophone = options.capturesMicrophone
         configuration.sampleRate = 44_100
         configuration.channelCount = 2
 
@@ -138,32 +143,25 @@ final class RecordingEngine {
             width: dimensions.width,
             height: dimensions.height,
             fps: fps,
-            withAudio: wantAudio
+            withSystemAudio: options.capturesSystemAudio,
+            withMicrophone: options.capturesMicrophone
         )
         let output = RecordingStreamOutput()
         output.onScreenFrame = { [writer] pixelBuffer, time in
             writer.append(pixelBuffer: pixelBuffer, at: time)
         }
-        output.onAudioSample = { [writer] sampleBuffer in
-            writer.append(audio: sampleBuffer)
+        output.onSystemAudio = { [writer] sampleBuffer in
+            writer.appendSystemAudio(sampleBuffer)
         }
         output.onStopped = { [weak self] error in
             Task { @MainActor in self?.handleStreamStopped(error) }
-        }
-        // 两路同时开启时才启用混音器；单路直写更快。
-        if options.capturesSystemAudio && options.capturesMicrophone {
-            output.audioMixer = AudioStreamMixer()
         }
 
         let stream = SCStream(filter: filter, configuration: configuration, delegate: output)
         do {
             try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: queue)
-            // .audio = 系统声音，.microphone = 麦克风——SCK 分两路交付，各自需要注册。
             if options.capturesSystemAudio {
                 try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: queue)
-            }
-            if options.capturesMicrophone {
-                try stream.addStreamOutput(output, type: .microphone, sampleHandlerQueue: queue)
             }
             try await stream.startCapture()
         } catch {
@@ -176,22 +174,54 @@ final class RecordingEngine {
         self.stream = stream
         isRunning = true
         isPaused = false
-        isMicrophoneActive = options.capturesMicrophone
         startedAt = Date()
+
+        // 麦克风走 AVAudioEngine 独立采集（参考 capcap）
+        if options.capturesMicrophone {
+            startMicrophoneRecording(deviceUID: options.microphoneDeviceUID)
+        }
+
         startTicker()
         logger.notice(
-            "recording \(dimensions.width)x\(dimensions.height)@\(fps) audio=\(options.capturesSystemAudio) mic=\(options.capturesMicrophone)"
+            "recording \(dimensions.width)x\(dimensions.height)@\(fps) audio=\(options.capturesSystemAudio) mic=\(options.capturesMicrophone) micDevice=\(options.microphoneDeviceUID ?? "default")"
         )
     }
+
+    // MARK: - 麦克风
+
+    /// 启动麦克风录制。失败则降级——录屏不会因为声音而取消。
+    private func startMicrophoneRecording(deviceUID: String?) {
+        let recorder = MicrophoneRecorder(deviceUID: deviceUID)
+        recorder.onSampleBuffer = { [weak self, weak writer] sampleBuffer in
+            guard let self, let writer else { return }
+            self.queue.async {
+                writer.appendMicrophone(sampleBuffer)
+            }
+        }
+        self.microphoneRecorder = recorder
+        do {
+            try recorder.start()
+            isMicrophoneActive = true
+        } catch {
+            logger.error("microphone start failed: \(error.localizedDescription)")
+            stopMicrophoneRecording()
+            isMicrophoneActive = false
+        }
+    }
+
+    private func stopMicrophoneRecording() {
+        microphoneRecorder?.stop()
+        microphoneRecorder = nil
+    }
+
+    // MARK: - 暂停
 
     /// 暂停：丢帧，并把恢复后的 PTS 整体前移（成片里看不出这段）。
     func pause() {
         guard isRunning, !isPaused else { return }
         isPaused = true
-        // 直接调（writer 内部用锁护住暂停状态）：**别** queue.async 过去——
-        // 闭包会继承 MainActor 隔离，丢到后台队列上跑会触发运行时的隔离断言（实测 SIGTRAP）。
         writer?.pause()
-        // 计时：暂停时把这一段的起点记下，tick 里扣掉。
+        microphoneRecorder?.pause()
         pausedAt = Date()
     }
 
@@ -203,6 +233,13 @@ final class RecordingEngine {
             self.pausedAt = nil
         }
         writer?.resume()
+        if isMicrophoneActive {
+            do {
+                try microphoneRecorder?.resume()
+            } catch {
+                logger.error("microphone resume failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// 收工并交付：停流 → 排空队列 → 结束写入 → 回临时文件路径。
@@ -219,6 +256,7 @@ final class RecordingEngine {
         guard isRunning else { return }
         isRunning = false
         stopTicker()
+        stopMicrophoneRecording()
         await stopStream()
         writer?.cancel()
         cleanUp()
@@ -241,11 +279,8 @@ final class RecordingEngine {
     @discardableResult
     private func finishCurrentSession() async -> Bool {
         stopTicker()
+        stopMicrophoneRecording()
         await stopStream()
-        // 双源混音器里可能残留一个未配对的样本，排出来写掉。
-        if let remaining = output?.audioMixer?.flush() {
-            writer?.append(audio: remaining)
-        }
         defer { cleanUp() }
         guard let writer else { return false }
         do {
@@ -271,6 +306,7 @@ final class RecordingEngine {
         stream = nil
         output = nil
         writer = nil
+        microphoneRecorder = nil
         isMicrophoneActive = false
         startedAt = nil
         isPaused = false
@@ -319,17 +355,12 @@ final class RecordingEngine {
 /// 所以这里**不许**往主线程 dispatch —— `stopStream()` 里的 `queue.sync {}` 屏障
 /// 一旦遇到主线程等待就会死锁。
 ///
-/// @author ixxxxoooo
+/// @author ygw
 nonisolated final class RecordingStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
-    // 三个回调都必须是 `@Sendable`：它们是在 `@MainActor` 的 `start(...)` 里赋值的，
-    // 不标的话闭包会**继承 MainActor 隔离**，而 SCK 把它们调到采集队列上 → 运行时隔离断言
-    // 直接 trap（实测 SIGTRAP，且没有任何输出，很难查）。
     var onScreenFrame: (@Sendable (CVPixelBuffer, CMTime) -> Void)?
-    var onAudioSample: (@Sendable (CMSampleBuffer) -> Void)?
+    /// 系统声音（SCStream `.audio`）。
+    var onSystemAudio: (@Sendable (CMSampleBuffer) -> Void)?
     var onStopped: (@Sendable (Error) -> Void)?
-
-    /// 双源混音器（系统声 + 麦克风同时开启时才赋值；单源时为 nil，直写 Writer）。
-    var audioMixer: AudioStreamMixer?
 
     func stream(
         _ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
@@ -337,7 +368,6 @@ nonisolated final class RecordingStreamOutput: NSObject, SCStreamOutput, SCStrea
     ) {
         switch type {
         case .screen:
-            // 只有 `.complete` 的帧才画得动：`.idle` / `.blank` 是占位帧。
             guard
                 let attachments = CMSampleBufferGetSampleAttachmentsArray(
                     sampleBuffer, createIfNecessary: false
@@ -348,27 +378,11 @@ nonisolated final class RecordingStreamOutput: NSObject, SCStreamOutput, SCStrea
             else { return }
             onScreenFrame?(pixelBuffer, CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
         case .audio:
-            // 系统声音（页面里的视频、音乐等）。
             guard sampleBuffer.numSamples > 0 else { return }
-            if let mixer = audioMixer {
-                // 双源：等麦克风配对后混合输出
-                if let mixed = mixer.addSystem(sampleBuffer) {
-                    onAudioSample?(mixed)
-                }
-            } else {
-                onAudioSample?(sampleBuffer)
-            }
+            onSystemAudio?(sampleBuffer)
         case .microphone:
-            // 麦克风（SCK 原生采集，与 .audio 分开交付）。
-            guard sampleBuffer.numSamples > 0 else { return }
-            if let mixer = audioMixer {
-                // 双源：等系统声配对后混合输出
-                if let mixed = mixer.addMic(sampleBuffer) {
-                    onAudioSample?(mixed)
-                }
-            } else {
-                onAudioSample?(sampleBuffer)
-            }
+            // 不走 SCK 的 microphone——capcap 走 AVAudioEngine（MicrophoneRecorder），更可靠。
+            break
         @unknown default:
             break
         }
@@ -378,4 +392,3 @@ nonisolated final class RecordingStreamOutput: NSObject, SCStreamOutput, SCStrea
         onStopped?(error)
     }
 }
-

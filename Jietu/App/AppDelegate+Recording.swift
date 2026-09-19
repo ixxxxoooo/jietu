@@ -100,6 +100,11 @@ extension AppDelegate {
             self.settings.recordMicrophone.toggle()
             self.recordingHUD?.setMicrophone(self.settings.recordMicrophone ? .active : .off)
         }
+        hud.selectedMicrophoneDeviceUID = settings.recordMicrophoneDeviceUID
+        hud.onSelectMicrophoneDevice = { [weak self] uid in
+            guard let self else { return }
+            self.settings.recordMicrophoneDeviceUID = uid
+        }
         recordingBorder = border
         recordingHUD = hud
         pendingRecording = (displayID: snapshot.displayID, region: target.region)
@@ -142,7 +147,8 @@ extension AppDelegate {
                 let options = RecordingEngine.Options(
                     fps: settings.recordFrameRate,
                     capturesSystemAudio: settings.recordSystemAudio,
-                    capturesMicrophone: wantsMicrophone
+                    capturesMicrophone: wantsMicrophone,
+                    microphoneDeviceUID: wantsMicrophone ? settings.recordMicrophoneDeviceUID : nil
                 )
                 try await engine.start(
                     displayID: pending.displayID,

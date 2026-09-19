@@ -3,8 +3,8 @@ import Foundation
 
 /// 麦克风权限工具。
 ///
-/// 录屏的麦克风采集已改用 ScreenCaptureKit 原生的 `captureMicrophone`（系统级混音，
-/// 质量比手动拆帧混合高得多）。这里只保留权限查询和申请的静态方法，供录屏前检查用。
+/// 录屏的麦克风采集走独立的 `MicrophoneRecorder`（AVAudioEngine）。
+/// 这里只保留权限查询和申请的静态方法，供录屏前检查用。
 ///
 /// @author ixxxxoooo
 nonisolated enum MicrophonePermission {
