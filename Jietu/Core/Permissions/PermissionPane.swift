@@ -14,8 +14,8 @@ enum PermissionPane {
     /// 面板名字，用于 UI 文案。
     var title: String {
         switch self {
-        case .screenRecording: return "屏幕录制"
-        case .accessibility: return "辅助功能"
+        case .screenRecording: return L10n.permPaneScreenRecording
+        case .accessibility: return L10n.permPaneAccessibility
         }
     }
 
@@ -39,9 +39,9 @@ enum PermissionPane {
     var dragHint: String {
         switch self {
         case .screenRecording:
-            return "那一栏是接受拖入的：拖进去就等于把它加进列表并授权。"
+            return L10n.permPaneDragHintSR
         case .accessibility:
-            return "「辅助功能」那一栏接受拖入：拖进去就等于授权，用于自动滚动截图。"
+            return L10n.permPaneDragHintAX
         }
     }
 

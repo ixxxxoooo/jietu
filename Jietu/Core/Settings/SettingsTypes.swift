@@ -36,8 +36,8 @@ enum QuickAccessPosition: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .bottomRight: return "右下角"
-        case .bottomLeft: return "左下角"
+        case .bottomRight: return L10n.quickAccessBottomRight
+        case .bottomLeft: return L10n.quickAccessBottomLeft
         }
     }
 }
@@ -55,8 +55,8 @@ enum EditorMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .inline: return "立即标注"
-        case .quickAccess: return "浮窗预览"
+        case .inline: return L10n.annotationEditorModeInline
+        case .quickAccess: return L10n.annotationEditorModeQuickAccess
         }
     }
 

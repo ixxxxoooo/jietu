@@ -66,16 +66,16 @@ enum QuickAccessAction: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .close: "关闭"
-        case .pin: "钉图"
-        case .annotate: "标注"
-        case .copy: "复制"
-        case .save: "保存"
+        case .close: L10n.qaClose
+        case .pin: L10n.qaPin
+        case .annotate: L10n.qaAnnotate
+        case .copy: L10n.qaCopy
+        case .save: L10n.qaSave
         case .saveVideo: "MP4"        // 胶囊上显示「MP4」，一眼知道这是保存 MP4
-        case .play: "播放"
-        case .reveal: "在访达中显示"
-        case .copyFile: "复制文件"
-        case .trimVideo: "裁剪"
+        case .play: L10n.qaPlay
+        case .reveal: L10n.qaRevealInFinder
+        case .copyFile: L10n.qaCopyFile
+        case .trimVideo: L10n.qaTrimVideo
         case .exportGif: "GIF"        // 胶囊上显示「GIF」，与 MP4 并列
         }
     }
@@ -83,10 +83,10 @@ enum QuickAccessAction: String, CaseIterable {
     /// 悬停时鼠标停在按钮上的说明：视频卡的「保存」是把成片**另存一份**（原片已经在保存目录里了）。
     var tooltip: String {
         switch self {
-        case .save, .saveVideo: "另存为…"
-        case .play: "用「预览」播放"
-        case .trimVideo: "裁剪…"
-        case .exportGif: "导出 GIF…"
+        case .save, .saveVideo: L10n.qaSaveAs
+        case .play: L10n.qaPlayWithPreview
+        case .trimVideo: L10n.qaTrimEllipsis
+        case .exportGif: L10n.qaExportGif
         default: title
         }
     }

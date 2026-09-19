@@ -1,0 +1,567 @@
+/* 简体中文本地化 */
+
+// MARK: - 菜单栏
+
+"menu.area_capture" = "区域截图";
+"menu.window_capture" = "窗口截图";
+"menu.fullscreen_capture" = "全屏截图";
+"menu.timed_capture" = "定时截图";
+"menu.scrolling_capture" = "滚动长图…";
+"menu.color_picker" = "取色器";
+"menu.region_recording" = "区域录制";
+"menu.window_recording" = "窗口录制";
+"menu.fullscreen_recording" = "全屏录制";
+"menu.recent_history" = "最近记录";
+"menu.open_save_folder" = "打开保存文件夹";
+"menu.no_recent_history" = "暂无最近记录";
+"menu.preferences" = "偏好设置…";
+"menu.restart_jietu" = "重启 Jietu";
+"menu.quit_jietu" = "退出 Jietu";
+"menu.permission_guide" = "权限引导…";
+"menu.drag_authorize_screen_recording" = "拖拽授权「屏幕录制」…";
+"menu.drag_authorize_accessibility" = "拖拽授权「辅助功能」…";
+"menu.seconds_later" = "%d 秒后";
+"menu.screen_recording_granted" = "屏幕录制权限：已授权";
+"menu.screen_recording_not_granted" = "屏幕录制权限：未授权";
+"menu.accessibility_granted" = "辅助功能权限：已授权";
+"menu.accessibility_not_granted" = "辅助功能权限：未授权";
+
+// MARK: - 设置页分类
+
+"settings.general" = "通用";
+"settings.capture" = "截图";
+"settings.hotkeys" = "快捷键";
+"settings.quick_access" = "浮窗";
+"settings.recording" = "录屏";
+"settings.annotation" = "标注";
+"settings.permission" = "权限";
+"settings.about" = "关于";
+
+// MARK: - 通用设置
+
+"general.launch_at_login" = "登录时启动";
+"general.launch_at_login_desc" = "开机后自动启动 Jietu，随菜单栏常驻。";
+"general.play_shutter_sound" = "截图后播放快门音";
+"general.play_shutter_sound_desc" = "截图成功时播放系统快门声。";
+"general.copy_to_clipboard" = "截图后自动复制到剪贴板";
+"general.copy_to_clipboard_desc" = "截图后立即写入剪贴板，可直接粘贴。";
+"general.show_notification" = "保存后显示系统通知";
+"general.show_notification_desc" = "保存到磁盘后弹出通知，点击可定位文件。";
+"general.section_general" = "通用";
+"general.default_behavior_footer" = "这些是每次截图都会用到的默认行为。";
+"general.theme" = "主题";
+"general.theme_desc" = "跟随系统，或把 Jietu 固定为浅色 / 深色。";
+"general.section_appearance" = "外观";
+
+// MARK: - 外观
+
+"appearance.system" = "跟随系统";
+"appearance.light" = "浅色";
+"appearance.dark" = "深色";
+
+// MARK: - 截图设置
+
+"capture.save_to_disk" = "自动保存到磁盘";
+"capture.save_to_disk_desc" = "截图后自动写入下面选定的保存位置。";
+"capture.save_location" = "保存位置";
+"capture.choose" = "选择…";
+"capture.reveal_in_finder" = "在访达中显示";
+"capture.section_output" = "输出";
+"capture.save_format" = "保存格式";
+"capture.save_format_desc" = "PNG 无损体积大，JPEG 可调质量。";
+"capture.jpeg_quality" = "JPEG 质量";
+"capture.jpeg_quality_desc" = "只在 JPEG 格式下生效。";
+"capture.section_format" = "格式";
+"capture.filename_template" = "文件名模板";
+"capture.filename_hint" = "%@\n示例：%@";
+"capture.reset_default" = "恢复默认";
+"capture.section_naming" = "命名";
+"capture.window_shadow" = "窗口截图阴影";
+"capture.window_shadow_desc" = "点选窗口截图时自动裁出圆角，并加上 macOS 风格的拟物投影。";
+"capture.shadow_size" = "阴影大小";
+"capture.shadow_size_desc" = "数值越大投影越柔和、扩散越远，窗口看起来悬浮得越高。";
+"capture.section_window_capture" = "窗口截图";
+
+// MARK: - 快捷键设置
+
+"hotkeys.section_global" = "全局热键";
+"hotkeys.section_global_footer" = "默认都不设置快捷键，点一下录制器再按组合键即可录入；悬停录制器时右侧的 ✕ 可清除。\n全局热键会抢占其它 App 的同名组合键，建议避开常用组合。";
+"hotkeys.section_editor" = "标注编辑";
+"hotkeys.section_editor_footer" = "只在标注编辑器里生效（原地编辑），不占用系统级组合键，所以默认就配好：⌘Z 撤销、⇧⌘Z 重做，也可以改成别的。\n这与上面那组全局热键是两回事——把 ⌘Z 设成全局会抢掉其它 App 的撤销。";
+"hotkeys.reset_default" = "恢复默认（⌘Z / ⇧⌘Z）";
+
+// MARK: - 快捷键动作
+
+"action.area_capture" = "区域截图";
+"action.window_capture" = "窗口截图";
+"action.fullscreen_capture" = "全屏截图";
+"action.timed_capture" = "定时截图";
+"action.scrolling_capture" = "滚动长图";
+"action.region_recording" = "区域录制";
+"action.window_recording" = "窗口录制";
+"action.fullscreen_recording" = "全屏录制";
+
+"action.area_capture_desc" = "拖动选区，截取任意区域";
+"action.window_capture_desc" = "抓取鼠标下方的窗口";
+"action.fullscreen_capture_desc" = "抓取鼠标所在的显示器";
+"action.timed_capture_desc" = "延时 %d 秒后进入区域截图";
+"action.scrolling_capture_desc" = "框选区域后滚动内容，自动拼成长图";
+"action.region_recording_desc" = "框选区域开始录屏，随时暂停 / 完成";
+"action.window_recording_desc" = "点哪个窗口就录哪个";
+"action.fullscreen_recording_desc" = "录鼠标所在的整块屏";
+
+// MARK: - 编辑器快捷键
+
+"editor.undo" = "撤销";
+"editor.redo" = "重做";
+"editor.undo_desc" = "标注编辑时回退上一步";
+"editor.redo_desc" = "重做被撤销的一步";
+
+// MARK: - 浮窗设置
+
+"quick_access.dock_position" = "停靠位置";
+"quick_access.dock_position_desc" = "截图后浮窗出现在屏幕的哪个角。";
+"quick_access.auto_close" = "自动关闭";
+"quick_access.auto_close_desc" = "浮窗多久后自动消失，「永不」则需手动关闭。";
+"quick_access.section_title" = "浮窗";
+"quick_access.bottom_right" = "右下角";
+"quick_access.bottom_left" = "左下角";
+"quick_access.seconds" = "%d 秒";
+"quick_access.never" = "永不";
+
+// MARK: - 录屏设置
+
+"recording.system_audio" = "录制系统声音";
+"recording.system_audio_desc" = "把页面里的视频 / 音乐一起录进去。";
+"recording.microphone" = "录制麦克风";
+"recording.microphone_desc" = "录下讲解旁白，与系统声音混成一条音轨；首次开启会请求麦克风权限。";
+"recording.frame_rate" = "帧率";
+"recording.frame_rate_desc" = "60 更顺滑，文件也更大。";
+"recording.section_recording" = "录制";
+"recording.save_location" = "保存位置";
+"recording.section_output" = "输出";
+"recording.output_footer" = "录屏保存为 mp4（H.264），与截图共用上面的位置与命名模板。";
+
+// MARK: - 标注设置
+
+"annotation.editor_mode" = "截选后流程";
+"annotation.editor_mode_desc" = "立即标注：截完直接在当前画面上标注。\n浮窗预览：截完先显示浮窗，点开后居中原地编辑。";
+"annotation.section_annotation" = "标注";
+"annotation.default_style" = "默认样式";
+"annotation.section_default_style" = "默认样式";
+"annotation.default_style_footer" = "工具 / 颜色 / 参数沿用上次用法。";
+"annotation.editor_mode_inline" = "立即标注";
+"annotation.editor_mode_quick_access" = "浮窗预览";
+"annotation.style_summary" = "%@ · %@ · 线宽 %d · 字号 %d";
+
+// MARK: - 标注工具
+
+"tool.select" = "选择";
+"tool.rectangle" = "矩形";
+"tool.ellipse" = "椭圆";
+"tool.arrow" = "箭头";
+"tool.line" = "直线";
+"tool.pen" = "画笔";
+"tool.highlight" = "高亮笔";
+"tool.spotlight" = "聚光灯";
+"tool.pixelate" = "马赛克";
+"tool.blur" = "模糊";
+"tool.text" = "文字";
+"tool.counter" = "序号";
+"tool.eraser" = "橡皮";
+"tool.crop" = "裁剪";
+
+// MARK: - 标注样式
+
+"style.stroke" = "描边";
+"style.callout" = "标注";
+"style.mosaic_granularity" = "马赛克颗粒度";
+"style.blur_radius" = "模糊半径";
+"style.eraser_size" = "橡皮大小";
+
+// MARK: - 颜色名称
+
+"color.red" = "红";
+"color.orange" = "橙";
+"color.yellow" = "黄";
+"color.green" = "绿";
+"color.blue" = "蓝";
+"color.white" = "白";
+"color.black" = "黑";
+"color.custom" = "自定义色";
+
+// MARK: - 工具栏
+
+"toolbar.save" = "保存";
+"toolbar.save_help" = "保存 (⌘S)";
+"toolbar.pin" = "钉图";
+"toolbar.cancel" = "取消";
+"toolbar.confirm" = "确认";
+"toolbar.ocr" = "识别文字";
+"toolbar.scroll_capture" = "滚动截图";
+"toolbar.record" = "录屏";
+
+// MARK: - 滚动截图选项
+
+"scroll.who_scrolls" = "谁来滚";
+"scroll.manual" = "手动滚动";
+"scroll.automatic" = "自动滚动";
+"scroll.manual_help" = "手动滚动：点完自己用鼠标或滚轮往下滚";
+"scroll.automatic_help" = "自动滚动：由 Jietu 自动滚轮（需辅助功能权限）";
+
+// MARK: - 裁剪
+
+"crop.drag_hint" = "拖拽框选要保留的区域（拖控制点微调）";
+"crop.finish" = "完成裁剪";
+"crop.finish_help" = "完成裁剪 (↵ / 双击)";
+"crop.cancel_help" = "取消裁剪 (Esc)";
+
+// MARK: - 权限设置
+
+"perm.screen_recording" = "屏幕录制";
+"perm.screen_recording_granted" = "Jietu 可以正常冻结屏幕并截图。";
+"perm.screen_recording_needs_relaunch" = "已经勾选，重启后生效。";
+"perm.screen_recording_denied" = "没有它，截图会返回空白画面。";
+"perm.recheck" = "重新检测";
+"perm.recheck_help" = "立刻再读一次系统里的授权状态";
+"perm.grant_target" = "授权对象";
+"perm.grant_target_desc" = "在「系统设置 › 隐私与安全性 › 屏幕录制」里勾选它；若列表里没有它，点列表左下的「+」手动选中这个 App。";
+"perm.grant_action" = "授权操作";
+"perm.drag_authorize" = "拖拽授权…";
+"perm.drag_authorize_help" = "打开系统设置并浮出面板，把本 App 的卡片拖进列表";
+"perm.needs_relaunch" = "需要重启";
+"perm.needs_relaunch_desc" = "macOS 的限制：授权只在授权之后启动的进程里生效。";
+"perm.restart_jietu" = "重启 Jietu";
+"perm.accessibility" = "辅助功能";
+"perm.accessibility_granted" = "「滚动长图（自动滚动）」可以合成滚轮了。";
+"perm.accessibility_denied" = "「滚动长图（自动滚动）」需要它来合成滚轮事件；不授权也能用手动滚动。";
+"perm.section_screen_recording" = "屏幕录制";
+"perm.section_accessibility" = "辅助功能";
+"perm.accessibility_footer" = "授权状态每秒复查一次，从系统设置切回来会立刻更新；辅助功能授权是**现读**的，不用重启。\n自签名 / Debug 构建有时不会自动出现在系统设置的列表里（但授权本身照样生效），用「拖拽授权…」把本 App 拖进去即可。";
+"perm.granted" = "已授权";
+"perm.not_granted" = "未授权";
+
+// MARK: - 关于页
+
+"about.version" = "版本 %@ (%@)";
+"about.build_channel" = "构建渠道";
+"about.section_info" = "信息";
+"about.section_links" = "链接";
+"about.tagline" = "本机截图工具：截完即标注、复制、保存，数据不出本机。";
+"about.copyright" = "© 2026 Jietu · 截图与标注全部在本机完成";
+"about.issues" = "问题反馈";
+
+// MARK: - 引导页
+
+"onboarding.welcome" = "欢迎使用 %@";
+"onboarding.screen_recording_perm" = "屏幕录制权限";
+"onboarding.set_hotkey" = "设一个快捷键";
+"onboarding.all_ready" = "一切就绪";
+"onboarding.welcome_subtitle" = "截完即复制、可标注、可保存，全部在本机完成。";
+"onboarding.perm_granted_subtitle" = "已经拿到权限，可以正常截图了。";
+"onboarding.perm_needs_relaunch_subtitle" = "已经勾选，重启后生效。";
+"onboarding.perm_denied_subtitle" = "没有它，截图会返回空白画面。";
+"onboarding.hotkey_subtitle" = "不设也能截图，从菜单栏开始就行。";
+"onboarding.ready_with_hotkey" = "按 %@ 随时开始区域截图。";
+"onboarding.ready_from_menu" = "随时可以从菜单栏开始截图。";
+"onboarding.copy_to_clipboard" = "截图后自动复制到剪贴板";
+"onboarding.copy_to_clipboard_desc" = "截完直接去别的 App 粘贴。";
+"onboarding.launch_at_login" = "登录时启动";
+"onboarding.launch_at_login_desc" = "开机后随菜单栏常驻。";
+"onboarding.change_in_settings" = "这两项随时可以在设置里改。";
+"onboarding.screen_recording" = "屏幕录制";
+"onboarding.accessibility" = "辅助功能（可选）";
+"onboarding.accessibility_granted" = "滚动长图自动滚动已就绪。";
+"onboarding.accessibility_denied" = "用于滚动长图自动滚动；不授权也可手动滚动。";
+"onboarding.grant_target" = "授权对象";
+"onboarding.grant_target_desc" = "在系统设置对应列表中勾选它；列表里没有就点「+」手动添加或拖入卡片。";
+"onboarding.relaunch_needed" = "需要重启";
+"onboarding.relaunch_desc" = "macOS 的限制：授权只在授权之后启动的进程里生效。";
+"onboarding.relaunch_hint" = "已经勾选却还是未授权？点「重启 Jietu」立刻生效。";
+"onboarding.drag_hint" = "点击授权按钮会打开系统设置并浮出面板，把卡片拖进列表即可。";
+"onboarding.go_authorize" = "去授权";
+"onboarding.no_hotkey_hint" = "默认都不绑定，避免和系统或其它 App 抢组合键。";
+"onboarding.from_menu_bar" = "从菜单栏开始";
+"onboarding.from_menu_bar_desc" = "区域 / 窗口 / 全屏 / 定时 / 滚动长图都在那里。";
+"onboarding.more_in_settings" = "设置里还有更多";
+"onboarding.more_in_settings_desc" = "保存位置与格式、浮窗、标注默认样式。";
+"onboarding.settings_hint" = "按 ⌘, 或点菜单栏的「偏好设置…」随时打开设置。";
+"onboarding.continue" = "继续";
+"onboarding.later" = "稍后";
+"onboarding.authorize" = "授权屏幕录制";
+"onboarding.start" = "开始使用";
+"onboarding.previous" = "上一步";
+
+// MARK: - 录制控制条
+
+"record.ready" = "准备录制";
+"record.start" = "开始录制 (⌘⇧S)";
+"record.pause" = "暂停 (⌘⇧P)";
+"record.resume" = "继续 (⌘⇧P)";
+"record.stop" = "完成 (⌘⇧S)";
+"record.cancel_no_save" = "取消（不保存）";
+"record.system_audio_on" = "系统声音：开（页面里的视频 / 音乐）";
+"record.system_audio_off" = "系统声音：关（点一下打开）";
+"record.mic_off" = "本次没录麦克风";
+"record.mic_off_ready" = "麦克风：关（点一下打开，录制时录下你的讲解）";
+"record.mic_active" = "麦克风：开（独立音轨录制）\n右键选择设备";
+"record.mic_unavailable" = "麦克风没启用：未授权或没有输入设备（本次只有系统声音）";
+"record.mic_not_recorded" = "本次没录麦克风";
+"record.default_mic" = "系统默认麦克风";
+"record.select_mic_menu" = "选择麦克风";
+
+// MARK: - Quick Access 浮窗动作
+
+"qa.close" = "关闭";
+"qa.pin" = "钉图";
+"qa.annotate" = "标注";
+"qa.copy" = "复制";
+"qa.save" = "保存";
+"qa.play" = "播放";
+"qa.reveal_in_finder" = "在访达中显示";
+"qa.copy_file" = "复制文件";
+"qa.trim_video" = "裁剪";
+"qa.save_as" = "另存为…";
+"qa.play_with_preview" = "用「预览」播放";
+"qa.trim_ellipsis" = "裁剪…";
+"qa.export_gif" = "导出 GIF…";
+"qa.video_help" = "点击播放，拖拽到其它 App 或文件夹可导出";
+"qa.image_help" = "点击原地编辑，拖拽到其它 App 或文件夹可导出";
+
+// MARK: - 钉图
+
+"pin.copy_image" = "复制图像";
+"pin.actual_size" = "实际大小 (100%)";
+"pin.edit" = "编辑 (⌘E)";
+"pin.live_text_on" = "退出识别文本";
+"pin.live_text_off" = "识别文本";
+"pin.translate" = "翻译…";
+"pin.close" = "关闭";
+"pin.edit_tooltip" = "编辑 (⌘E)";
+"pin.close_tooltip" = "关闭 (⌘W)";
+"pin.live_text_tooltip" = "识别文本";
+"pin.translate_tooltip" = "翻译（用 macOS 自己的翻译）";
+"pin.exit_live_text" = "退出识别文本";
+"pin.recognizing" = "正在识别图上的文字…";
+"pin.no_text_found" = "没识别到文字";
+"pin.no_text_found_detail" = "这张图里没有可以翻译的文字。";
+
+// MARK: - 放大镜信息
+
+"loupe.coordinate" = "坐标";
+"loupe.region" = "区域";
+
+// MARK: - 取色器
+
+"color_picker.hint" = "点击取色 · Esc 取消";
+
+// MARK: - 遮罩层提示
+
+"overlay.display_info" = "显示器 %d/%d  ·  %.0f×%.0f px  ·  缩放 %.2fx";
+"overlay.click_window_record" = "  ·  点击要录的窗口  ·  ␣ 切换自由框选  ·  Esc 取消";
+"overlay.drag_area_record" = "  ·  拖拽框选要录的区域（或点一下某个窗口）  ·  Esc 取消";
+"overlay.scroll_drag_hint" = "  ·  拖拽框选（鼠标停住出「手动 / 自动」）  ·  Esc 取消";
+"overlay.scroll_adjust_hint" = "  ·  鼠标停住出「手动 / 自动」，选区还能接着调  ·  Esc 取消";
+"overlay.click_window_capture" = "  ·  点击窗口截图  ·  ␣ 切换自由框选  ·  Esc 取消";
+"overlay.drag_capture" = "  ·  拖拽框选 / 点窗口截整窗  ·  ␣ 切换窗口模式  ·  Esc 取消";
+"overlay.selection_confirm" = "  ·  ↵ 完成, ⇥ 上次选区, ⇧ 正方形  ·  Esc 取消";
+"overlay.switch_free_select" = "切换自由框选";
+"overlay.switch_window_mode" = "切换窗口模式";
+"overlay.esc_cancel" = "Esc 取消";
+
+// MARK: - CaptureError
+
+"error.permission_denied" = "未获得「屏幕录制」权限";
+"error.no_shareable_content" = "无法获取可捕获的屏幕内容：%@";
+"error.no_displays" = "没有找到可捕获的显示器";
+"error.display_not_shareable" = "显示器 %u 当前不可捕获";
+"error.empty_image" = "显示器 %u 返回了空图像";
+"error.empty_region" = "选区太小，无法截取";
+"error.window_not_capturable" = "窗口 %u 当前不可捕获";
+"error.no_window_under_cursor" = "鼠标下没有可截取的窗口";
+
+"error.recovery_permission" = "请在「系统设置 › 隐私与安全性 › 屏幕录制」中勾选 Jietu，然后重启 Jietu。";
+"error.recovery_relaunch" = "通常是权限刚授予但进程尚未重启，请重启 Jietu 后重试。";
+"error.recovery_no_displays" = "请确认显示器已正确连接。";
+"error.recovery_empty_region" = "请框选一块更大一点的区域再试。";
+"error.recovery_no_window" = "请把鼠标移到要截取的窗口上再试一次。";
+
+// MARK: - 通知
+
+"notify.saved" = "截图已保存";
+"notify.recording_complete" = "录屏完成";
+"notify.duration" = "时长 %02d:%02d";
+"notify.mic_unavailable" = "这次没能录到麦克风";
+"notify.mic_unavailable_body" = "成片里只有系统声音。请在「系统设置 › 隐私与安全性 › 麦克风」里允许 Jietu，或检查输入设备。";
+
+// MARK: - Alert
+
+"alert.ok" = "好";
+"alert.capture_failed" = "截图失败";
+"alert.recording_failed" = "录屏没能完成";
+"alert.open_system_settings" = "打开系统设置";
+"alert.hotkey_failed" = "「%2$@」的快捷键 %1$@ 注册失败";
+"alert.hotkey_conflict" = "该组合键可能已被系统、其它 App 或本 App 的其它动作占用，已恢复为原来的快捷键。";
+
+// MARK: - 其它
+
+"copied_color" = "已复制 %@";
+
+// MARK: - 滚动截图面板
+
+"scroll_panel.title" = "滚动长图";
+"scroll_panel.manual" = "手动";
+"scroll_panel.manual_help" = "点完自己把鼠标放进选区往下滚";
+"scroll_panel.automatic" = "自动";
+"scroll_panel.automatic_help" = "由 Jietu 自己滚动（需要辅助功能权限）";
+"scroll_panel.cancel" = "取消（Esc）";
+"scroll_panel.finish" = "完成";
+"scroll_panel.help" = "滚动长图：框好区域，选谁来滚";
+"scroll_panel.stitched" = "已拼接 %d px";
+"scroll_panel.ready" = "准备滚动…";
+"scroll_panel.waiting" = "等待滚动…";
+
+// MARK: - 滚动截图 Alert
+
+"scroll.need_accessibility" = "自动滚动需要「辅助功能」权限";
+"scroll.need_accessibility_body" = "系统已弹出授权申请；授权后重试即可自动滚动。\n也可以现在就改用手动滚动：把鼠标放进选区，自己往下滚。";
+"scroll.use_manual" = "改用手动滚动";
+"scroll.no_content" = "没有捕获到滚动内容";
+"scroll.no_content_body" = "选区里得是「整块能滚动的页面」，而且要真的滚起来：\n· 手动：点完「手动」把鼠标放进选区，自己往下滚；\n· 自动：Jietu 会自己发滚轮，但鼠标停在图表 / 下拉菜单这类会吃掉滚轮的控件上时会带不动。\n换个区域或改用手动再试一次。";
+
+// MARK: - GIF 导出
+
+"gif.exporting" = "正在导出 GIF…";
+"gif.exporting_progress" = "正在导出 GIF… %d%%";
+"gif.exported" = "GIF 已导出";
+"gif.export_failed" = "没能导出 GIF";
+
+// MARK: - 快捷键录制器
+
+"hotkey_recorder.placeholder" = "请按组合键…";
+"hotkey_recorder.clear" = "清除";
+"hotkey_recorder.not_set" = "未设置";
+"hotkey_recorder.need_modifier" = "至少需要一个修饰键（⌘ ⌥ ⌃ ⇧）";
+
+// MARK: - 设置页导航
+
+"settings.back" = "后退";
+"settings.forward" = "前进";
+
+// MARK: - 引导窗口标题
+
+"onboarding.window_title" = "欢迎使用 Jietu";
+
+// MARK: - 历史记录
+
+"history.title" = "截图历史";
+"history.done" = "完成";
+"history.no_records" = "暂无最近记录";
+"history.auto_display" = "截图与录屏都会自动展示在这里";
+"history.open_folder" = "打开保存文件夹";
+"history.clear_all" = "清除所有记录";
+"history.cannot_read" = "无法读取";
+"history.copied" = "已复制";
+"history.copy" = "复制";
+"history.pin" = "钉图";
+"history.reveal" = "访达";
+"history.edit" = "编辑";
+"history.copy_tooltip" = "复制图像到剪贴板";
+"history.pin_tooltip" = "钉在屏幕上";
+"history.reveal_tooltip" = "在访达中显示";
+"history.edit_tooltip" = "在标注编辑器中打开";
+"history.today" = "今天";
+"history.yesterday" = "昨天";
+"history.month_day" = "%d月%d日";
+"history.year_month_day" = "%d年%d月%d日";
+
+// MARK: - 拖拽授权面板
+
+"drag_card.hint" = "按住拖我";
+"drag_panel.instruction" = "把 %@ 拖进右边的列表";
+"drag_panel.close" = "关闭";
+"drag_panel.restart" = "重启 Jietu";
+"drag_panel.restart_help" = "授权后需要重启才会生效";
+
+// MARK: - 权限面板
+
+"perm_pane.screen_recording" = "屏幕录制";
+"perm_pane.accessibility" = "辅助功能";
+"perm_pane.drag_hint_sr" = "那一栏是接受拖入的：拖进去就等于把它加进列表并授权。";
+"perm_pane.drag_hint_ax" = "「辅助功能」那一栏接受拖入：拖进去就等于授权，用于自动滚动截图。";
+
+// MARK: - 箭头样式
+
+"arrow.tapered" = "渐宽箭头";
+"arrow.double_ended" = "双向箭头";
+"arrow.line" = "直箭头";
+"arrow.dot_tail" = "圆点箭头";
+
+// MARK: - 矩形角样式
+
+"corner.square" = "方角";
+"corner.rounded" = "圆角";
+
+// MARK: - 填充模式
+
+"fill.none" = "线框";
+"fill.opaque" = "填充";
+"fill.translucent" = "半透明填充";
+
+// MARK: - 文字占位
+
+"text.placeholder" = "文字";
+
+// MARK: - 文件名模板
+
+"filename.placeholder_hint" = "{date} 日期 · {time} 时间 · {counter} 递增序号";
+
+// MARK: - GIF 导出错误
+
+"gif_error.no_video_track" = "这个文件里没有视频轨，转不了 GIF。";
+"gif_error.reader" = "读视频失败：%@";
+"gif_error.no_frames" = "一帧都没解出来，转不了 GIF。";
+"gif_error.encode_failed" = "GIF 编码失败（磁盘写满或没有写入权限）。";
+"gif_error.cannot_add_track" = "解不了视频轨";
+"gif_error.cannot_read_file" = "读不了这个文件";
+"gif_error.decoding_interrupted" = "解码中断";
+
+// MARK: - 设置组件
+
+"settings.build_channel_help" = "开发渠道：%@";
+
+// MARK: - 滚动截图运行中提示
+
+"scroll_hint.auto_paused" = "已暂停：鼠标在选区外。移回选区继续滚动，或直接点「完成 / 取消」。";
+"scroll_hint.auto_scrolling" = "正在自动滚动…把鼠标移出选区即暂停；任意键停止，到底后自动完成。";
+"scroll_hint.manual" = "匀速滚动，停止约 1.5 秒自动完成。";
+
+// MARK: - 菜单栏 Tooltip
+
+"menu_bar.tooltip" = "Jietu 截图";
+
+// MARK: - CaptureOutput 错误
+
+"error.encoding_failed" = "截图编码失败";
+"error.empty_selection" = "选区为空";
+
+// MARK: - RecordingEngine 错误
+
+"rec_error.permission_denied" = "没有「屏幕录制」权限，录不了屏。";
+"rec_error.display_not_shareable" = "拿不到显示器 %u 的可共享内容。";
+"rec_error.empty_region" = "选区太小了，先拖一块像样的区域。";
+"rec_error.start_failed" = "开始录制失败：%@";
+"rec_error.stream" = "采集流中断：%@";
+"rec_error.writer" = "写视频失败：%@";
+"rec_error.no_frames" = "一帧都没录到，选区里可能没有画面变化。";
+
+// MARK: - MicrophoneRecorder 错误
+
+"mic_error.audio_unit_unavailable" = "指定的麦克风不可用";
+"mic_error.input_format_unavailable" = "麦克风输入格式不可用";
+"mic_error.converter_unavailable" = "音频格式转换器创建失败";
+
+// MARK: - RecordingWriter 错误
+
+"writer_error.video_track" = "视频轨加不进去";
+"writer_error.start_writing" = "startWriting 失败";

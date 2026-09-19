@@ -70,7 +70,13 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
             ]
         )
         guard writer.canAdd(videoInput) else {
-            throw RecordingEngine.Failure.startFailed("视频轨加不进去")
+            throw RecordingEngine.Failure.startFailed({
+                let r = CFBundleCopyLocalizedString(
+                    CFBundleGetMainBundle(), "writer_error.video_track" as CFString,
+                    "writer_error.video_track" as CFString, "Localizable" as CFString
+                )
+                return r as String? ?? "writer_error.video_track"
+            }())
         }
         writer.add(videoInput)
 
@@ -102,7 +108,13 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
 
         guard writer.startWriting() else {
             throw RecordingEngine.Failure.writer(
-                writer.error ?? RecordingEngine.Failure.startFailed("startWriting 失败")
+                writer.error ?? RecordingEngine.Failure.startFailed({
+                    let r = CFBundleCopyLocalizedString(
+                        CFBundleGetMainBundle(), "writer_error.start_writing" as CFString,
+                        "writer_error.start_writing" as CFString, "Localizable" as CFString
+                    )
+                    return r as String? ?? "writer_error.start_writing"
+                }())
             )
         }
     }

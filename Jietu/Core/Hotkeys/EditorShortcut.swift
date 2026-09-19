@@ -20,16 +20,16 @@ enum EditorShortcut: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .undo: return "撤销"
-        case .redo: return "重做"
+        case .undo: return L10n.editorUndo
+        case .redo: return L10n.editorRedo
         }
     }
 
     /// 设置页里的说明文案。
     var subtitle: String {
         switch self {
-        case .undo: return "标注编辑时回退上一步"
-        case .redo: return "重做被撤销的一步"
+        case .undo: return L10n.editorUndoDesc
+        case .redo: return L10n.editorRedoDesc
         }
     }
 

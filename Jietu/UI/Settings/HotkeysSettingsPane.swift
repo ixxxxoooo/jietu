@@ -17,13 +17,9 @@ struct HotkeysSettingsPane: View {
                     )
                 }
             } header: {
-                SettingsSectionHeader(title: "全局热键")
+                SettingsSectionHeader(title: L10n.hotkeysSectionGlobal)
             } footer: {
-                Text(
-                    "默认都不设置快捷键，点一下录制器再按组合键即可录入；"
-                        + "悬停录制器时右侧的 ✕ 可清除。\n"
-                        + "全局热键会抢占其它 App 的同名组合键，建议避开常用组合。"
-                )
+                Text(L10n.hotkeysSectionGlobalFooter)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
@@ -36,16 +32,12 @@ struct HotkeysSettingsPane: View {
                         hotkey: editorBinding(for: shortcut)
                     )
                 }
-                Button("恢复默认（⌘Z / ⇧⌘Z）") { settings.resetEditorShortcuts() }
+                Button(L10n.hotkeysResetDefault) { settings.resetEditorShortcuts() }
                     .disabled(settings.editorShortcuts == .standard)
             } header: {
-                SettingsSectionHeader(title: "标注编辑")
+                SettingsSectionHeader(title: L10n.hotkeysSectionEditor)
             } footer: {
-                Text(
-                    "只在标注编辑器里生效（原地编辑），不占用系统级组合键，"
-                        + "所以默认就配好：⌘Z 撤销、⇧⌘Z 重做，也可以改成别的。\n"
-                        + "这与上面那组全局热键是两回事——把 ⌘Z 设成全局会抢掉其它 App 的撤销。"
-                )
+                Text(L10n.hotkeysSectionEditorFooter)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }

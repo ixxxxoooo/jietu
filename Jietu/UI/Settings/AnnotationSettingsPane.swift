@@ -13,21 +13,21 @@ struct AnnotationSettingsPane: View {
                         Text(mode.title).tag(mode)
                     }
                 } label: {
-                    Text("截选后流程")
-                    Text("立即标注：截完直接在当前画面上标注。\n浮窗预览：截完先显示浮窗，点开后居中原地编辑。")
+                    Text(L10n.annotationEditorMode)
+                    Text(L10n.annotationEditorModeDesc)
                 }
             } header: {
-                SettingsSectionHeader(title: "标注")
+                SettingsSectionHeader(title: L10n.annotationSectionAnnotation)
             }
 
             Section {
-                SettingsRow(title: "默认样式", subtitle: styleSummary) {
-                    Button("恢复默认") { settings.annotationDefaults = .standard }
+                SettingsRow(title: L10n.annotationDefaultStyle, subtitle: styleSummary) {
+                    Button(L10n.captureResetDefault) { settings.annotationDefaults = .standard }
                 }
             } header: {
-                SettingsSectionHeader(title: "默认样式")
+                SettingsSectionHeader(title: L10n.annotationSectionDefaultStyle)
             } footer: {
-                Text("工具 / 颜色 / 参数沿用上次用法。")
+                Text(L10n.annotationDefaultStyleFooter)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -41,13 +41,15 @@ struct AnnotationSettingsPane: View {
         let isMarker = style.tool == .highlight
         let color = isMarker ? style.highlightColor : style.color
         let width = isMarker ? style.highlightLineWidth : style.lineWidth
-        let colorName = Self.colorNames[color] ?? "自定义色"
-        return "\(style.tool.title) · \(colorName) · 线宽 \(Int(width)) · 字号 \(Int(style.fontSize))"
+        let colorName = Self.colorNames[color] ?? L10n.colorCustom
+        return L10n.annotationStyleSummary(
+            style.tool.title, colorName, Int(width), Int(style.fontSize))
     }
 
     private static let colorNames: [RGBAColor: String] = [
-        .red: "红", .orange: "橙", .yellow: "黄", .green: "绿",
-        .blue: "蓝", .white: "白", .black: "黑",
+        .red: L10n.colorRed, .orange: L10n.colorOrange, .yellow: L10n.colorYellow,
+        .green: L10n.colorGreen,
+        .blue: L10n.colorBlue, .white: L10n.colorWhite, .black: L10n.colorBlack,
     ]
 }
 

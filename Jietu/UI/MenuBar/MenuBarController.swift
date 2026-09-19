@@ -61,14 +61,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     func refresh() {
         refreshHotkeyTitles()
         let granted = ScreenCapturePermission.isGranted
-        permissionItem.title = granted ? "屏幕录制权限：已授权" : "屏幕录制权限：未授权"
+        permissionItem.title = L10n.menuScreenRecordingPermission(granted: granted)
         permissionItem.image = NSImage(
             systemSymbolName: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
             accessibilityDescription: nil
         )
 
         let axGranted = AccessibilityPermission.isGranted
-        accessibilityPermissionItem.title = axGranted ? "辅助功能权限：已授权" : "辅助功能权限：未授权"
+        accessibilityPermissionItem.title = L10n.menuAccessibilityPermission(granted: axGranted)
         accessibilityPermissionItem.image = NSImage(
             systemSymbolName: axGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
             accessibilityDescription: nil
@@ -78,7 +78,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func configureStatusButton() {
         guard let button = statusItem.button else { return }
         button.image = Self.icon("camera.viewfinder", description: "Jietu")
-        button.toolTip = "Jietu 截图"
+        button.toolTip = L10n.menuBarTooltip
     }
 
     /// 图标按 16pt 取：SF Symbol 默认的文本字号渲染出来只有 12.5pt 墨迹，
@@ -96,68 +96,68 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func buildMenu() {
         // 截图四条 + 滚动长图留在顶层（都是最常用的），录制三条另起一组，
         // 中间用一条分隔线隔开——不收起子菜单，一步就能点到。
-        menu.addItem(hotkeyItem(.areaCapture, "区域截图", #selector(handleCaptureArea), "viewfinder"))
+        menu.addItem(hotkeyItem(.areaCapture, L10n.menuAreaCapture, #selector(handleCaptureArea), "viewfinder"))
         menu.addItem(
-            hotkeyItem(.windowCapture, "窗口截图", #selector(handleCaptureWindow), "macwindow")
+            hotkeyItem(.windowCapture, L10n.menuWindowCapture, #selector(handleCaptureWindow), "macwindow")
         )
         menu.addItem(
             hotkeyItem(
-                .fullScreenCapture, "全屏截图", #selector(handleCaptureFullScreen), "rectangle.fill"
+                .fullScreenCapture, L10n.menuFullScreenCapture, #selector(handleCaptureFullScreen), "rectangle.fill"
             )
         )
-        menu.addItem(timedCaptureItem())  // 自带子菜单，下一行补上快捷键显示
+        menu.addItem(timedCaptureItem())
         menu.addItem(
-            hotkeyItem(.scrollingCapture, "滚动长图…", #selector(handleCaptureScrolling), "scroll")
+            hotkeyItem(.scrollingCapture, L10n.menuScrollingCapture, #selector(handleCaptureScrolling), "scroll")
         )
-        menu.addItem(item("取色器", #selector(handlePickColor), symbol: "eyedropper.halffull"))
+        menu.addItem(item(L10n.menuColorPicker, #selector(handlePickColor), symbol: "eyedropper.halffull"))
 
         menu.addItem(.separator())
 
         menu.addItem(
-            hotkeyItem(.screenRecording, "区域录制", #selector(handleRecordRegion), "record.circle")
+            hotkeyItem(.screenRecording, L10n.menuRegionRecording, #selector(handleRecordRegion), "record.circle")
         )
         menu.addItem(
-            hotkeyItem(.windowRecording, "窗口录制", #selector(handleRecordWindow), "macwindow")
+            hotkeyItem(.windowRecording, L10n.menuWindowRecording, #selector(handleRecordWindow), "macwindow")
         )
         menu.addItem(
             hotkeyItem(
-                .fullScreenRecording, "全屏录制", #selector(handleRecordFullScreen), "rectangle.fill"
+                .fullScreenRecording, L10n.menuFullScreenRecording, #selector(handleRecordFullScreen), "rectangle.fill"
             )
         )
 
         menu.addItem(.separator())
 
         menu.addItem(recentCaptureItem())
-        menu.addItem(item("打开保存文件夹", #selector(handleOpenFolder), symbol: "folder"))
+        menu.addItem(item(L10n.menuOpenSaveFolder, #selector(handleOpenFolder), symbol: "folder"))
 
         menu.addItem(.separator())
 
         permissionItem.isEnabled = false
         menu.addItem(permissionItem)
         menu.addItem(
-            item("拖拽授权「屏幕录制」…", #selector(handleAuthorizeScreenRecording), symbol: "hand.draw")
+            item(L10n.menuDragAuthorizeScreenRecording, #selector(handleAuthorizeScreenRecording), symbol: "hand.draw")
         )
         accessibilityPermissionItem.isEnabled = false
         menu.addItem(accessibilityPermissionItem)
         menu.addItem(
-            item("拖拽授权「辅助功能」…", #selector(handleAuthorizeAccessibility), symbol: "hand.draw")
+            item(L10n.menuDragAuthorizeAccessibility, #selector(handleAuthorizeAccessibility), symbol: "hand.draw")
         )
-        menu.addItem(item("权限引导…", #selector(handleOpenOnboarding), symbol: nil))
+        menu.addItem(item(L10n.menuPermissionGuide, #selector(handleOpenOnboarding), symbol: nil))
 
         menu.addItem(.separator())
 
-        let preferences = item("偏好设置…", #selector(handleOpenSettings), symbol: "gearshape")
+        let preferences = item(L10n.menuPreferences, #selector(handleOpenSettings), symbol: "gearshape")
         preferences.keyEquivalent = ","
         menu.addItem(preferences)
 
         menu.addItem(.separator())
 
         // 屏幕录制的授权在授权时的那个进程里不生效，卡住时重启是最快的路。
-        menu.addItem(item("重启 Jietu", #selector(handleRelaunch), symbol: "arrow.clockwise"))
+        menu.addItem(item(L10n.menuRestartJietu, #selector(handleRelaunch), symbol: "arrow.clockwise"))
 
         menu.addItem(.separator())
 
-        let quit = item("退出 Jietu", #selector(handleQuit), symbol: nil)
+        let quit = item(L10n.menuQuitJietu, #selector(handleQuit), symbol: nil)
         quit.keyEquivalent = "q"
         menu.addItem(quit)
     }
@@ -210,7 +210,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func timedCaptureItem() -> NSMenuItem {
-        let parent = NSMenuItem(title: "定时截图", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: L10n.menuTimedCapture, action: nil, keyEquivalent: "")
         parent.image = NSImage(systemSymbolName: "timer", accessibilityDescription: nil)
         // 配了「定时截图」热键也显示出来（它触发的是默认那档 3 秒）。
         hotkeyItems.append((.timedCapture, parent))
@@ -218,7 +218,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let submenu = NSMenu()
         for seconds in [3.0, 5.0, 10.0] {
             let entry = NSMenuItem(
-                title: "\(Int(seconds)) 秒后",
+                title: L10n.menuSecondsLater(Int(seconds)),
                 action: #selector(handleCaptureTimed(_:)),
                 keyEquivalent: ""
             )
@@ -231,7 +231,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func recentCaptureItem() -> NSMenuItem {
-        let parent = NSMenuItem(title: "最近记录", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: L10n.menuRecentHistory, action: nil, keyEquivalent: "")
         parent.image = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: nil)
         parent.submenu = recentMenu
         return parent
@@ -272,7 +272,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // 窗口式阴影，跟菜单本身完全不是一回事（用户报的「显示异常」就是它）。
         // 一条原生的灰字菜单项就够了：和「暂无…」这种系统写法一致。
         guard !items.isEmpty else {
-            let empty = NSMenuItem(title: "暂无最近记录", action: nil, keyEquivalent: "")
+            let empty = NSMenuItem(title: L10n.menuNoRecentHistory, action: nil, keyEquivalent: "")
             empty.isEnabled = false
             recentMenu.addItem(empty)
             return

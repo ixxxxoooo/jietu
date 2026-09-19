@@ -20,28 +20,28 @@ enum HotkeyAction: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .areaCapture: return "区域截图"
-        case .windowCapture: return "窗口截图"
-        case .fullScreenCapture: return "全屏截图"
-        case .timedCapture: return "定时截图"
-        case .scrollingCapture: return "滚动长图"
-        case .screenRecording: return "区域录制"
-        case .windowRecording: return "窗口录制"
-        case .fullScreenRecording: return "全屏录制"
+        case .areaCapture: return L10n.actionAreaCapture
+        case .windowCapture: return L10n.actionWindowCapture
+        case .fullScreenCapture: return L10n.actionFullScreenCapture
+        case .timedCapture: return L10n.actionTimedCapture
+        case .scrollingCapture: return L10n.actionScrollingCapture
+        case .screenRecording: return L10n.actionRegionRecording
+        case .windowRecording: return L10n.actionWindowRecording
+        case .fullScreenRecording: return L10n.actionFullScreenRecording
         }
     }
 
     /// 设置页里的说明文案。
     var subtitle: String {
         switch self {
-        case .areaCapture: return "拖动选区，截取任意区域"
-        case .windowCapture: return "抓取鼠标下方的窗口"
-        case .fullScreenCapture: return "抓取鼠标所在的显示器"
-        case .timedCapture: return "延时 \(Int(HotkeyAction.timedCaptureDelay)) 秒后进入区域截图"
-        case .scrollingCapture: return "框选区域后滚动内容，自动拼成长图"
-        case .screenRecording: return "框选区域开始录屏，随时暂停 / 完成"
-        case .windowRecording: return "点哪个窗口就录哪个"
-        case .fullScreenRecording: return "录鼠标所在的整块屏"
+        case .areaCapture: return L10n.actionAreaCaptureDesc
+        case .windowCapture: return L10n.actionWindowCaptureDesc
+        case .fullScreenCapture: return L10n.actionFullScreenCaptureDesc
+        case .timedCapture: return L10n.actionTimedCaptureDesc(Int(HotkeyAction.timedCaptureDelay))
+        case .scrollingCapture: return L10n.actionScrollingCaptureDesc
+        case .screenRecording: return L10n.actionRegionRecordingDesc
+        case .windowRecording: return L10n.actionWindowRecordingDesc
+        case .fullScreenRecording: return L10n.actionFullScreenRecordingDesc
         }
     }
 

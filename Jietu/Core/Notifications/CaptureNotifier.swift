@@ -43,7 +43,7 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
 
         pendingAction = { NSWorkspace.shared.activateFileViewerSelecting([fileURL]) }
         let content = UNMutableNotificationContent()
-        content.title = "截图已保存"
+        content.title = L10n.notifySaved
         content.body = fileURL.lastPathComponent
         if let attachment = try? UNNotificationAttachment(
             identifier: "capture",
@@ -72,8 +72,8 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
 
         let total = max(0, Int(duration.rounded(.down)))
         let content = UNMutableNotificationContent()
-        content.title = "录屏完成"
-        content.body = String(format: "时长 %02d:%02d", total / 60, total % 60)
+        content.title = L10n.notifyRecordingComplete
+        content.body = L10n.notifyDuration(total / 60, total % 60)
         let request = UNNotificationRequest(
             identifier: UUID().uuidString,
             content: content,
@@ -117,8 +117,8 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         pendingAction = { NSWorkspace.shared.open(MicrophoneCapture.privacySettingsURL) }
 
         let content = UNMutableNotificationContent()
-        content.title = "这次没能录到麦克风"
-        content.body = "成片里只有系统声音。请在「系统设置 › 隐私与安全性 › 麦克风」里允许 Jietu，或检查输入设备。"
+        content.title = L10n.notifyMicUnavailable
+        content.body = L10n.notifyMicUnavailableBody
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         )

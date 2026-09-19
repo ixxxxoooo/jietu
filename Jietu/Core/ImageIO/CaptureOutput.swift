@@ -189,10 +189,17 @@ enum CaptureOutputError: LocalizedError {
     case encodingFailed
     case emptySelection
 
+    private static func _l(_ key: String) -> String {
+        let result = CFBundleCopyLocalizedString(
+            CFBundleGetMainBundle(), key as CFString, key as CFString, "Localizable" as CFString
+        )
+        return result as String? ?? key
+    }
+
     var errorDescription: String? {
         switch self {
-        case .encodingFailed: return "截图编码失败"
-        case .emptySelection: return "选区为空"
+        case .encodingFailed: return Self._l("error.encoding_failed")
+        case .emptySelection: return Self._l("error.empty_selection")
         }
     }
 }

@@ -9,23 +9,23 @@ struct CaptureSettingsPane: View {
         Form {
             Section {
                 Toggle(isOn: $settings.saveToDisk) {
-                    Text("自动保存到磁盘")
-                    Text("截图后自动写入下面选定的保存位置。")
+                    Text(L10n.captureSaveToDisk)
+                    Text(L10n.captureSaveToDiskDesc)
                 }
                 LabeledContent {
                     HStack(spacing: Theme.Spacing.md) {
-                        Button("选择…") { chooseDirectory() }
-                        Button("在访达中显示") {
+                        Button(L10n.captureChoose) { chooseDirectory() }
+                        Button(L10n.captureRevealInFinder) {
                             NSWorkspace.shared.activateFileViewerSelecting([settings.saveDirectory])
                         }
                     }
                 } label: {
-                    Text("保存位置")
+                    Text(L10n.captureSaveLocation)
                     Text(settings.saveDirectory.path)
                 }
                 .settingsEnabled(settings.saveToDisk)
             } header: {
-                SettingsSectionHeader(title: "输出")
+                SettingsSectionHeader(title: L10n.captureSectionOutput)
             }
 
             Section {
@@ -34,11 +34,11 @@ struct CaptureSettingsPane: View {
                         Text(format.title).tag(format)
                     }
                 } label: {
-                    Text("保存格式")
-                    Text("PNG 无损体积大，JPEG 可调质量。")
+                    Text(L10n.captureSaveFormat)
+                    Text(L10n.captureSaveFormatDesc)
                 }
 
-                SettingsRow(title: "JPEG 质量", subtitle: "只在 JPEG 格式下生效。") {
+                SettingsRow(title: L10n.captureJpegQuality, subtitle: L10n.captureJpegQualityDesc) {
                     Slider(value: $settings.jpegQuality, in: 0.3...1.0)
                         .frame(width: 180)
                     Text(String(format: "%.0f%%", settings.jpegQuality * 100))
@@ -48,34 +48,34 @@ struct CaptureSettingsPane: View {
                 }
                 .settingsEnabled(settings.saveFormat == .jpeg)
             } header: {
-                SettingsSectionHeader(title: "格式")
+                SettingsSectionHeader(title: L10n.captureSectionFormat)
             }
 
             Section {
                 SettingsRow(
-                    title: "文件名模板",
-                    subtitle: "\(FilenameTemplate.placeholderHint)\n示例：\(previewFilename)",
+                    title: L10n.captureFilenameTemplate,
+                    subtitle: L10n.captureFilenameHint(FilenameTemplate.placeholderHint, previewFilename),
                     subtitleLineLimit: 3
                 ) {
                     TextField(FilenameTemplate.defaultTemplate, text: $settings.filenameTemplate)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 220)
-                    Button("恢复默认") {
+                    Button(L10n.captureResetDefault) {
                         settings.filenameTemplate = FilenameTemplate.defaultTemplate
                     }
                 }
             } header: {
-                SettingsSectionHeader(title: "命名")
+                SettingsSectionHeader(title: L10n.captureSectionNaming)
             }
 
             Section {
                 Toggle(isOn: $settings.windowShadowEnabled) {
-                    Text("窗口截图阴影")
-                    Text("点选窗口截图时自动裁出圆角，并加上 macOS 风格的拟物投影。")
+                    Text(L10n.captureWindowShadow)
+                    Text(L10n.captureWindowShadowDesc)
                 }
                 SettingsRow(
-                    title: "阴影大小",
-                    subtitle: "数值越大投影越柔和、扩散越远，窗口看起来悬浮得越高。"
+                    title: L10n.captureShadowSize,
+                    subtitle: L10n.captureShadowSizeDesc
                 ) {
                     HStack(spacing: Theme.Spacing.md) {
                         Slider(
@@ -92,7 +92,7 @@ struct CaptureSettingsPane: View {
                 }
                 .settingsEnabled(settings.windowShadowEnabled)
             } header: {
-                SettingsSectionHeader(title: "窗口截图")
+                SettingsSectionHeader(title: L10n.captureSectionWindowCapture)
             }
         }
         .formStyle(.grouped)
@@ -115,7 +115,7 @@ struct CaptureSettingsPane: View {
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
         panel.directoryURL = settings.saveDirectory
-        panel.prompt = "选择"
+        panel.prompt = L10n.captureChoose
         if panel.runModal() == .OK, let url = panel.url {
             settings.saveDirectory = url
         }

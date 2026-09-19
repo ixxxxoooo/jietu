@@ -87,20 +87,24 @@ struct HistoryItem: Identifiable, Sendable {
         // 「今天 / 昨天」按传进来的 `now` 判，别用 `isDateInToday`：那个看的是**真实时钟**，
         // 于是这个「now 可注入」的纯函数其实测不出今天 / 昨天（单测在午夜前后会翻车）。
         if calendar.isDate(date, inSameDayAs: now) {
-            return "今天 " + time
+            return L10n.historyToday + " " + time
         }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
             calendar.isDate(date, inSameDayAs: yesterday)
         {
-            return "昨天 " + time
+            return L10n.historyYesterday + " " + time
         }
         if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
-            return "\(calendar.component(.month, from: date))月\(calendar.component(.day, from: date))日 "
-                + time
+            return L10n.historyMonthDay(
+                calendar.component(.month, from: date),
+                calendar.component(.day, from: date)
+            ) + " " + time
         }
-        return "\(calendar.component(.year, from: date))年"
-            + "\(calendar.component(.month, from: date))月"
-            + "\(calendar.component(.day, from: date))日 " + time
+        return L10n.historyYearMonthDay(
+            calendar.component(.year, from: date),
+            calendar.component(.month, from: date),
+            calendar.component(.day, from: date)
+        ) + " " + time
     }
 
     private static let timeOnlyFormatter: DateFormatter = {

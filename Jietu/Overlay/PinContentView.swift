@@ -366,7 +366,7 @@ final class PinContentView: NSView {
         let menu = NSMenu(title: "PinMenu")
 
         let copyItem = NSMenuItem(
-            title: "复制图像",
+            title: L10n.pinCopyImage,
             action: #selector(handleCopy),
             keyEquivalent: "c"
         )
@@ -374,7 +374,7 @@ final class PinContentView: NSView {
         menu.addItem(copyItem)
 
         let actualSizeItem = NSMenuItem(
-            title: "实际大小 (100%)",
+            title: L10n.pinActualSize,
             action: #selector(handleActualSize),
             keyEquivalent: "0"
         )
@@ -382,7 +382,7 @@ final class PinContentView: NSView {
         menu.addItem(actualSizeItem)
 
         let editItem = NSMenuItem(
-            title: "编辑 (⌘E)",
+            title: L10n.pinEdit,
             action: #selector(handleEdit),
             keyEquivalent: "e"
         )
@@ -391,7 +391,7 @@ final class PinContentView: NSView {
 
         menu.addItem(NSMenuItem.separator())
 
-        let liveTextTitle = isLiveTextOn ? "退出识别文本" : "识别文本"
+        let liveTextTitle = isLiveTextOn ? L10n.pinLiveTextOn : L10n.pinLiveTextOff
         let liveTextItem = NSMenuItem(
             title: liveTextTitle,
             action: #selector(toggleLiveText),
@@ -401,7 +401,7 @@ final class PinContentView: NSView {
         menu.addItem(liveTextItem)
 
         let translateItem = NSMenuItem(
-            title: "翻译…",
+            title: L10n.pinTranslate,
             action: #selector(handleTranslate),
             keyEquivalent: ""
         )
@@ -411,7 +411,7 @@ final class PinContentView: NSView {
         menu.addItem(NSMenuItem.separator())
 
         let closeItem = NSMenuItem(
-            title: "关闭",
+            title: L10n.pinClose,
             action: #selector(handleClose),
             keyEquivalent: "w"
         )
@@ -448,7 +448,7 @@ final class PinContentView: NSView {
         let button = GlassControlButton(
             symbol: "square.and.pencil",
             diameter: 28,
-            tooltip: "编辑 (⌘E)"
+            tooltip: L10n.pinEditTooltip
         )
         button.onClick = { [weak self] in
             self?.onRequestEdit?()
@@ -462,7 +462,7 @@ final class PinContentView: NSView {
         let button = GlassControlButton(
             symbol: "xmark",
             diameter: 28,
-            tooltip: "关闭 (⌘W)"
+            tooltip: L10n.pinCloseTooltip
         )
         button.onClick = { [weak self] in
             self?.onRequestClose?()
@@ -480,7 +480,7 @@ final class PinContentView: NSView {
         let button = GlassControlButton(
             symbol: "text.viewfinder",
             diameter: 28,
-            tooltip: "识别文本"
+            tooltip: L10n.pinLiveTextTooltip
         )
         button.onClick = { [weak self] in
             self?.toggleLiveText()
@@ -494,9 +494,9 @@ final class PinContentView: NSView {
     private func configureTranslateButton() {
         let button = GlassControlButton(
             symbol: "translate",
-            labelText: "翻译",
+            labelText: L10n.pinTranslate,
             diameter: 28,
-            tooltip: "翻译（用 macOS 自己的翻译）"
+            tooltip: L10n.pinTranslateTooltip
         )
         button.onClick = { [weak self] in
             self?.handleTranslate()
@@ -576,7 +576,7 @@ final class PinContentView: NSView {
         // 右上角「关闭」必须一直在（用户明确要求 OCR 时也要能关掉钉图），
         // 右下角「识别文本」留着点回普通态。
         setFloatingButtonsVisible(true)
-        liveTextButton?.toolTip = "退出识别文本"
+        liveTextButton?.toolTip = L10n.pinExitLiveText
         liveTextButton?.isActive = true
         // macOS 那颗 Live Text 按钮亮着就是蓝底实心。
         liveTextButton?.prominence = .accent
@@ -657,7 +657,7 @@ final class PinContentView: NSView {
     private func setRecognizing(_ recognizing: Bool) {
         isTranslating = recognizing
         translateButton?.alphaValue = recognizing ? 0.55 : 1
-        translateButton?.toolTip = recognizing ? "正在识别图上的文字…" : "翻译（用 macOS 自己的翻译）"
+        translateButton?.toolTip = recognizing ? L10n.pinRecognizing : L10n.pinTranslateTooltip
     }
 
     private func presentSystemTranslation(_ text: String) {
@@ -676,9 +676,9 @@ final class PinContentView: NSView {
 
     private func presentNothingToTranslate() {
         let alert = NSAlert()
-        alert.messageText = "没识别到文字"
-        alert.informativeText = "这张图里没有可以翻译的文字。"
-        alert.addButton(withTitle: "好")
+        alert.messageText = L10n.pinNoTextFound
+        alert.informativeText = L10n.pinNoTextFoundDetail
+        alert.addButton(withTitle: L10n.alertOK)
         alert.runModal()
     }
 

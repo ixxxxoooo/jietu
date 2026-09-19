@@ -168,8 +168,7 @@ extension OverlayCanvasView {
     func updateHint() {
         guard !isScrollCaptureChrome else { return }
         let size = snapshot.pixelSize
-        var text = String(
-            format: "显示器 %d/%d  ·  %.0f×%.0f px  ·  缩放 %.2fx",
+        var text = L10n.overlayDisplayInfo(
             displayIndex,
             displayCount,
             size.width,
@@ -177,19 +176,19 @@ extension OverlayCanvasView {
             snapshot.effectiveScale
         )
         if isRecordMode && isWindowOnlyMode {
-            text += "  ·  点击要录的窗口  ·  ␣ 切换自由框选  ·  Esc 取消"
+            text += L10n.overlayClickWindowRecord
         } else if isRecordMode {
-            text += "  ·  拖拽框选要录的区域（或点一下某个窗口）  ·  Esc 取消"
+            text += L10n.overlayDragAreaRecord
         } else if isRegionPickMode {
             text += selection == nil
-                ? "  ·  拖拽框选（鼠标停住出「手动 / 自动」）  ·  Esc 取消"
-                : "  ·  鼠标停住出「手动 / 自动」，选区还能接着调  ·  Esc 取消"
+                ? L10n.overlayScrollDragHint
+                : L10n.overlayScrollAdjustHint
         } else if isWindowOnlyMode {
-            text += "  ·  点击窗口截图  ·  ␣ 切换自由框选  ·  Esc 取消"
+            text += L10n.overlayClickWindowCapture
         } else {
             text += selection == nil
-                ? "  ·  拖拽框选 / 点窗口截整窗  ·  ␣ 切换窗口模式  ·  Esc 取消"
-                : "  ·  ↵ 完成, ⇥ 上次选区, ⇧ 正方形  ·  Esc 取消"
+                ? L10n.overlayDragCapture
+                : L10n.overlaySelectionConfirm
         }
         let width = min(bounds.width - 40, max(420, CGFloat(text.count) * 7.4))
         hintLayer.string = text

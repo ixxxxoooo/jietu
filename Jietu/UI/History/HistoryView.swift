@@ -13,11 +13,11 @@ struct HistoryView: View {
                 Image(systemName: "clock.arrow.circlepath")
                     .font(Theme.Typography.bar)
                     .foregroundStyle(Theme.Colors.textSecondary)
-                Text("截图历史")
+                Text(L10n.historyTitle)
                     .font(Theme.Typography.sectionHeader)
                     .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer(minLength: Theme.Spacing.md)
-                GlassButton(title: "完成", role: .cancel, action: onClose)
+                GlassButton(title: L10n.historyDone, role: .cancel, action: onClose)
             }
             .padding(.leading, Theme.Spacing.xl)
             .padding(.trailing, Theme.Spacing.md)

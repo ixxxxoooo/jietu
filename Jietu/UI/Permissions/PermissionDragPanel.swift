@@ -234,13 +234,13 @@ struct PermissionDragView: View {
             Image(systemName: "arrow.up.forward.app")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.Colors.accent)
-            Text("把 \(appName) 拖进右边的列表")
+            Text(L10n.dragPanelInstruction(appName))
                 .font(Theme.Typography.sectionHeader)
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .lineLimit(1)
             Spacer(minLength: Theme.Spacing.md)
             BarIconButton(
-                title: "关闭",
+                title: L10n.dragPanelClose,
                 systemImage: "xmark",
                 tint: Theme.Colors.textTertiary,
                 action: onClose
@@ -256,12 +256,12 @@ struct PermissionDragView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             GlassButton(
-                title: "重启 Jietu",
+                title: L10n.dragPanelRestart,
                 systemImage: "arrow.clockwise",
                 role: .prominent,
                 action: { ScreenCapturePermission.relaunchApp() }
             )
-            .help("授权后需要重启才会生效")
+            .help(L10n.dragPanelRestartHelp)
         }
     }
 }

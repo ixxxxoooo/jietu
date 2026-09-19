@@ -130,19 +130,19 @@ struct InlineMainToolbar: View {
         separator
 
         BarIconButton(
-            title: "撤销",
+            title: L10n.editorUndo,
             systemImage: "arrow.uturn.backward",
             isSelected: false,
-            help: Self.shortcutHelp("撤销", model.editorShortcuts.undo),
+            help: Self.shortcutHelp(L10n.editorUndo, model.editorShortcuts.undo),
             action: { model.onUndo?() }
         )
         .disabled(!model.canUndo)
         .opacity(model.canUndo ? 1 : 0.4)
 
         BarIconButton(
-            title: "重做",
+            title: L10n.editorRedo,
             systemImage: "arrow.uturn.forward",
-            help: Self.shortcutHelp("重做", model.editorShortcuts.redo),
+            help: Self.shortcutHelp(L10n.editorRedo, model.editorShortcuts.redo),
             action: { model.onRedo?() }
         )
         .disabled(!model.canRedo)
@@ -151,7 +151,7 @@ struct InlineMainToolbar: View {
 
     @ViewBuilder private var actions: some View {
         BarIconButton(
-            title: "识别文字",
+            title: L10n.toolbarOCR,
             systemImage: "text.viewfinder",
             tint: model.isLiveTextActive
                 ? Theme.Colors.brand : Theme.Colors.toolbarIcon,
@@ -168,7 +168,7 @@ struct InlineMainToolbar: View {
 
         if !model.isRestoredImage {
             BarIconButton(
-                title: "滚动截图",
+                title: L10n.toolbarScrollCapture,
                 systemImage: "scroll",
                 isSelected: model.showScroll
             ) {
@@ -179,31 +179,31 @@ struct InlineMainToolbar: View {
             }
 
             // 录屏：拿当前这块选区去录（点了收掉遮罩、上红框与「准备录制」控制条）。
-            BarIconButton(title: "录屏", systemImage: "record.circle") {
+            BarIconButton(title: L10n.toolbarRecord, systemImage: "record.circle") {
                 model.onRecord?()
             }
         }
 
         BarIconButton(
-            title: "保存",
+            title: L10n.toolbarSave,
             systemImage: "square.and.arrow.down",
-            help: "保存 (⌘S)",
+            help: L10n.toolbarSaveHelp,
             key: "s"
         ) {
             model.onSave?()
         }
-        BarIconButton(title: "钉图", systemImage: "pin") {
+        BarIconButton(title: L10n.toolbarPin, systemImage: "pin") {
             model.onPin?()
         }
         BarIconButton(
-            title: "取消",
+            title: L10n.toolbarCancel,
             systemImage: "xmark",
             tint: Theme.Colors.destructive
         ) {
             model.onCancel?()
         }
         BarIconButton(
-            title: "确认",
+            title: L10n.toolbarConfirm,
             systemImage: "checkmark",
             tint: Theme.Colors.success
         ) {
@@ -362,11 +362,11 @@ struct InlineOptionsToolbar: View {
             vSeparator
             ColorSwatchesView(selectedColor: $model.color, isVertical: model.isVerticalLayout)
             vSeparator
-            HUDCheckboxButton(title: "描边", isSelected: model.textHasStroke) {
+            HUDCheckboxButton(title: L10n.styleStroke, isSelected: model.textHasStroke) {
                 model.textHasStroke.toggle()
                 model.onTextStyleChange?(.stroke)
             }
-            HUDCheckboxButton(title: "标注", isSelected: model.textHasCallout) {
+            HUDCheckboxButton(title: L10n.styleCallout, isSelected: model.textHasCallout) {
                 model.textHasCallout.toggle()
                 model.onTextStyleChange?(.callout)
             }
@@ -390,7 +390,7 @@ struct InlineOptionsToolbar: View {
             step: 1,
             isVertical: model.isVerticalLayout
         )
-        .help(model.tool == .pixelate ? "马赛克颗粒度" : "模糊半径")
+        .help(model.tool == .pixelate ? L10n.styleMosaicGranularity : L10n.styleBlurRadius)
     }
 
     /// 橡皮：同上，面板里只留一条滑块。
@@ -401,7 +401,7 @@ struct InlineOptionsToolbar: View {
             step: 2,
             isVertical: model.isVerticalLayout
         )
-        .help("橡皮大小")
+        .help(L10n.styleEraserSize)
     }
 
     private var scrollOptions: some View {
@@ -409,20 +409,20 @@ struct InlineOptionsToolbar: View {
             Image(systemName: "scroll")
                 .font(Theme.Typography.bar)
                 .foregroundStyle(Theme.Colors.toolbarIcon)
-            Text("谁来滚")
+            Text(L10n.scrollWhoScrolls)
                 .font(Theme.Typography.bar)
                 .foregroundStyle(Theme.Colors.textSecondary)
             scrollChoice(
-                "手动滚动",
+                L10n.scrollManual,
                 systemImage: "hand.draw",
-                help: "手动滚动：点完自己用鼠标或滚轮往下滚"
+                help: L10n.scrollManualHelp
             ) {
                 model.onScrollCapture?(.manual)
             }
             scrollChoice(
-                "自动滚动",
+                L10n.scrollAutomatic,
                 systemImage: "wand.and.rays",
-                help: "自动滚动：由 Jietu 自动滚轮（需辅助功能权限）"
+                help: L10n.scrollAutomaticHelp
             ) {
                 model.onScrollCapture?(.automatic)
             }
@@ -431,7 +431,7 @@ struct InlineOptionsToolbar: View {
 
     private var cropOptions: some View {
         optionGroup {
-            Text("拖拽框选要保留的区域（拖控制点微调）")
+            Text(L10n.cropDragHint)
                 .font(Theme.Typography.bar)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 // 竖排时二级菜单是窄窄一条，提示文字折行成一小块。
@@ -440,13 +440,13 @@ struct InlineOptionsToolbar: View {
 
             vSeparator
 
-            BarButton(chrome: .rounded, help: "完成裁剪 (↵ / 双击)") {
+            BarButton(chrome: .rounded, help: L10n.cropFinishHelp) {
                 model.onApplyCrop?()
             } label: {
                 HStack(spacing: Theme.Spacing.xs) {
                     Image(systemName: "checkmark")
                         .font(Theme.Typography.chip)
-                    Text("完成裁剪")
+                    Text(L10n.cropFinish)
                         .font(Theme.Typography.bar)
                 }
                 .foregroundStyle(Theme.Colors.success)
@@ -454,13 +454,13 @@ struct InlineOptionsToolbar: View {
                 .frame(height: Theme.Size.barButtonHeight)
             }
 
-            BarButton(chrome: .rounded, help: "取消裁剪 (Esc)") {
+            BarButton(chrome: .rounded, help: L10n.cropCancelHelp) {
                 model.onCancelCrop?()
             } label: {
                 HStack(spacing: Theme.Spacing.xs) {
                     Image(systemName: "xmark")
                         .font(Theme.Typography.chip)
-                    Text("取消")
+                    Text(L10n.toolbarCancel)
                         .font(Theme.Typography.bar)
                 }
                 .foregroundStyle(Theme.Colors.destructive)

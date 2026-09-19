@@ -131,7 +131,7 @@ struct ScrollingPreviewView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else {
-                Text("等待滚动…")
+                Text(L10n.scrollPanelWaiting)
                     .font(Theme.Typography.rowSubtitle)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

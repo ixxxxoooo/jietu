@@ -197,16 +197,16 @@ struct ScrollingCapturePanelView: View {
             Image(systemName: "scroll")
                 .font(Theme.Typography.bar)
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .help("滚动长图：框好区域，选谁来滚")
+                .help(L10n.scrollPanelHelp)
             Spacer(minLength: Theme.Spacing.sm)
-            GlassButton(title: "手动", systemImage: "hand.draw", action: onStartManual)
-                .help("点完自己把鼠标放进选区往下滚")
+            GlassButton(title: L10n.scrollPanelManual, systemImage: "hand.draw", action: onStartManual)
+                .help(L10n.scrollPanelManualHelp)
             GlassButton(
-                title: "自动", systemImage: "wand.and.rays", role: .prominent, action: onStartAuto
+                title: L10n.scrollPanelAutomatic, systemImage: "wand.and.rays", role: .prominent, action: onStartAuto
             )
-            .help("由 Jietu 自己滚动（需要辅助功能权限）")
+            .help(L10n.scrollPanelAutomaticHelp)
             GlassCircleButton(
-                title: "取消（Esc）",
+                title: L10n.scrollPanelCancel,
                 systemImage: "xmark",
                 diameter: Theme.Size.scrollingModeBarClose,
                 tint: Theme.Colors.textSecondary,
@@ -229,7 +229,7 @@ struct ScrollingCapturePanelView: View {
                 Image(systemName: "scroll")
                     .font(Theme.Typography.bar)
                     .foregroundStyle(Theme.Colors.textSecondary)
-                Text("滚动长图")
+                Text(L10n.scrollPanelTitle)
                     .font(Theme.Typography.bar)
                     .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer(minLength: Theme.Spacing.md)
@@ -244,9 +244,9 @@ struct ScrollingCapturePanelView: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: Theme.Spacing.md) {
                 Spacer(minLength: 0)
-                GlassButton(title: "取消", role: .cancel, action: onCancel)
+                GlassButton(title: L10n.toolbarCancel, role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                GlassButton(title: "完成", role: .prominent, action: onFinish)
+                GlassButton(title: L10n.scrollPanelFinish, role: .prominent, action: onFinish)
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -260,7 +260,7 @@ struct ScrollingCapturePanelView: View {
     }
 
     private var trailingText: String {
-        height > 0 ? "已拼接 \(height) px" : "准备滚动…"
+        height > 0 ? L10n.scrollPanelStitched(height) : L10n.scrollPanelReady
     }
 
     private func hintText(_ mode: ScrollingCaptureSession.Mode) -> String {
@@ -269,10 +269,10 @@ struct ScrollingCapturePanelView: View {
             // 自动滚动的滚轮是发给「光标下面的窗口」的：光标在选区里就滚，
             // 移出去就暂停（也把输入让开），这样用户随时能过来点完成 / 取消。
             return isPaused
-                ? "已暂停：鼠标在选区外。移回选区继续滚动，或直接点「完成 / 取消」。"
-                : "正在自动滚动…把鼠标移出选区即暂停；任意键停止，到底后自动完成。"
+                ? L10n.scrollHintAutoPaused
+                : L10n.scrollHintAutoScrolling
         case .manual:
-            return "匀速滚动，停止约 1.5 秒自动完成。"
+            return L10n.scrollHintManual
         }
     }
 }

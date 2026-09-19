@@ -1,0 +1,567 @@
+/* English localization for Jietu */
+
+// MARK: - Menu Bar
+
+"menu.area_capture" = "Area Capture";
+"menu.window_capture" = "Window Capture";
+"menu.fullscreen_capture" = "Full Screen Capture";
+"menu.timed_capture" = "Timed Capture";
+"menu.scrolling_capture" = "Scrolling Capture…";
+"menu.color_picker" = "Color Picker";
+"menu.region_recording" = "Region Recording";
+"menu.window_recording" = "Window Recording";
+"menu.fullscreen_recording" = "Full Screen Recording";
+"menu.recent_history" = "Recent History";
+"menu.open_save_folder" = "Open Save Folder";
+"menu.no_recent_history" = "No Recent History";
+"menu.preferences" = "Preferences…";
+"menu.restart_jietu" = "Restart Jietu";
+"menu.quit_jietu" = "Quit Jietu";
+"menu.permission_guide" = "Permission Guide…";
+"menu.drag_authorize_screen_recording" = "Drag to Authorize Screen Recording…";
+"menu.drag_authorize_accessibility" = "Drag to Authorize Accessibility…";
+"menu.seconds_later" = "%d seconds later";
+"menu.screen_recording_granted" = "Screen Recording: Authorized";
+"menu.screen_recording_not_granted" = "Screen Recording: Not Authorized";
+"menu.accessibility_granted" = "Accessibility: Authorized";
+"menu.accessibility_not_granted" = "Accessibility: Not Authorized";
+
+// MARK: - Settings Sections
+
+"settings.general" = "General";
+"settings.capture" = "Capture";
+"settings.hotkeys" = "Hotkeys";
+"settings.quick_access" = "Quick Access";
+"settings.recording" = "Recording";
+"settings.annotation" = "Annotation";
+"settings.permission" = "Permissions";
+"settings.about" = "About";
+
+// MARK: - General Settings
+
+"general.launch_at_login" = "Launch at Login";
+"general.launch_at_login_desc" = "Auto-start Jietu after login, stay in menu bar.";
+"general.play_shutter_sound" = "Play Shutter Sound";
+"general.play_shutter_sound_desc" = "Play system shutter sound after capture.";
+"general.copy_to_clipboard" = "Auto Copy to Clipboard";
+"general.copy_to_clipboard_desc" = "Copy to clipboard immediately after capture.";
+"general.show_notification" = "Show Notification After Save";
+"general.show_notification_desc" = "Show system notification after saving, click to locate file.";
+"general.section_general" = "General";
+"general.default_behavior_footer" = "These are the default behaviors for every capture.";
+"general.theme" = "Theme";
+"general.theme_desc" = "Follow system, or lock Jietu to light / dark mode.";
+"general.section_appearance" = "Appearance";
+
+// MARK: - Appearance
+
+"appearance.system" = "System";
+"appearance.light" = "Light";
+"appearance.dark" = "Dark";
+
+// MARK: - Capture Settings
+
+"capture.save_to_disk" = "Auto Save to Disk";
+"capture.save_to_disk_desc" = "Automatically save captures to the selected location below.";
+"capture.save_location" = "Save Location";
+"capture.choose" = "Choose…";
+"capture.reveal_in_finder" = "Reveal in Finder";
+"capture.section_output" = "Output";
+"capture.save_format" = "Save Format";
+"capture.save_format_desc" = "PNG is lossless but larger; JPEG quality is adjustable.";
+"capture.jpeg_quality" = "JPEG Quality";
+"capture.jpeg_quality_desc" = "Only applies when JPEG format is selected.";
+"capture.section_format" = "Format";
+"capture.filename_template" = "Filename Template";
+"capture.filename_hint" = "%@\nExample: %@";
+"capture.reset_default" = "Reset Default";
+"capture.section_naming" = "Naming";
+"capture.window_shadow" = "Window Capture Shadow";
+"capture.window_shadow_desc" = "Auto-crop rounded corners and add macOS-style drop shadow when capturing windows.";
+"capture.shadow_size" = "Shadow Size";
+"capture.shadow_size_desc" = "Larger values create softer, more spread-out shadows, making the window appear more elevated.";
+"capture.section_window_capture" = "Window Capture";
+
+// MARK: - Hotkeys Settings
+
+"hotkeys.section_global" = "Global Hotkeys";
+"hotkeys.section_global_footer" = "No hotkeys are set by default. Click the recorder and press a key combination to bind; hover over the recorder and click ✕ to clear.\nGlobal hotkeys override the same key combination in other apps. Avoid commonly used shortcuts.";
+"hotkeys.section_editor" = "Annotation Editing";
+"hotkeys.section_editor_footer" = "Only active inside the annotation editor (inline editing), does not take up system-level key combinations. Default: ⌘Z undo, ⇧⌘Z redo, can also be changed.\nThis is separate from the global hotkeys above — setting ⌘Z as global would override undo in all other apps.";
+"hotkeys.reset_default" = "Reset Default (⌘Z / ⇧⌘Z)";
+
+// MARK: - Hotkey Actions
+
+"action.area_capture" = "Area Capture";
+"action.window_capture" = "Window Capture";
+"action.fullscreen_capture" = "Full Screen Capture";
+"action.timed_capture" = "Timed Capture";
+"action.scrolling_capture" = "Scrolling Capture";
+"action.region_recording" = "Region Recording";
+"action.window_recording" = "Window Recording";
+"action.fullscreen_recording" = "Full Screen Recording";
+
+"action.area_capture_desc" = "Drag to select any area";
+"action.window_capture_desc" = "Capture the window under cursor";
+"action.fullscreen_capture_desc" = "Capture the display under cursor";
+"action.timed_capture_desc" = "Delay %d seconds then enter area capture";
+"action.scrolling_capture_desc" = "Select area, scroll content, auto-stitch into long image";
+"action.region_recording_desc" = "Select area to start recording, pause/stop anytime";
+"action.window_recording_desc" = "Click any window to record it";
+"action.fullscreen_recording_desc" = "Record the entire display under cursor";
+
+// MARK: - Editor Shortcuts
+
+"editor.undo" = "Undo";
+"editor.redo" = "Redo";
+"editor.undo_desc" = "Undo the last step in annotation";
+"editor.redo_desc" = "Redo the undone step";
+
+// MARK: - Quick Access Settings
+
+"quick_access.dock_position" = "Dock Position";
+"quick_access.dock_position_desc" = "Which corner of the screen the floating window appears after capture.";
+"quick_access.auto_close" = "Auto Close";
+"quick_access.auto_close_desc" = "How long before the floating window auto-dismisses. \"Never\" requires manual close.";
+"quick_access.section_title" = "Quick Access";
+"quick_access.bottom_right" = "Bottom Right";
+"quick_access.bottom_left" = "Bottom Left";
+"quick_access.seconds" = "%d sec";
+"quick_access.never" = "Never";
+
+// MARK: - Recording Settings
+
+"recording.system_audio" = "Record System Audio";
+"recording.system_audio_desc" = "Include audio from videos/music playing on screen.";
+"recording.microphone" = "Record Microphone";
+"recording.microphone_desc" = "Record narration; mixed into one audio track with system audio. First enable will request microphone permission.";
+"recording.frame_rate" = "Frame Rate";
+"recording.frame_rate_desc" = "60 is smoother but produces larger files.";
+"recording.section_recording" = "Recording";
+"recording.save_location" = "Save Location";
+"recording.section_output" = "Output";
+"recording.output_footer" = "Recordings are saved as mp4 (H.264), sharing the same location and naming template as captures.";
+
+// MARK: - Annotation Settings
+
+"annotation.editor_mode" = "Post-Capture Flow";
+"annotation.editor_mode_desc" = "Inline Annotate: annotate directly on the capture.\nQuick Access: show floating preview first, click to edit.";
+"annotation.section_annotation" = "Annotation";
+"annotation.default_style" = "Default Style";
+"annotation.section_default_style" = "Default Style";
+"annotation.default_style_footer" = "Tool / color / parameters carry over from last use.";
+"annotation.editor_mode_inline" = "Inline Annotate";
+"annotation.editor_mode_quick_access" = "Quick Access";
+"annotation.style_summary" = "%@ · %@ · Width %d · Font %d";
+
+// MARK: - Annotation Tools
+
+"tool.select" = "Select";
+"tool.rectangle" = "Rectangle";
+"tool.ellipse" = "Ellipse";
+"tool.arrow" = "Arrow";
+"tool.line" = "Line";
+"tool.pen" = "Pen";
+"tool.highlight" = "Highlighter";
+"tool.spotlight" = "Spotlight";
+"tool.pixelate" = "Pixelate";
+"tool.blur" = "Blur";
+"tool.text" = "Text";
+"tool.counter" = "Counter";
+"tool.eraser" = "Eraser";
+"tool.crop" = "Crop";
+
+// MARK: - Annotation Styles
+
+"style.stroke" = "Stroke";
+"style.callout" = "Callout";
+"style.mosaic_granularity" = "Mosaic Granularity";
+"style.blur_radius" = "Blur Radius";
+"style.eraser_size" = "Eraser Size";
+
+// MARK: - Color Names
+
+"color.red" = "Red";
+"color.orange" = "Orange";
+"color.yellow" = "Yellow";
+"color.green" = "Green";
+"color.blue" = "Blue";
+"color.white" = "White";
+"color.black" = "Black";
+"color.custom" = "Custom";
+
+// MARK: - Toolbar
+
+"toolbar.save" = "Save";
+"toolbar.save_help" = "Save (⌘S)";
+"toolbar.pin" = "Pin";
+"toolbar.cancel" = "Cancel";
+"toolbar.confirm" = "Confirm";
+"toolbar.ocr" = "Recognize Text";
+"toolbar.scroll_capture" = "Scroll Capture";
+"toolbar.record" = "Record";
+
+// MARK: - Scroll Capture Options
+
+"scroll.who_scrolls" = "Scroll Mode";
+"scroll.manual" = "Manual Scroll";
+"scroll.automatic" = "Auto Scroll";
+"scroll.manual_help" = "Manual Scroll: scroll by yourself with mouse or trackpad";
+"scroll.automatic_help" = "Auto Scroll: Jietu scrolls automatically (requires Accessibility permission)";
+
+// MARK: - Crop
+
+"crop.drag_hint" = "Drag to select the area to keep (drag control points to fine-tune)";
+"crop.finish" = "Finish Crop";
+"crop.finish_help" = "Finish Crop (↵ / double-click)";
+"crop.cancel_help" = "Cancel Crop (Esc)";
+
+// MARK: - Permission Settings
+
+"perm.screen_recording" = "Screen Recording";
+"perm.screen_recording_granted" = "Jietu can freeze the screen and capture normally.";
+"perm.screen_recording_needs_relaunch" = "Already checked, will take effect after restart.";
+"perm.screen_recording_denied" = "Without it, captures will return blank images.";
+"perm.recheck" = "Recheck";
+"perm.recheck_help" = "Re-read the system authorization status now";
+"perm.grant_target" = "Grant Target";
+"perm.grant_target_desc" = "Check it in \"System Settings › Privacy & Security › Screen Recording\"; if not listed, click \"+\" at the bottom left to manually add this app.";
+"perm.grant_action" = "Grant Action";
+"perm.drag_authorize" = "Drag to Authorize…";
+"perm.drag_authorize_help" = "Open System Settings and show the drag panel; drag the app card into the list";
+"perm.needs_relaunch" = "Restart Needed";
+"perm.needs_relaunch_desc" = "macOS limitation: authorization only takes effect in processes launched after granting.";
+"perm.restart_jietu" = "Restart Jietu";
+"perm.accessibility" = "Accessibility";
+"perm.accessibility_granted" = "Scrolling Capture (Auto Scroll) can now synthesize scroll events.";
+"perm.accessibility_denied" = "Scrolling Capture (Auto Scroll) needs it to synthesize scroll events; manual scroll works without it.";
+"perm.section_screen_recording" = "Screen Recording";
+"perm.section_accessibility" = "Accessibility";
+"perm.accessibility_footer" = "Authorization status is rechecked every second and updates immediately when switching back from System Settings; Accessibility authorization takes effect instantly without restart.\nSelf-signed / Debug builds may not appear automatically in the System Settings list (but authorization still works). Use \"Drag to Authorize…\" to drag the app into the list.";
+"perm.granted" = "Authorized";
+"perm.not_granted" = "Not Authorized";
+
+// MARK: - About
+
+"about.version" = "Version %@ (%@)";
+"about.build_channel" = "Build Channel";
+"about.section_info" = "Info";
+"about.section_links" = "Links";
+"about.tagline" = "Local screenshot tool: capture, annotate, copy, save — all on your Mac.";
+"about.copyright" = "© 2026 Jietu · All captures and annotations stay on your Mac";
+"about.issues" = "Issues";
+
+// MARK: - Onboarding
+
+"onboarding.welcome" = "Welcome to %@";
+"onboarding.screen_recording_perm" = "Screen Recording Permission";
+"onboarding.set_hotkey" = "Set a Hotkey";
+"onboarding.all_ready" = "All Set";
+"onboarding.welcome_subtitle" = "Capture, copy, annotate, save — everything stays on your Mac.";
+"onboarding.perm_granted_subtitle" = "Permission granted, you can capture normally.";
+"onboarding.perm_needs_relaunch_subtitle" = "Already checked, will take effect after restart.";
+"onboarding.perm_denied_subtitle" = "Without it, captures will return blank images.";
+"onboarding.hotkey_subtitle" = "You can also capture from the menu bar without hotkeys.";
+"onboarding.ready_with_hotkey" = "Press %@ to start area capture anytime.";
+"onboarding.ready_from_menu" = "You can start capturing from the menu bar anytime.";
+"onboarding.copy_to_clipboard" = "Auto Copy to Clipboard";
+"onboarding.copy_to_clipboard_desc" = "Paste directly in other apps after capture.";
+"onboarding.launch_at_login" = "Launch at Login";
+"onboarding.launch_at_login_desc" = "Stay in the menu bar after boot.";
+"onboarding.change_in_settings" = "You can change these anytime in Settings.";
+"onboarding.screen_recording" = "Screen Recording";
+"onboarding.accessibility" = "Accessibility (Optional)";
+"onboarding.accessibility_granted" = "Scrolling Capture auto-scroll is ready.";
+"onboarding.accessibility_denied" = "Used for Scrolling Capture auto-scroll; manual scroll works without it.";
+"onboarding.grant_target" = "Grant Target";
+"onboarding.grant_target_desc" = "Check it in the corresponding list in System Settings; if not listed, click \"+\" to add or drag the card.";
+"onboarding.relaunch_needed" = "Restart Needed";
+"onboarding.relaunch_desc" = "macOS limitation: authorization only takes effect in processes launched after granting.";
+"onboarding.relaunch_hint" = "Already checked but still not authorized? Click \"Restart Jietu\" to apply.";
+"onboarding.drag_hint" = "Click the authorize button to open System Settings and show the drag panel; drag the card into the list.";
+"onboarding.go_authorize" = "Authorize";
+"onboarding.no_hotkey_hint" = "No hotkeys bound by default, to avoid conflicts with system or other apps.";
+"onboarding.from_menu_bar" = "Start from Menu Bar";
+"onboarding.from_menu_bar_desc" = "Area / Window / Full Screen / Timed / Scrolling Capture — all there.";
+"onboarding.more_in_settings" = "More in Settings";
+"onboarding.more_in_settings_desc" = "Save location and format, Quick Access, annotation defaults.";
+"onboarding.settings_hint" = "Press ⌘, or click \"Preferences…\" in the menu bar to open Settings.";
+"onboarding.continue" = "Continue";
+"onboarding.later" = "Later";
+"onboarding.authorize" = "Authorize Screen Recording";
+"onboarding.start" = "Get Started";
+"onboarding.previous" = "Previous";
+
+// MARK: - Recording Control
+
+"record.ready" = "Ready";
+"record.start" = "Start Recording (⌘⇧S)";
+"record.pause" = "Pause (⌘⇧P)";
+"record.resume" = "Resume (⌘⇧P)";
+"record.stop" = "Stop (⌘⇧S)";
+"record.cancel_no_save" = "Cancel (discard)";
+"record.system_audio_on" = "System Audio: On (videos/music on screen)";
+"record.system_audio_off" = "System Audio: Off (click to enable)";
+"record.mic_off" = "Microphone: Off (click to record narration)";
+"record.mic_off_ready" = "Microphone: Off (click to enable for recording narration)";
+"record.mic_active" = "Microphone: On (separate track)\nRight-click to select device";
+"record.mic_unavailable" = "Microphone unavailable: not authorized or no input device (system audio only)";
+"record.mic_not_recorded" = "Microphone not recorded this time";
+"record.default_mic" = "System Default Microphone";
+"record.select_mic_menu" = "Select Microphone";
+
+// MARK: - Quick Access Actions
+
+"qa.close" = "Close";
+"qa.pin" = "Pin";
+"qa.annotate" = "Annotate";
+"qa.copy" = "Copy";
+"qa.save" = "Save";
+"qa.play" = "Play";
+"qa.reveal_in_finder" = "Reveal in Finder";
+"qa.copy_file" = "Copy File";
+"qa.trim_video" = "Trim";
+"qa.save_as" = "Save As…";
+"qa.play_with_preview" = "Play with Preview";
+"qa.trim_ellipsis" = "Trim…";
+"qa.export_gif" = "Export GIF…";
+"qa.video_help" = "Click to play, drag to other apps or folders to export";
+"qa.image_help" = "Click to edit inline, drag to other apps or folders to export";
+
+// MARK: - Pin
+
+"pin.copy_image" = "Copy Image";
+"pin.actual_size" = "Actual Size (100%)";
+"pin.edit" = "Edit (⌘E)";
+"pin.live_text_on" = "Exit Text Recognition";
+"pin.live_text_off" = "Recognize Text";
+"pin.translate" = "Translate…";
+"pin.close" = "Close";
+"pin.edit_tooltip" = "Edit (⌘E)";
+"pin.close_tooltip" = "Close (⌘W)";
+"pin.live_text_tooltip" = "Recognize Text";
+"pin.translate_tooltip" = "Translate (uses macOS built-in translation)";
+"pin.exit_live_text" = "Exit Text Recognition";
+"pin.recognizing" = "Recognizing text in the image…";
+"pin.no_text_found" = "No Text Found";
+"pin.no_text_found_detail" = "No translatable text was found in this image.";
+
+// MARK: - Loupe
+
+"loupe.coordinate" = "Position";
+"loupe.region" = "Region";
+
+// MARK: - Color Picker
+
+"color_picker.hint" = "Click to pick color · Esc to cancel";
+
+// MARK: - Overlay Hints
+
+"overlay.display_info" = "Display %d/%d  ·  %.0f×%.0f px  ·  Scale %.2fx";
+"overlay.click_window_record" = "  ·  Click the window to record  ·  ␣ switch to free select  ·  Esc cancel";
+"overlay.drag_area_record" = "  ·  Drag to select recording area (or click a window)  ·  Esc cancel";
+"overlay.scroll_drag_hint" = "  ·  Drag to select (stop for manual/auto options)  ·  Esc cancel";
+"overlay.scroll_adjust_hint" = "  ·  Stop for manual/auto options, selection is still adjustable  ·  Esc cancel";
+"overlay.click_window_capture" = "  ·  Click window to capture  ·  ␣ switch to free select  ·  Esc cancel";
+"overlay.drag_capture" = "  ·  Drag to select / click window  ·  ␣ switch to window mode  ·  Esc cancel";
+"overlay.selection_confirm" = "  ·  ↵ confirm, ⇥ last selection, ⇧ square  ·  Esc cancel";
+"overlay.switch_free_select" = "switch to free select";
+"overlay.switch_window_mode" = "switch to window mode";
+"overlay.esc_cancel" = "Esc cancel";
+
+// MARK: - Capture Errors
+
+"error.permission_denied" = "Screen Recording permission not granted";
+"error.no_shareable_content" = "Unable to get shareable screen content: %@";
+"error.no_displays" = "No capturable displays found";
+"error.display_not_shareable" = "Display %u is not capturable";
+"error.empty_image" = "Display %u returned an empty image";
+"error.empty_region" = "Selection too small to capture";
+"error.window_not_capturable" = "Window %u is not capturable";
+"error.no_window_under_cursor" = "No capturable window under cursor";
+
+"error.recovery_permission" = "Please check Jietu in \"System Settings › Privacy & Security › Screen Recording\", then restart Jietu.";
+"error.recovery_relaunch" = "Usually caused by permission just granted but process not restarted. Please restart Jietu and try again.";
+"error.recovery_no_displays" = "Please make sure your display is properly connected.";
+"error.recovery_empty_region" = "Please select a larger area and try again.";
+"error.recovery_no_window" = "Please move the cursor over the window you want to capture and try again.";
+
+// MARK: - Notifications
+
+"notify.saved" = "Capture Saved";
+"notify.recording_complete" = "Recording Complete";
+"notify.duration" = "Duration %02d:%02d";
+"notify.mic_unavailable" = "Microphone Not Recorded";
+"notify.mic_unavailable_body" = "Only system audio in this recording. Please allow Jietu in \"System Settings › Privacy & Security › Microphone\", or check input device.";
+
+// MARK: - Alerts
+
+"alert.ok" = "OK";
+"alert.capture_failed" = "Capture Failed";
+"alert.recording_failed" = "Recording Failed";
+"alert.open_system_settings" = "Open System Settings";
+"alert.hotkey_failed" = "Hotkey %@ for \"%@\" registration failed";
+"alert.hotkey_conflict" = "This key combination may already be taken by the system, another app, or another action in Jietu. Reverted to the previous hotkey.";
+
+// MARK: - Misc
+
+"copied_color" = "Copied %@";
+
+// MARK: - Scroll Capture Panel
+
+"scroll_panel.title" = "Scrolling Capture";
+"scroll_panel.manual" = "Manual";
+"scroll_panel.manual_help" = "Scroll by yourself in the selected area";
+"scroll_panel.automatic" = "Auto";
+"scroll_panel.automatic_help" = "Jietu scrolls automatically (requires Accessibility permission)";
+"scroll_panel.cancel" = "Cancel (Esc)";
+"scroll_panel.finish" = "Finish";
+"scroll_panel.help" = "Scrolling Capture: select area, choose who scrolls";
+"scroll_panel.stitched" = "Stitched %d px";
+"scroll_panel.ready" = "Ready to scroll…";
+"scroll_panel.waiting" = "Waiting for scroll…";
+
+// MARK: - Scroll Capture Alerts
+
+"scroll.need_accessibility" = "Auto Scroll requires Accessibility permission";
+"scroll.need_accessibility_body" = "System has prompted for authorization; after granting, retry auto scroll.\nYou can also switch to manual scroll: place cursor in the area and scroll down yourself.";
+"scroll.use_manual" = "Use Manual Scroll";
+"scroll.no_content" = "No scrolling content captured";
+"scroll.no_content_body" = "The selected area needs to be a scrollable page, and you need to actually scroll:\n· Manual: after clicking \"Manual\", place your mouse in the area and scroll down;\n· Auto: Jietu sends scroll events, but controls like charts or dropdowns may intercept them.\nTry a different area or switch to manual.";
+
+// MARK: - GIF Export
+
+"gif.exporting" = "Exporting GIF…";
+"gif.exporting_progress" = "Exporting GIF… %d%%";
+"gif.exported" = "GIF Exported";
+"gif.export_failed" = "Failed to export GIF";
+
+// MARK: - Hotkey Recorder
+
+"hotkey_recorder.placeholder" = "Press a key combination…";
+"hotkey_recorder.clear" = "Clear";
+"hotkey_recorder.not_set" = "Not Set";
+"hotkey_recorder.need_modifier" = "At least one modifier key required (⌘ ⌥ ⌃ ⇧)";
+
+// MARK: - Settings Navigation
+
+"settings.back" = "Back";
+"settings.forward" = "Forward";
+
+// MARK: - Onboarding Window
+
+"onboarding.window_title" = "Welcome to Jietu";
+
+// MARK: - History
+
+"history.title" = "Capture History";
+"history.done" = "Done";
+"history.no_records" = "No Recent History";
+"history.auto_display" = "Captures and recordings will appear here automatically";
+"history.open_folder" = "Open Save Folder";
+"history.clear_all" = "Clear All Records";
+"history.cannot_read" = "Cannot read";
+"history.copied" = "Copied";
+"history.copy" = "Copy";
+"history.pin" = "Pin";
+"history.reveal" = "Finder";
+"history.edit" = "Edit";
+"history.copy_tooltip" = "Copy image to clipboard";
+"history.pin_tooltip" = "Pin to screen";
+"history.reveal_tooltip" = "Reveal in Finder";
+"history.edit_tooltip" = "Open in annotation editor";
+"history.today" = "Today";
+"history.yesterday" = "Yesterday";
+"history.month_day" = "%d/%d";
+"history.year_month_day" = "%d/%d/%d";
+
+// MARK: - Drag Authorization Panel
+
+"drag_card.hint" = "Hold and drag me";
+"drag_panel.instruction" = "Drag %@ into the list on the right";
+"drag_panel.close" = "Close";
+"drag_panel.restart" = "Restart Jietu";
+"drag_panel.restart_help" = "Restart required after authorization to take effect";
+
+// MARK: - Permission Panes
+
+"perm_pane.screen_recording" = "Screen Recording";
+"perm_pane.accessibility" = "Accessibility";
+"perm_pane.drag_hint_sr" = "The list accepts drag-and-drop: dragging it in is the same as adding and authorizing.";
+"perm_pane.drag_hint_ax" = "The Accessibility list accepts drag-and-drop: dragging it in authorizes it for auto-scroll capture.";
+
+// MARK: - Arrow Style
+
+"arrow.tapered" = "Tapered Arrow";
+"arrow.double_ended" = "Double-Ended Arrow";
+"arrow.line" = "Straight Arrow";
+"arrow.dot_tail" = "Dot Tail Arrow";
+
+// MARK: - Rect Corner Style
+
+"corner.square" = "Square";
+"corner.rounded" = "Rounded";
+
+// MARK: - Fill Mode
+
+"fill.none" = "Outline";
+"fill.opaque" = "Filled";
+"fill.translucent" = "Translucent Fill";
+
+// MARK: - Text Placeholder
+
+"text.placeholder" = "Text";
+
+// MARK: - Filename Template
+
+"filename.placeholder_hint" = "{date} date · {time} time · {counter} incremental number";
+
+// MARK: - GIF Export Errors
+
+"gif_error.no_video_track" = "This file has no video track, cannot convert to GIF.";
+"gif_error.reader" = "Failed to read video: %@";
+"gif_error.no_frames" = "No frames decoded, cannot convert to GIF.";
+"gif_error.encode_failed" = "GIF encoding failed (disk full or no write permission).";
+"gif_error.cannot_add_track" = "Cannot decode video track";
+"gif_error.cannot_read_file" = "Cannot read this file";
+"gif_error.decoding_interrupted" = "Decoding interrupted";
+
+// MARK: - Settings Components
+
+"settings.build_channel_help" = "Build channel: %@";
+
+// MARK: - Scrolling Capture Running Hints
+
+"scroll_hint.auto_paused" = "Paused: cursor is outside the selection. Move it back to continue, or click Finish / Cancel.";
+"scroll_hint.auto_scrolling" = "Auto-scrolling… Move cursor out to pause; any key stops; auto-finishes at bottom.";
+"scroll_hint.manual" = "Scroll steadily; stops auto-finish after ~1.5 s pause.";
+
+// MARK: - Menu Bar Tooltip
+
+"menu_bar.tooltip" = "Jietu Screenshot";
+
+// MARK: - CaptureOutput Errors
+
+"error.encoding_failed" = "Screenshot encoding failed";
+"error.empty_selection" = "Selection is empty";
+
+// MARK: - RecordingEngine Errors
+
+"rec_error.permission_denied" = "Screen Recording permission not granted, cannot record.";
+"rec_error.display_not_shareable" = "Cannot get shareable content for display %u.";
+"rec_error.empty_region" = "Selection too small — drag a proper area first.";
+"rec_error.start_failed" = "Failed to start recording: %@";
+"rec_error.stream" = "Capture stream interrupted: %@";
+"rec_error.writer" = "Failed to write video: %@";
+"rec_error.no_frames" = "No frames captured — there may be no changes in the selected area.";
+
+// MARK: - MicrophoneRecorder Errors
+
+"mic_error.audio_unit_unavailable" = "The specified microphone is unavailable";
+"mic_error.input_format_unavailable" = "Microphone input format is unavailable";
+"mic_error.converter_unavailable" = "Failed to create audio format converter";
+
+// MARK: - RecordingWriter Errors
+
+"writer_error.video_track" = "Cannot add video track";
+"writer_error.start_writing" = "startWriting failed";

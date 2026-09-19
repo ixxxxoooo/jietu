@@ -85,7 +85,7 @@ struct DevChannelBadge: View {
             .padding(.horizontal, Theme.Spacing.sm)
             .frame(height: Theme.Size.recorderKeyCap)
             .background(Capsule().fill(Theme.Colors.accent.opacity(0.15)))
-            .help("开发渠道：\(AppIdentity.bundleIdentifier)")
+            .help(L10n.buildChannelHelp(AppIdentity.bundleIdentifier))
     }
 }
 

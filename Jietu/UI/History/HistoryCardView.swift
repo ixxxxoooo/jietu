@@ -7,10 +7,10 @@ enum HistoryQuickAction: CaseIterable {
 
     var title: String {
         switch self {
-        case .copy: "复制"
-        case .pin: "钉图"
-        case .reveal: "访达"
-        case .edit: "编辑"
+        case .copy: L10n.historyCopy
+        case .pin: L10n.historyPin
+        case .reveal: L10n.historyReveal
+        case .edit: L10n.historyEdit
         }
     }
 
@@ -25,10 +25,10 @@ enum HistoryQuickAction: CaseIterable {
 
     var help: String {
         switch self {
-        case .copy: "复制图像到剪贴板"
-        case .pin: "钉在屏幕上"
-        case .reveal: "在访达中显示"
-        case .edit: "在标注编辑器中打开"
+        case .copy: L10n.historyCopyTooltip
+        case .pin: L10n.historyPinTooltip
+        case .reveal: L10n.historyRevealTooltip
+        case .edit: L10n.historyEditTooltip
         }
     }
 }
@@ -78,7 +78,7 @@ struct HistoryCardView: View {
                         .frame(maxHeight: 110)
                         .clipShape(shape)
                 } else {
-                    Text("无法读取")
+                    Text(L10n.historyCannotRead)
                         .font(Theme.Typography.rowSubtitle)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
@@ -160,7 +160,7 @@ struct HistoryCardView: View {
             } label: {
                 chip(
                     symbol: copied ? "checkmark" : action.symbol,
-                    title: copied ? "已复制" : action.title,
+                    title: copied ? L10n.historyCopied : action.title,
                     tint: copied ? Theme.Colors.success : Theme.Colors.textSecondary
                 )
             }

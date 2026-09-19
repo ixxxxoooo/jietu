@@ -52,7 +52,7 @@ struct HotkeyRecorderChip: View {
     @ViewBuilder
     private var content: some View {
         if isRecording {
-            Text("请按组合键…")
+            Text(L10n.hotkeyRecorderPlaceholder)
                 .font(Theme.Typography.keyCap)
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .frame(maxWidth: .infinity)
@@ -89,10 +89,10 @@ struct HotkeyRecorderChip: View {
                 .buttonStyle(.plain)
                 .opacity(hovered ? 1 : 0)
                 .allowsHitTesting(hovered)
-                .help("清除")
+                .help(L10n.hotkeyRecorderClear)
             }
         } else {
-            Text("未设置")
+            Text(L10n.hotkeyRecorderNotSet)
                 .font(Theme.Typography.keyCap)
                 .foregroundStyle(hovered ? Theme.Colors.textSecondary : Theme.Colors.textTertiary)
                 .frame(maxWidth: .infinity)
@@ -111,7 +111,7 @@ struct HotkeyRecorderChip: View {
                 return nil
             }
             guard let recorded = Hotkey.from(event: event) else {
-                setHint("至少需要一个修饰键（⌘ ⌥ ⌃ ⇧）")
+                setHint(L10n.hotkeyRecorderNeedModifier)
                 return nil
             }
             setHint(nil)

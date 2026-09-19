@@ -22,7 +22,7 @@ struct ColorPickerCard: View {
             VStack(alignment: .leading, spacing: 3) {
                 PixelLoupeHexRow(hex: model.hex, swatch: model.swatch)
 
-                Text("点击取色 · Esc 取消")
+                Text(L10n.colorPickerHint)
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }

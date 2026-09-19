@@ -15,9 +15,9 @@ enum AppAppearance: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .system: return "跟随系统"
-        case .light: return "浅色"
-        case .dark: return "深色"
+        case .system: return L10n.appearanceSystem
+        case .light: return L10n.appearanceLight
+        case .dark: return L10n.appearanceDark
         }
     }
 

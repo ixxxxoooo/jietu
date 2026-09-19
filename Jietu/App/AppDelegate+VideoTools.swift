@@ -42,7 +42,7 @@ extension AppDelegate {
                 gifExportPanel = nil
                 logger.notice("gif exported: \(destination.lastPathComponent)")
                 if settings.showSaveNotification {
-                    notifier.notifyExported(fileURL: destination, title: "GIF 已导出")
+                    notifier.notifyExported(fileURL: destination, title: L10n.gifExported)
                 }
             } catch {
                 hud.close()
@@ -61,9 +61,9 @@ extension AppDelegate {
         NSApp.activate()
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "没能导出 GIF"
+        alert.messageText = L10n.gifExportFailed
         alert.informativeText = error.localizedDescription
-        alert.addButton(withTitle: "好")
+        alert.addButton(withTitle: L10n.alertOK)
         alert.runModal()
     }
 }

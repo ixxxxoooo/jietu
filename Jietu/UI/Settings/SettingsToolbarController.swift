@@ -24,8 +24,8 @@ final class SettingsToolbarController: NSObject, WindowChrome, NSToolbarDelegate
     init(navigation: SettingsNavigationState) {
         self.navigation = navigation
         // 两个独立按钮，不用 segmented：后者会在中间画一条分隔线。
-        backButton = Self.makeButton("chevron.backward", "后退")
-        forwardButton = Self.makeButton("chevron.forward", "前进")
+        backButton = Self.makeButton("chevron.backward", L10n.settingsBack)
+        forwardButton = Self.makeButton("chevron.forward", L10n.settingsForward)
         super.init()
         backButton.target = self
         backButton.action = #selector(goBack)
@@ -78,10 +78,10 @@ final class SettingsToolbarController: NSObject, WindowChrome, NSToolbarDelegate
         switch identifier {
         case Self.back:
             item.view = backButton
-            item.label = "后退"
+            item.label = L10n.settingsBack
         case Self.forward:
             item.view = forwardButton
-            item.label = "前进"
+            item.label = L10n.settingsForward
         default:
             return nil
         }

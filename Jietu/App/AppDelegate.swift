@@ -413,9 +413,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "「\(action.title)」的快捷键 \(hotkey.displayString) 注册失败"
-        alert.informativeText = "该组合键可能已被系统、其它 App 或本 App 的其它动作占用，已恢复为原来的快捷键。"
-        alert.addButton(withTitle: "好")
+        alert.messageText = L10n.alertHotkeyFailed(action.title, hotkey.displayString)
+        alert.informativeText = L10n.alertHotkeyConflict
+        alert.addButton(withTitle: L10n.alertOK)
         alert.runModal()
     }
 
@@ -425,13 +425,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = (error as? CaptureError)?.errorDescription ?? "截图失败"
+        alert.messageText = (error as? CaptureError)?.errorDescription ?? L10n.alertCaptureFailed
         alert.informativeText = (error as? CaptureError)?.recoverySuggestion
             ?? error.localizedDescription
         // 屏幕录制的授权在授权时的那个进程里不生效，所以这类失败给「重启」这条捷径。
         let suggestion = (error as? CaptureError)?.suggestsRelaunch ?? false
-        alert.addButton(withTitle: suggestion ? "重启 Jietu" : "打开系统设置")
-        alert.addButton(withTitle: "好")
+        alert.addButton(withTitle: suggestion ? L10n.permRestartJietu : L10n.alertOpenSystemSettings)
+        alert.addButton(withTitle: L10n.alertOK)
 
         if alert.runModal() == .alertFirstButtonReturn {
             if suggestion {

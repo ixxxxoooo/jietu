@@ -31,12 +31,19 @@ nonisolated enum GifExporter {
         case noFrames
         case encodeFailed
 
+        fileprivate static func _l(_ key: String) -> String {
+            let result = CFBundleCopyLocalizedString(
+                CFBundleGetMainBundle(), key as CFString, key as CFString, "Localizable" as CFString
+            )
+            return result as String? ?? key
+        }
+
         var errorDescription: String? {
             switch self {
-            case .noVideoTrack: return "这个文件里没有视频轨，转不了 GIF。"
-            case .reader(let reason): return "读视频失败：\(reason)"
-            case .noFrames: return "一帧都没解出来，转不了 GIF。"
-            case .encodeFailed: return "GIF 编码失败（磁盘写满或没有写入权限）。"
+            case .noVideoTrack: return Self._l("gif_error.no_video_track")
+            case .reader(let reason): return String(format: Self._l("gif_error.reader"), reason)
+            case .noFrames: return Self._l("gif_error.no_frames")
+            case .encodeFailed: return Self._l("gif_error.encode_failed")
             }
         }
     }
@@ -135,10 +142,10 @@ nonisolated enum GifExporter {
             ]
         )
         output.alwaysCopiesSampleData = false
-        guard reader.canAdd(output) else { throw Failure.reader("解不了视频轨") }
+        guard reader.canAdd(output) else { throw Failure.reader(Failure._l("gif_error.cannot_add_track")) }
         reader.add(output)
         guard reader.startReading() else {
-            throw Failure.reader(reader.error?.localizedDescription ?? "读不了这个文件")
+            throw Failure.reader(reader.error?.localizedDescription ?? Failure._l("gif_error.cannot_read_file"))
         }
 
         guard
@@ -174,7 +181,7 @@ nonisolated enum GifExporter {
             if written % 8 == 0 { progress?(min(1, seconds / limit)) }
         }
         if reader.status == .failed {
-            throw Failure.reader(reader.error?.localizedDescription ?? "解码中断")
+            throw Failure.reader(reader.error?.localizedDescription ?? Failure._l("gif_error.decoding_interrupted"))
         }
         guard written > 0 else { throw Failure.noFrames }
         guard CGImageDestinationFinalize(destinationRef) else { throw Failure.encodeFailed }

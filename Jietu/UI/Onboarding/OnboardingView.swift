@@ -87,19 +87,23 @@ struct OnboardingView: View {
 
     private var title: String {
         switch step {
-        case 0: return "欢迎使用 \(AppIdentity.displayName)"
-        case 1: return "屏幕录制权限"
-        case 2: return "设一个快捷键"
-        default: return "一切就绪"
+        case 0: return L10n.onboardingWelcome(AppIdentity.displayName)
+        case 1: return L10n.onboardingScreenRecordingPerm
+        case 2: return L10n.onboardingSetHotkey
+        default: return L10n.onboardingAllReady
         }
     }
 
     private var subtitle: String {
         switch step {
-        case 0: return "截完即复制、可标注、可保存，全部在本机完成。"
-        case 1: return model.isGranted
-            ? "已经拿到权限，可以正常截图了。" : "没有它，截图会返回空白画面。"
-        case 2: return "不设也能截图，从菜单栏开始就行。"
+        case 0: return L10n.onboardingWelcomeSubtitle
+        case 1:
+            if model.isGranted {
+                if model.needsRelaunch { return L10n.onboardingPermNeedsRelaunchSubtitle }
+                return L10n.onboardingPermGrantedSubtitle
+            }
+            return L10n.onboardingPermDeniedSubtitle
+        case 2: return L10n.onboardingHotkeySubtitle
         default: return readyMessage
         }
     }
@@ -124,9 +128,9 @@ struct OnboardingView: View {
 
     private var readyMessage: String {
         if let hotkey = model.areaCaptureHotkey {
-            return "按 \(hotkey.displayString) 随时开始区域截图。"
+            return L10n.onboardingReadyWithHotkey(hotkey.displayString)
         }
-        return "随时可以从菜单栏开始截图。"
+        return L10n.onboardingReadyFromMenu
     }
 
     // MARK: - Steps
@@ -145,8 +149,8 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             OnboardingCard {
                 OnboardingRow(
-                    title: "截图后自动复制到剪贴板",
-                    subtitle: "截完直接去别的 App 粘贴。",
+                    title: L10n.onboardingCopyToClipboard,
+                    subtitle: L10n.onboardingCopyToClipboardDesc,
                     systemImage: "doc.on.clipboard",
                     tint: Theme.Colors.accent
                 ) {
@@ -160,8 +164,8 @@ struct OnboardingView: View {
                 }
                 OnboardingDivider()
                 OnboardingRow(
-                    title: "登录时启动",
-                    subtitle: "开机后随菜单栏常驻。",
+                    title: L10n.onboardingLaunchAtLogin,
+                    subtitle: L10n.onboardingLaunchAtLoginDesc,
                     systemImage: "power",
                     tint: Theme.Colors.success
                 ) {
@@ -174,7 +178,7 @@ struct OnboardingView: View {
                         .controlSize(.small)
                 }
             }
-            caption("这两项随时可以在设置里改。")
+            caption(L10n.onboardingChangeInSettings)
         }
     }
 
@@ -182,15 +186,17 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             OnboardingCard {
                 OnboardingRow(
-                    title: "屏幕录制",
+                    title: L10n.onboardingScreenRecording,
                     subtitle: model.isGranted
-                        ? (model.needsRelaunch ? "已经勾选，重启后生效。" : "Jietu 可以正常冻结屏幕并截图。")
-                        : "没有它，截图会返回空白画面。",
+                        ? (model.needsRelaunch
+                            ? L10n.permScreenRecordingNeedsRelaunch
+                            : L10n.permScreenRecordingGranted)
+                        : L10n.permScreenRecordingDenied,
                     systemImage: "camera.viewfinder",
                     tint: model.isGranted ? Theme.Colors.success : Theme.Colors.accent
                 ) {
                     OnboardingStatusBadge(
-                        title: model.isGranted ? "已授权" : "未授权",
+                        title: model.isGranted ? L10n.permGranted : L10n.permNotGranted,
                         systemImage: model.isGranted
                             ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
                         tint: model.isGranted ? Theme.Colors.success : Theme.Colors.warning
@@ -198,21 +204,21 @@ struct OnboardingView: View {
                 }
                 OnboardingDivider()
                 OnboardingRow(
-                    title: "辅助功能（可选）",
+                    title: L10n.onboardingAccessibility,
                     subtitle: model.isAccessibilityGranted
-                        ? "滚动长图自动滚动已就绪。"
-                        : "用于滚动长图自动滚动；不授权也可手动滚动。",
+                        ? L10n.onboardingAccessibilityGranted
+                        : L10n.onboardingAccessibilityDenied,
                     systemImage: "hand.tap",
                     tint: model.isAccessibilityGranted ? Theme.Colors.success : Theme.Colors.accent
                 ) {
                     if model.isAccessibilityGranted {
                         OnboardingStatusBadge(
-                            title: "已授权",
+                            title: L10n.permGranted,
                             systemImage: "checkmark.circle.fill",
                             tint: Theme.Colors.success
                         )
                     } else {
-                        Button("去授权") {
+                        Button(L10n.onboardingGoAuthorize) {
                             model.requestAccessibilityAccess()
                         }
                         .controlSize(.small)
@@ -220,8 +226,8 @@ struct OnboardingView: View {
                 }
                 OnboardingDivider()
                 OnboardingRow(
-                    title: "授权对象",
-                    subtitle: "在系统设置对应列表中勾选它；列表里没有就点「+」手动添加或拖入卡片。",
+                    title: L10n.onboardingGrantTarget,
+                    subtitle: L10n.onboardingGrantTargetDesc,
                     systemImage: "app.badge.checkmark",
                     tint: Theme.Colors.accent
                 ) {
@@ -236,12 +242,12 @@ struct OnboardingView: View {
                 if model.suggestsRelaunch {
                     OnboardingDivider()
                     OnboardingRow(
-                        title: "需要重启",
-                        subtitle: "macOS 的限制：授权只在授权之后启动的进程里生效。",
+                        title: L10n.onboardingRelaunchNeeded,
+                        subtitle: L10n.onboardingRelaunchDesc,
                         systemImage: "arrow.clockwise",
                         tint: Theme.Colors.warning
                     ) {
-                        Button("重启 Jietu") { ScreenCapturePermission.relaunchApp() }
+                        Button(L10n.permRestartJietu) { ScreenCapturePermission.relaunchApp() }
                             .controlSize(.small)
                     }
                 }
@@ -249,11 +255,11 @@ struct OnboardingView: View {
             HStack(spacing: Theme.Spacing.md) {
                 caption(
                     model.suggestsRelaunch
-                        ? "已经勾选却还是未授权？点「重启 Jietu」立刻生效。"
-                        : "点击授权按钮会打开系统设置并浮出面板，把卡片拖进列表即可。"
+                        ? L10n.onboardingRelaunchHint
+                        : L10n.onboardingDragHint
                 )
                 Spacer(minLength: 0)
-                Button("重新检测") { model.refresh() }
+                Button(L10n.permRecheck) { model.refresh() }
                     .buttonStyle(.link)
                     .font(.caption)
             }
@@ -277,7 +283,7 @@ struct OnboardingView: View {
                     }
                 }
             }
-            caption("默认都不绑定，避免和系统或其它 App 抢组合键。")
+            caption(L10n.onboardingNoHotkeyHint)
         }
     }
 
@@ -285,20 +291,20 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             OnboardingCard {
                 OnboardingRow(
-                    title: "从菜单栏开始",
-                    subtitle: "区域 / 窗口 / 全屏 / 定时 / 滚动长图都在那里。",
+                    title: L10n.onboardingFromMenuBar,
+                    subtitle: L10n.onboardingFromMenuBarDesc,
                     systemImage: "menubar.rectangle",
                     tint: Theme.Colors.accent
                 )
                 OnboardingDivider()
                 OnboardingRow(
-                    title: "设置里还有更多",
-                    subtitle: "保存位置与格式、浮窗、标注默认样式。",
+                    title: L10n.onboardingMoreInSettings,
+                    subtitle: L10n.onboardingMoreInSettingsDesc,
                     systemImage: "gearshape",
                     tint: Theme.Colors.textSecondary
                 )
             }
-            caption("按 ⌘, 或点菜单栏的「偏好设置…」随时打开设置。")
+            caption(L10n.onboardingSettingsHint)
                 .frame(maxWidth: .infinity, alignment: .center)
         }
     }
@@ -319,14 +325,14 @@ struct OnboardingView: View {
                     Button {
                         step -= 1
                     } label: {
-                        Label("上一步", systemImage: "chevron.left")
+                        Label(L10n.onboardingPrevious, systemImage: "chevron.left")
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                 }
                 Spacer()
                 if showsSkip {
-                    Button("稍后") { advance() }
+                    Button(L10n.onboardingLater) { advance() }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
                 }
@@ -344,12 +350,12 @@ struct OnboardingView: View {
 
     private var primaryTitle: String {
         switch step {
-        case 0: return "继续"
+        case 0: return L10n.onboardingContinue
         case 1:
-            if model.isGranted { return model.needsRelaunch ? "重启 Jietu" : "继续" }
-            return "授权屏幕录制"
-        case 2: return "继续"
-        default: return "开始使用"
+            if model.isGranted { return model.needsRelaunch ? L10n.permRestartJietu : L10n.onboardingContinue }
+            return L10n.onboardingAuthorize
+        case 2: return L10n.onboardingContinue
+        default: return L10n.onboardingStart
         }
     }
 

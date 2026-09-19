@@ -20,17 +20,18 @@ struct PermissionSettingsPane: View {
                 LabeledContent {
                     HStack(spacing: Theme.Spacing.lg) {
                         statusLabel(granted: screenRecordingGranted)
-                        Button("重新检测") { refresh() }
+                        Button(L10n.permRecheck) { refresh() }
                             .controlSize(.small)
-                            .help("立刻再读一次系统里的授权状态")
+                            .help(L10n.permRecheckHelp)
                     }
                 } label: {
-                    Text("屏幕录制")
+                    Text(L10n.permScreenRecording)
                     Text(
                         screenRecordingGranted
                             ? (ScreenCapturePermission.needsRelaunch
-                                ? "已经勾选，重启后生效。" : "Jietu 可以正常冻结屏幕并截图。")
-                            : "没有它，截图会返回空白画面。"
+                                ? L10n.permScreenRecordingNeedsRelaunch
+                                : L10n.permScreenRecordingGranted)
+                            : L10n.permScreenRecordingDenied
                     )
                 }
 
@@ -43,75 +44,67 @@ struct PermissionSettingsPane: View {
                         }
                     }
                 } label: {
-                    Text("授权对象")
-                    Text(
-                        "在「系统设置 › 隐私与安全性 › 屏幕录制」里勾选它；"
-                            + "若列表里没有它，点列表左下的「+」手动选中这个 App。"
-                    )
+                    Text(L10n.permGrantTarget)
+                    Text(L10n.permGrantTargetDesc)
                 }
 
                 LabeledContent {
                     // 统一走拖拽授权：打开系统设置并浮出面板，把 App 卡片拖进列表即可。
-                    Button("拖拽授权…") {
+                    Button(L10n.permDragAuthorize) {
                         triedGranting = true
                         PermissionDragController.shared.present(pane: .screenRecording)
                         refresh()
                     }
-                    .help("打开系统设置并浮出面板，把本 App 的卡片拖进列表")
+                    .help(L10n.permDragAuthorizeHelp)
                 } label: {
-                    Text("授权操作")
+                    Text(L10n.permGrantAction)
                 }
 
                 if suggestsRelaunch {
                     LabeledContent {
-                        Button("重启 Jietu") { ScreenCapturePermission.relaunchApp() }
+                        Button(L10n.permRestartJietu) { ScreenCapturePermission.relaunchApp() }
                     } label: {
-                        Text("需要重启")
-                        Text("macOS 的限制：授权只在授权之后启动的进程里生效。")
+                        Text(L10n.permNeedsRelaunch)
+                        Text(L10n.permNeedsRelaunchDesc)
                     }
                 }
             } header: {
-                SettingsSectionHeader(title: "屏幕录制")
+                SettingsSectionHeader(title: L10n.permSectionScreenRecording)
             }
 
             Section {
                 LabeledContent {
                     HStack(spacing: Theme.Spacing.lg) {
                         statusLabel(granted: accessibilityGranted)
-                        Button("重新检测") { refresh() }
+                        Button(L10n.permRecheck) { refresh() }
                             .controlSize(.small)
-                            .help("立刻再读一次系统里的授权状态")
+                            .help(L10n.permRecheckHelp)
                     }
                 } label: {
-                    Text("辅助功能")
+                    Text(L10n.permAccessibility)
                     Text(
                         accessibilityGranted
-                            ? "「滚动长图（自动滚动）」可以合成滚轮了。"
-                            : "「滚动长图（自动滚动）」需要它来合成滚轮事件；不授权也能用手动滚动。"
+                            ? L10n.permAccessibilityGranted
+                            : L10n.permAccessibilityDenied
                     )
                 }
 
                 LabeledContent {
                     // 与「屏幕录制」保持一致：只留拖拽授权这一个出口，系统设置由面板自己打开。
-                    Button("拖拽授权…") {
+                    Button(L10n.permDragAuthorize) {
                         PermissionDragController.shared.present(pane: .accessibility)
                         refresh()
                     }
-                    .help("打开系统设置并浮出面板，把本 App 的卡片拖进列表")
+                    .help(L10n.permDragAuthorizeHelp)
                 } label: {
-                    Text("授权操作")
+                    Text(L10n.permGrantAction)
                 }
             } header: {
-                SettingsSectionHeader(title: "辅助功能")
+                SettingsSectionHeader(title: L10n.permSectionAccessibility)
             } footer: {
-                Text(
-                    "授权状态每秒复查一次，从系统设置切回来会立刻更新；"
-                        + "辅助功能授权是**现读**的，不用重启。\n"
-                        + "自签名 / Debug 构建有时不会自动出现在系统设置的列表里"
-                        + "（但授权本身照样生效），用「拖拽授权…」把本 App 拖进去即可。"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(L10n.permAccessibilityFooter)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -124,7 +117,7 @@ struct PermissionSettingsPane: View {
 
     private func statusLabel(granted: Bool) -> some View {
         Label(
-            granted ? "已授权" : "未授权",
+            granted ? L10n.permGranted : L10n.permNotGranted,
             systemImage: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
         )
         .foregroundStyle(granted ? Color.green : Color.orange)

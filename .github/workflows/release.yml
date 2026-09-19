@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build DMG & Create Release
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.app || sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build Release
+        run: |
+          xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Release \
+            -destination 'platform=macOS' -derivedDataPath .build build
+
+      - name: Verify signature
+        run: codesign --verify --deep --strict ".build/Build/Products/Release/Jietu.app"
+
+      - name: Create DMG
+        run: bash Scripts/build-dmg.sh
+
+      - name: Compute checksums
+        id: checksum
+        run: |
+          DMG_PATH="$(ls dist/Jietu-*.dmg)"
+          SHA256="$(shasum -a 256 "$DMG_PATH" | cut -d' ' -f1)"
+          echo "dmg_path=$DMG_PATH" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "dmg_name=$(basename "$DMG_PATH")" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Jietu ${{ steps.version.outputs.version }}
+          body: |
+            ## Jietu ${{ steps.version.outputs.version }}
+
+            ### Installation
+
+            1. Download `${{ steps.checksum.outputs.dmg_name }}` below.
+            2. Open the DMG and drag **Jietu.app** into `/Applications`.
+            3. First launch: right-click → **Open** → Confirm (self-signed app).
+               Or run: `xattr -dr com.apple.quarantine /Applications/Jietu.app`
+
+            ### Permissions
+
+            - **Screen Recording** (required): System Settings › Privacy & Security › Screen Recording → add Jietu → restart app.
+            - **Accessibility** (optional, for auto-scroll): System Settings › Privacy & Security › Accessibility → add Jietu.
+
+            ### Checksum
+
+            ```
+            SHA-256: ${{ steps.checksum.outputs.sha256 }}
+            ```
+          files: ${{ steps.checksum.outputs.dmg_path }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -10,7 +10,7 @@ enum FilenameTemplate {
     static let defaultTemplate = "Jietu {date} at {time}"
 
     static let placeholders = ["{date}", "{time}", "{datetime}", "{counter}"]
-    static let placeholderHint = "{date} 日期 · {time} 时间 · {counter} 递增序号"
+    static var placeholderHint: String { L10n.filenamePlaceholderHint }
 
     /// 文件名里不允许出现的字符（路径分隔与 HFS 兼容冒号）。
     private static let illegalCharacters = CharacterSet(charactersIn: "/:")

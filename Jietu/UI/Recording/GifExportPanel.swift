@@ -10,7 +10,7 @@ import AppKit
 @MainActor
 final class GifExportPanel {
     private let panel: NSPanel
-    private let label = NSTextField(labelWithString: "正在导出 GIF…")
+    private let label = NSTextField(labelWithString: L10n.gifExporting)
     private let bar = NSProgressIndicator()
 
     private static let size = CGSize(width: 260, height: 72)
@@ -82,7 +82,7 @@ final class GifExportPanel {
     func update(fraction: Double) {
         let clamped = min(1, max(0, fraction))
         bar.doubleValue = clamped
-        label.stringValue = "正在导出 GIF… \(Int((clamped * 100).rounded()))%"
+        label.stringValue = L10n.gifExportingProgress(Int((clamped * 100).rounded()))
     }
 
     func close() {

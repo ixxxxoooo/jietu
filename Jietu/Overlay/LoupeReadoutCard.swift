@@ -30,8 +30,8 @@ struct LoupeReadoutCard: View {
     var body: some View {
         PixelLoupeCard(image: model.image, cursorCell: model.cursorCell) {
             VStack(alignment: .leading, spacing: 3) {
-                PixelLoupeReadoutRow(label: "坐标", value: model.coordinate)
-                PixelLoupeReadoutRow(label: "区域", value: model.region)
+                PixelLoupeReadoutRow(label: L10n.loupeCoordinate, value: model.coordinate)
+                PixelLoupeReadoutRow(label: L10n.loupeRegion, value: model.region)
                 PixelLoupeHexRow(hex: model.hex, swatch: model.swatch)
             }
         }

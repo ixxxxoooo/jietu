@@ -539,7 +539,7 @@ extension Annotation {
 
     /// 标注气泡文字框的矩形（含内边距）。
     static func calloutLabelRect(origin: CGPoint, string: String, fontSize: CGFloat) -> CGRect {
-        let size = textSize(string: string.isEmpty ? "文字" : string, fontSize: fontSize)
+        let size = textSize(string: string.isEmpty ? L10n.textPlaceholder : string, fontSize: fontSize)
         return CGRect(
             origin: origin,
             size: CGSize(width: size.width + 16, height: max(fontSize * 1.6, size.height + 10))

@@ -45,15 +45,25 @@ final class RecordingEngine {
         /// 一帧都没写进去：选区是全黑的 / 采集被系统掐了。
         case noFrames
 
+        private static func _l(_ key: String) -> String {
+            let result = CFBundleCopyLocalizedString(
+                CFBundleGetMainBundle(), key as CFString, key as CFString, "Localizable" as CFString
+            )
+            return result as String? ?? key
+        }
+        private static func _lf(_ key: String, _ args: any CVarArg...) -> String {
+            String(format: _l(key), arguments: args)
+        }
+
         var errorDescription: String? {
             switch self {
-            case .permissionDenied: return "没有「屏幕录制」权限，录不了屏。"
-            case .displayNotShareable(let id): return "拿不到显示器 \(id) 的可共享内容。"
-            case .emptyRegion: return "选区太小了，先拖一块像样的区域。"
-            case .startFailed(let reason): return "开始录制失败：\(reason)"
-            case .stream(let error): return "采集流中断：\(error.localizedDescription)"
-            case .writer(let error): return "写视频失败：\(error.localizedDescription)"
-            case .noFrames: return "一帧都没录到，选区里可能没有画面变化。"
+            case .permissionDenied: return Self._l("rec_error.permission_denied")
+            case .displayNotShareable(let id): return Self._lf("rec_error.display_not_shareable", id)
+            case .emptyRegion: return Self._l("rec_error.empty_region")
+            case .startFailed(let reason): return Self._lf("rec_error.start_failed", reason)
+            case .stream(let error): return Self._lf("rec_error.stream", error.localizedDescription)
+            case .writer(let error): return Self._lf("rec_error.writer", error.localizedDescription)
+            case .noFrames: return Self._l("rec_error.no_frames")
             }
         }
     }

@@ -119,7 +119,7 @@ extension AppDelegate {
             let toast = colorToast ?? ToastPanel()
             colorToast = toast
             toast.present(
-                "已复制 \(picked.hex)",
+                L10n.copiedColor(picked.hex),
                 swatchColor: picked.nsColor,
                 near: NSEvent.mouseLocation
             )

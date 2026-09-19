@@ -23,14 +23,21 @@ nonisolated final class MicrophoneRecorder {
         case inputFormatUnavailable
         case converterUnavailable
 
+        private static func _l(_ key: String) -> String {
+            let result = CFBundleCopyLocalizedString(
+                CFBundleGetMainBundle(), key as CFString, key as CFString, "Localizable" as CFString
+            )
+            return result as String? ?? key
+        }
+
         var errorDescription: String? {
             switch self {
             case .audioUnitUnavailable:
-                return "指定的麦克风不可用"
+                return Self._l("mic_error.audio_unit_unavailable")
             case .inputFormatUnavailable:
-                return "麦克风输入格式不可用"
+                return Self._l("mic_error.input_format_unavailable")
             case .converterUnavailable:
-                return "音频格式转换器创建失败"
+                return Self._l("mic_error.converter_unavailable")
             }
         }
     }

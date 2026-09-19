@@ -70,7 +70,7 @@ struct QuickAccessVideoView: View {
         }
         .frame(width: cardSize.width, height: cardSize.height)
         .glassPanel(cornerRadius: Theme.Radius.menuPanel)
-        .help("点击播放，拖拽到其它 App 或文件夹可导出")
+        .help(L10n.qaVideoHelp)
         .animation(.easeOut(duration: Theme.Duration.hover), value: isHovering)
     }
 

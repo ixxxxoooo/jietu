@@ -44,10 +44,10 @@ enum ArrowStyle: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .tapered: return "渐宽箭头"
-        case .doubleEnded: return "双向箭头"
-        case .line: return "直箭头"
-        case .dotTail: return "圆点箭头"
+        case .tapered: return L10n.arrowTapered
+        case .doubleEnded: return L10n.arrowDoubleEnded
+        case .line: return L10n.arrowLine
+        case .dotTail: return L10n.arrowDotTail
         }
     }
 
@@ -75,8 +75,8 @@ enum RectCornerStyle: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .square: return "方角"
-        case .rounded: return "圆角"
+        case .square: return L10n.cornerSquare
+        case .rounded: return L10n.cornerRounded
         }
     }
 
@@ -115,9 +115,9 @@ enum ShapeFillMode: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .none: return "线框"
-        case .opaque: return "填充"
-        case .translucent: return "半透明填充"
+        case .none: return L10n.fillNone
+        case .opaque: return L10n.fillOpaque
+        case .translucent: return L10n.fillTranslucent
         }
     }
 }

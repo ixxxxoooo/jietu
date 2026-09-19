@@ -14,7 +14,7 @@ struct AboutSettingsPane: View {
         let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
             as? String ?? "—"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
-        return "版本 \(short) (\(build))"
+        return L10n.aboutVersion(short, build)
     }
 
     var body: some View {
@@ -27,7 +27,7 @@ struct AboutSettingsPane: View {
                 }
 
                 Section {
-                    LabeledContent("构建渠道") {
+                    LabeledContent(L10n.aboutBuildChannel) {
                         HStack(spacing: Theme.Spacing.sm) {
                             Text(AppIdentity.isDevChannel ? "Debug" : "Release")
                             if AppIdentity.isDevChannel {
@@ -40,9 +40,9 @@ struct AboutSettingsPane: View {
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
                     }
-                    LabeledContent("屏幕录制") {
+                    LabeledContent(L10n.permScreenRecording) {
                         Label(
-                            ScreenCapturePermission.isGranted ? "已授权" : "未授权",
+                            ScreenCapturePermission.isGranted ? L10n.permGranted : L10n.permNotGranted,
                             systemImage: ScreenCapturePermission.isGranted
                                 ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
                         )
@@ -50,7 +50,7 @@ struct AboutSettingsPane: View {
                             ScreenCapturePermission.isGranted ? Color.green : Color.orange)
                     }
                 } header: {
-                    SettingsSectionHeader(title: "信息")
+                    SettingsSectionHeader(title: L10n.aboutSectionInfo)
                 }
 
                 Section {
@@ -58,7 +58,7 @@ struct AboutSettingsPane: View {
                         AboutLinkRow(link: link)
                     }
                 } header: {
-                    SettingsSectionHeader(title: "链接")
+                    SettingsSectionHeader(title: L10n.aboutSectionLinks)
                 }
             }
             .formStyle(.grouped)
@@ -89,14 +89,14 @@ struct AboutSettingsPane: View {
                     .overlay(Capsule().strokeBorder(Theme.Colors.cardStroke, lineWidth: 1))
             }
 
-            Text("本机截图工具：截完即标注、复制、保存，数据不出本机。")
+            Text(L10n.aboutTagline)
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
     }
 
     private var footer: some View {
-        Text("© 2026 Jietu · 截图与标注全部在本机完成")
+        Text(L10n.aboutCopyright)
             .font(.caption2)
             .foregroundStyle(.tertiary)
     }
@@ -122,7 +122,7 @@ private struct AboutLink: Identifiable {
             url: URL(string: repository)!),
         AboutLink(
             id: "issues", symbol: "exclamationmark.bubble",
-            title: "问题反馈", detail: "github.com/ixxxxoooo/jietu/issues",
+            title: L10n.aboutIssues, detail: "github.com/ixxxxoooo/jietu/issues",
             url: URL(string: repository + "/issues")!),
     ]
 }

@@ -1,0 +1,3 @@
+/* 简体中文 Info.plist 本地化 */
+"NSMicrophoneUsageDescription" = "Jietu 需要访问麦克风才能在录屏时录下你的讲解。音频仅保存在本机，不会上传。";
+"NSScreenCaptureUsageDescription" = "Jietu 需要「屏幕录制」权限才能截取你的屏幕内容。所有截图仅保存在本机，不会上传。";

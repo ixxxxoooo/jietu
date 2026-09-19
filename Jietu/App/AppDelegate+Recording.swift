@@ -297,9 +297,9 @@ extension AppDelegate {
         NSApp.activate()
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = "录屏没能完成"
+        alert.messageText = L10n.alertRecordingFailed
         alert.informativeText = error.localizedDescription
-        alert.addButton(withTitle: "好")
+        alert.addButton(withTitle: L10n.alertOK)
         alert.runModal()
     }
 

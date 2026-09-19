@@ -51,12 +51,10 @@ extension AppDelegate {
         NSApp.activate()
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = "自动滚动需要「辅助功能」权限"
-        alert.informativeText =
-            "系统已弹出授权申请；授权后重试即可自动滚动。\n"
-            + "也可以现在就改用手动滚动：把鼠标放进选区，自己往下滚。"
-        alert.addButton(withTitle: "改用手动滚动")
-        alert.addButton(withTitle: "打开系统设置")
+        alert.messageText = L10n.scrollNeedAccessibility
+        alert.informativeText = L10n.scrollNeedAccessibilityBody
+        alert.addButton(withTitle: L10n.scrollUseManual)
+        alert.addButton(withTitle: L10n.alertOpenSystemSettings)
         if alert.runModal() == .alertSecondButtonReturn {
             AccessibilityPermission.openSystemSettings()
         }
@@ -300,13 +298,9 @@ struct CaptureRegionTarget {
             NSApp.activate()
             let alert = NSAlert()
             alert.alertStyle = .informational
-            alert.messageText = "没有捕获到滚动内容"
-            alert.informativeText =
-                "选区里得是「整块能滚动的页面」，而且要真的滚起来：\n"
-                + "· 手动：点完「手动」把鼠标放进选区，自己往下滚；\n"
-                + "· 自动：Jietu 会自己发滚轮，但鼠标停在图表 / 下拉菜单这类会吃掉滚轮的控件上时会带不动。\n"
-                + "换个区域或改用手动再试一次。"
-            alert.addButton(withTitle: "好")
+            alert.messageText = L10n.scrollNoContent
+            alert.informativeText = L10n.scrollNoContentBody
+            alert.addButton(withTitle: L10n.alertOK)
             alert.runModal()
             return
         }

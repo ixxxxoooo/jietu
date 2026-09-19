@@ -1,0 +1,3 @@
+/* English Info.plist strings */
+"NSMicrophoneUsageDescription" = "Jietu needs microphone access to record your narration during screen recording. Audio is stored locally only and never uploaded.";
+"NSScreenCaptureUsageDescription" = "Jietu needs Screen Recording permission to capture your screen. All captures are stored locally only and never uploaded.";

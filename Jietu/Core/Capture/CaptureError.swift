@@ -11,39 +11,49 @@ enum CaptureError: LocalizedError {
     case windowNotCapturable(CGWindowID)
     case noWindowUnderCursor
 
+    /// 直接用 `CFBundleCopyLocalizedString` 而不走 `L10n`——
+    /// `LocalizedError.errorDescription` 是 `nonisolated` 协议要求，
+    /// 而 `L10n` 的静态属性会被 Swift 6 推断为 `@MainActor`（Bundle 相关依赖链）。
+    private static func _l(_ key: String) -> String {
+        let result = CFBundleCopyLocalizedString(
+            CFBundleGetMainBundle(), key as CFString, key as CFString, "Localizable" as CFString
+        )
+        return result as String? ?? key
+    }
+
     var errorDescription: String? {
         switch self {
         case .permissionDenied:
-            return "未获得「屏幕录制」权限"
+            return Self._l("error.permission_denied")
         case .noShareableContent(let detail):
-            return "无法获取可捕获的屏幕内容：\(detail)"
+            return String(format: Self._l("error.no_shareable_content"), detail)
         case .noDisplays:
-            return "没有找到可捕获的显示器"
+            return Self._l("error.no_displays")
         case .displayNotShareable(let id):
-            return "显示器 \(id) 当前不可捕获"
+            return String(format: Self._l("error.display_not_shareable"), id)
         case .emptyImage(let id):
-            return "显示器 \(id) 返回了空图像"
+            return String(format: Self._l("error.empty_image"), id)
         case .emptyRegion:
-            return "选区太小，无法截取"
+            return Self._l("error.empty_region")
         case .windowNotCapturable(let id):
-            return "窗口 \(id) 当前不可捕获"
+            return String(format: Self._l("error.window_not_capturable"), id)
         case .noWindowUnderCursor:
-            return "鼠标下没有可截取的窗口"
+            return Self._l("error.no_window_under_cursor")
         }
     }
 
     var recoverySuggestion: String? {
         switch self {
         case .permissionDenied:
-            return "请在「系统设置 › 隐私与安全性 › 屏幕录制」中勾选 Jietu，然后重启 Jietu。"
+            return Self._l("error.recovery_permission")
         case .noShareableContent, .displayNotShareable, .emptyImage, .windowNotCapturable:
-            return "通常是权限刚授予但进程尚未重启，请重启 Jietu 后重试。"
+            return Self._l("error.recovery_relaunch")
         case .noDisplays:
-            return "请确认显示器已正确连接。"
+            return Self._l("error.recovery_no_displays")
         case .emptyRegion:
-            return "请框选一块更大一点的区域再试。"
+            return Self._l("error.recovery_empty_region")
         case .noWindowUnderCursor:
-            return "请把鼠标移到要截取的窗口上再试一次。"
+            return Self._l("error.recovery_no_window")
         }
     }
 

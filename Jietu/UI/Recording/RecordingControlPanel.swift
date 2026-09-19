@@ -213,31 +213,31 @@ private final class RecordingControlContentView: NSView {
 
     private let glass = NSVisualEffectView()
     private let dot = NSView()
-    private let label = NSTextField(labelWithString: "准备录制")
+    private let label = NSTextField(labelWithString: L10n.recordReady)
     /// 音频开关：**待开始态可以直接点**（CapCut 那类录屏的「录前先配好」），
     /// 录制中变成只读状态显示——省得为了开麦克风再跑去设置页。
     private let systemAudioButton = GlassControlButton(
-        symbol: "speaker.wave.2.fill", diameter: 24, tooltip: "系统声音"
+        symbol: "speaker.wave.2.fill", diameter: 24, tooltip: L10n.recordingSystemAudio
     )
     private let micButton = GlassControlButton(
-        symbol: "mic.fill", diameter: 24, tooltip: "麦克风"
+        symbol: "mic.fill", diameter: 24, tooltip: L10n.recordingMicrophone
     )
     private var microphone: RecordingControlPanel.MicrophoneState = .off
     private var systemAudio = false
     /// 「开始」：待开始态的主操作（红色 = 录制的通用语言，和 CapCut 那类浮条一样）。
     private let startButton = GlassControlButton(
-        symbol: "record.circle", diameter: 26, tooltip: "开始录制 (⌘⇧S)",
+        symbol: "record.circle", diameter: 26, tooltip: L10n.recordStart,
         iconTint: NSColor(Theme.Colors.destructive)
     )
     private lazy var pauseButton = GlassControlButton(
-        symbol: "pause.fill", diameter: 26, tooltip: "暂停 (⌘⇧P)"
+        symbol: "pause.fill", diameter: 26, tooltip: L10n.recordPause
     )
     private let stopButton = GlassControlButton(
-        symbol: "stop.fill", diameter: 26, tooltip: "完成 (⌘⇧S)",
+        symbol: "stop.fill", diameter: 26, tooltip: L10n.recordStop,
         iconTint: NSColor(Theme.Colors.destructive)
     )
     private let cancelButton = GlassControlButton(
-        symbol: "xmark", diameter: 26, tooltip: "取消（不保存）"
+        symbol: "xmark", diameter: 26, tooltip: L10n.recordCancelNoSave
     )
     private var isPaused = false
     private var phase: RecordingControlPanel.Phase = .ready
@@ -344,7 +344,7 @@ private final class RecordingControlContentView: NSView {
     func setPhase(_ phase: RecordingControlPanel.Phase) {
         guard self.phase != phase else { return }
         self.phase = phase
-        label.stringValue = phase == .ready ? "准备录制" : "00:00"
+        label.stringValue = phase == .ready ? L10n.recordReady : "00:00"
         // 待开始态的红点压暗：框摆好了，但还没在录。
         dot.layer?.backgroundColor = NSColor(Theme.Colors.destructive)
             .withAlphaComponent(phase == .ready ? 0.35 : 1).cgColor
@@ -356,7 +356,7 @@ private final class RecordingControlContentView: NSView {
         guard isPaused != paused else { return }
         isPaused = paused
         pauseButton.symbolName = paused ? "play.fill" : "pause.fill"
-        pauseButton.toolTip = paused ? "继续 (⌘⇧P)" : "暂停 (⌘⇧P)"
+        pauseButton.toolTip = paused ? L10n.recordResume : L10n.recordPause
         dot.layer?.backgroundColor = NSColor(Theme.Colors.destructive)
             .withAlphaComponent(paused ? 0.35 : 1).cgColor
     }
@@ -375,16 +375,16 @@ private final class RecordingControlContentView: NSView {
             micButton.symbolName = "mic.slash"
             micButton.iconTint = NSColor(Theme.Colors.textSecondary)
             micButton.toolTip = phase == .ready
-                ? "麦克风：关（点一下打开，录制时录下你的讲解）"
-                : "本次没录麦克风"
+                ? L10n.recordMicOffReady
+                : L10n.recordMicNotRecorded
         case .active:
             micButton.symbolName = "mic.fill"
             micButton.iconTint = NSColor(Theme.Colors.success)
-            micButton.toolTip = "麦克风：开（独立音轨录制）\n右键选择设备"
+            micButton.toolTip = L10n.recordMicActive
         case .unavailable:
             micButton.symbolName = "mic.slash"
             micButton.iconTint = NSColor(Theme.Colors.warning)
-            micButton.toolTip = "麦克风没启用：未授权或没有输入设备（本次只有系统声音）"
+            micButton.toolTip = L10n.recordMicUnavailable
         }
     }
 
@@ -400,17 +400,17 @@ private final class RecordingControlContentView: NSView {
         systemAudioButton.iconTint =
             systemAudio ? NSColor(Theme.Colors.success) : NSColor(Theme.Colors.textSecondary)
         systemAudioButton.toolTip = systemAudio
-            ? "系统声音：开（页面里的视频 / 音乐）"
-            : "系统声音：关（点一下打开）"
+            ? L10n.recordSystemAudioOn
+            : L10n.recordSystemAudioOff
     }
 
     /// 右键麦克风按钮：弹出设备选择菜单。
     private func showMicrophoneDeviceMenu() {
-        let menu = NSMenu(title: "选择麦克风")
+        let menu = NSMenu(title: L10n.recordSelectMicMenu)
 
         // 「系统默认」选项
         let defaultItem = NSMenuItem(
-            title: "系统默认麦克风",
+            title: L10n.recordDefaultMic,
             action: #selector(selectMicrophoneDevice(_:)),
             keyEquivalent: ""
         )

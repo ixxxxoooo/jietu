@@ -17,14 +17,14 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .general: return "通用"
-        case .capture: return "截图"
-        case .hotkeys: return "快捷键"
-        case .quickAccess: return "浮窗"
-        case .recording: return "录屏"
-        case .annotation: return "标注"
-        case .permission: return "权限"
-        case .about: return "关于"
+        case .general: return L10n.settingsGeneral
+        case .capture: return L10n.settingsCapture
+        case .hotkeys: return L10n.settingsHotkeys
+        case .quickAccess: return L10n.settingsQuickAccess
+        case .recording: return L10n.settingsRecording
+        case .annotation: return L10n.settingsAnnotation
+        case .permission: return L10n.settingsPermission
+        case .about: return L10n.settingsAbout
         }
     }
 

@@ -28,20 +28,20 @@ enum AnnotationTool: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
-        case .select: return "选择"
-        case .rectangle: return "矩形"
-        case .ellipse: return "椭圆"
-        case .arrow: return "箭头"
-        case .line: return "直线"
-        case .pen: return "画笔"
-        case .highlight: return "高亮笔"
-        case .spotlight: return "聚光灯"
-        case .pixelate: return "马赛克"
-        case .blur: return "模糊"
-        case .text: return "文字"
-        case .counter: return "序号"
-        case .eraser: return "橡皮"
-        case .crop: return "裁剪"
+        case .select: return L10n.toolSelect
+        case .rectangle: return L10n.toolRectangle
+        case .ellipse: return L10n.toolEllipse
+        case .arrow: return L10n.toolArrow
+        case .line: return L10n.toolLine
+        case .pen: return L10n.toolPen
+        case .highlight: return L10n.toolHighlight
+        case .spotlight: return L10n.toolSpotlight
+        case .pixelate: return L10n.toolPixelate
+        case .blur: return L10n.toolBlur
+        case .text: return L10n.toolText
+        case .counter: return L10n.toolCounter
+        case .eraser: return L10n.toolEraser
+        case .crop: return L10n.toolCrop
         }
     }
 

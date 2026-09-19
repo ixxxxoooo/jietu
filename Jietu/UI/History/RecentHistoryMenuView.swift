@@ -29,7 +29,7 @@ struct RecentHistoryMenuView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.Colors.accent)
 
-            Text("最近记录")
+            Text(L10n.menuRecentHistory)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -53,7 +53,7 @@ struct RecentHistoryMenuView: View {
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
                 .buttonStyle(.plain)
-                .help("打开保存文件夹")
+                .help(L10n.historyOpenFolder)
             }
 
             if let onClear, !items.isEmpty {
@@ -63,7 +63,7 @@ struct RecentHistoryMenuView: View {
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
                 .buttonStyle(.plain)
-                .help("清除所有记录")
+                .help(L10n.historyClearAll)
             }
         }
         .padding(.horizontal, 12)
@@ -77,10 +77,10 @@ struct RecentHistoryMenuView: View {
                 Image(systemName: "photo.on.rectangle.angled")
                     .font(.system(size: 26))
                     .foregroundStyle(Theme.Colors.textSecondary.opacity(0.6))
-                Text("暂无最近记录")
+                Text(L10n.historyNoRecords)
                     .font(Theme.Typography.rowSubtitle)
                     .foregroundStyle(Theme.Colors.textSecondary)
-                Text("截图与录屏都会自动展示在这里")
+                Text(L10n.historyAutoDisplay)
                     .font(.system(size: 10))
                     .foregroundStyle(Theme.Colors.textTertiary)
             }

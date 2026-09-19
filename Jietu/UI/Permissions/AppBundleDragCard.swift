@@ -188,7 +188,7 @@ private struct AppBundleDragCardContent: View {
             HStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: "hand.draw")
                     .font(.system(size: 13, weight: .regular))
-                Text("按住拖我")
+                Text(L10n.dragCardHint)
                     .font(Theme.Typography.compactKeyCap)
             }
             .foregroundStyle(Theme.Colors.textSecondary)

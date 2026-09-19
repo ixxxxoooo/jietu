@@ -56,6 +56,31 @@ trap 'rm -rf "$STAGE"' EXIT
 ditto "$APP" "$STAGE/$APP_NAME.app"
 ln -s /Applications "$STAGE/Applications"
 
+# 在 DMG 内放一份安装说明，下载后打开就能看到。
+cat > "$STAGE/README - Installation.txt" <<'INSTALL'
+=== Jietu — Installation Guide ===
+
+1. Drag "Jietu.app" into the "Applications" folder (the shortcut is right here).
+
+2. FIRST LAUNCH (self-signed app)
+   macOS Gatekeeper will block the first launch. To bypass:
+     • Right-click Jietu.app → Open → Confirm
+     • OR run in Terminal:
+         xattr -dr com.apple.quarantine /Applications/Jietu.app
+
+3. GRANT PERMISSIONS
+   • Screen Recording (REQUIRED):
+       System Settings › Privacy & Security › Screen Recording
+       → Click "+" → add Jietu → RESTART the app
+   • Accessibility (optional, for scrolling capture):
+       System Settings › Privacy & Security › Accessibility
+       → Click "+" → add Jietu (no restart needed)
+
+4. You're all set! Enjoy Jietu.
+
+More info: https://github.com/ixxxxoooo/jietu
+INSTALL
+
 # ---------- 4/5 打包 ----------
 echo "==> 4/5 打包"
 mkdir -p "$DIST"

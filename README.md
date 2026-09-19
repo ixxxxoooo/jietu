@@ -1,258 +1,160 @@
-# Jietu 截图
+<p align="center">
+  <img src="Jietu/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="128" alt="Jietu icon">
+</p>
 
-原生 macOS 截图工具（对标 CleanShot）。菜单栏常驻（LSUIElement），
-ScreenCaptureKit 冻结全屏 + 全屏遮罩选区，支持立即标注与浮窗预览两种截选后流程，
-也能按区域 / 窗口 / 全屏录屏。
+<h1 align="center">Jietu</h1>
 
-## 功能
+<p align="center">
+  <b>A native macOS screenshot & screen recording tool</b><br>
+  Capture, annotate, pin, record — everything stays on your Mac.
+</p>
 
-### 截图
-- 区域截图：绿色虚线选框 + 圆形控制点 + 十字准线 + 尺寸标签，像素级精准、Retina 原生分辨率
-- 窗口截图：自动识别窗口边界，**绿色粗线**吸附，单击即贴边截取；阴影可开关、大小可调（16–64 pt，默认 32 pt）
-- 全屏截图、定时截图（菜单里是 3 / 5 / 10 秒三档）
-- 多显示器：所有屏幕同时进入选区状态
+<p align="center">
+  <a href="https://github.com/ixxxxoooo/jietu/releases/latest"><img src="https://img.shields.io/github/v/release/ixxxxoooo/jietu?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/ixxxxoooo/jietu/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ixxxxoooo/jietu/ci.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%2026%2B-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/Swift-6-orange?style=flat-square" alt="Swift 6">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/ixxxxoooo/jietu?style=flat-square" alt="License"></a>
+  <a href="README_zh-CN.md">🇨🇳 中文文档</a>
+</p>
 
-### 录屏
-- 三种取景：**区域**（走遮罩选区，或直接在就地工具栏点「录屏」用当前选区）、
-  **窗口**（点哪个窗口就录哪个）、**全屏**（不弹遮罩，直接录鼠标所在的那块屏，立刻出红框 + 控制条）
-- 选区到手后**不自动开录**：控制条先停在「准备录制」，点「开始」才真开录。
-  待开始态的控制条上可以直接开关**系统声音 / 麦克风**（像 CapCut 那样「录前先配好」），
-  录制中它们变成状态显示（灰=关 / 绿=开 / 橙=开着但没启用）；控制条贴在选区**外侧**下方
-  8pt，不挡要录的内容
-- 录制中面板显示红点 + `mm:ss` + 取消 / 完成 / 暂停；**暂停段不会出现在成片里、也不留空档**
-  （丢帧 + 后续帧的 PTS 整体前移）
-- 会话内快捷键：`Esc` 取消（不保存）、`⌘⇧P` 暂停 / 继续、`⌘⇧S` 开始 / 完成。
-  这几个只在录制会话里生效，不注册全局热键
-- 录制区域套一圈 2pt 圆角红框（非交互、被排除在画面外，不会拍进成片）；
-  控制条是非激活面板，录制时还能正常操作别的 App，也可拖到别处
-- 编码固定 **mp4 + H.264**；帧率 **30 / 60**（默认 30）；码率按「像素数 × 帧率」自动估
-  （夹在 3–80 Mbps），没有手动档位；没有时长上限
-- 声音支持**系统声音**（页面里的视频 / 音乐）与**麦克风**（讲解旁白），各自独立开关、
-  默认都关；两条都开时按采样**混成一条音轨**（mp4 放两条音轨播放器只出第一条）。
-  麦克风没授权 / 没输入设备时自动降级为不录麦克风，不影响录屏本身——
-  控制条上有一枚**麦克风状态图标**（灰=不录 / 绿=正在录 / 橙=开关开着但没启用），
-  没启用时还会发一条通知，点击直接跳到系统的麦克风隐私设置
-- 鼠标光标会录进画面
-- 收工后**总是落盘**到保存目录——不受「自动保存到磁盘」开关约束（这点与截图不同），
-  套用同一套文件名模板与序号规则
-- 收工后的浮窗视频卡上还能**裁剪**成片（双柄时间轴掐头去尾，直通导出、原片不动）与
-  **导出 GIF**（480 宽 / 10fps / 最多前 60 秒，带进度浮窗）
-- 采集流意外中断（切显示器、系统掐流）时能救就救：已写的帧先成片，一帧都没录到才算失败
+---
 
-### 全局热键（默认都不设置，可在设置页逐个添加 / 清除）
-- 八个动作：区域截图 / 窗口截图 / 全屏截图 / 定时截图 / 滚动长图 / 区域录制 / 窗口录制 / 全屏录制
-- 出厂都不绑定，避免抢占系统与其它 App 的组合键
-- 点「未设置」按组合键即录入，「清除」可随时删掉；与其它 App 或本 App 其它动作撞车时自动回滚并提示
-- 「定时截图」热键走**固定 5 秒**；3 / 5 / 10 秒三档只在菜单里选
+## ✨ Features
 
-### 标注编辑快捷键（编辑器内，默认已配好）
-- 撤销 / 重做：默认 **⌘Z / ⇧⌘Z**，原地编辑器里生效
-- 与上面那组**全局热键不是一回事**：这两条只在标注编辑器拿到键盘焦点时生效，
-  不注册系统级组合键——把 ⌘Z 抢成全局会废掉系统里其它所有 App 的撤销
-- 键位在设置页「快捷键 › 标注编辑」里改；下一次打开编辑器就生效（不用重启 App），
-  也可以解绑，或用「恢复默认」还原成 ⌘Z / ⇧⌘Z
-- 编辑文字的过程中 ⌘Z 仍然归输入框（撤的是刚打的字），不会去动标注
+### Screenshot
+- **Area capture** — pixel-perfect selection with green-dashed box, crosshair, and size label
+- **Window capture** — auto-detect window bounds with green snap outline; optional macOS-style shadow
+- **Full screen capture** — grab the entire display under cursor
+- **Timed capture** — 3 / 5 / 10 second delay
+- **Scrolling capture** — auto-stitch long pages (manual or auto-scroll)
+- **Multi-display** — all monitors enter selection mode simultaneously
 
-### 滚动长图
-- 菜单「滚动长图（自动滚动）…」/「滚动长图（手动滚动）…」，或自配热键（走自动滚动）→ 框选区域 → 控制条浮在选区下方
-- **取景框**：框选后遮罩**不关闭**——只留「外面压暗 + 选区绿框」（冻结图收起，所以能看见下面真实页面在滚），窗口变成鼠标穿透，滚轮直接落到页面；右侧还有一条**实时预览**（贴在选区右边、顶部对齐，跟着拼接长出来）
-- **自动滚动**：`AutoScroller` 往选区中央发合成滚轮（步长 = 选区内高的 15%，夹在 60–180pt），
-  匀速推进；同时屏蔽用户在选区里的输入，**任意键停止**，到底后自动完成。
-  需要**「辅助功能」权限**（合成滚轮事件的前提）；没有就先申请并让用户改用手动
-- **手动滚动**：自己把鼠标放进选区匀速滚，停止约 1.5 秒自动完成
-- 两种模式都用 `ScrollStitcher` 行签名互相关算纵向位移、只接新增的行
-- 也可点控制条「完成」/ Esc 结束
-- 抓取时把本 App 排除在画面外，所以控制条不会被拍进长图
+### Screen Recording
+- **Region / Window / Full screen** modes
+- **System audio + Microphone** recording with real-time mix
+- **Pause / Resume** — paused segments are seamlessly removed
+- MP4 (H.264), 30/60 fps, auto bitrate
+- Post-recording **trim** and **GIF export**
 
-### 标注（对象化，全程可改）
-- 工具：选择、矩形、椭圆、箭头、直线、画笔、高亮笔、聚光灯、马赛克、模糊、文字、序号、橡皮
-- 高亮笔为**荧光笔**式笔迹（参考 capcap）：笔尖粗细的实际笔迹是它的 6 倍、半透明且来回涂不叠色，
-  颜色与粗细有独立色槽（默认黄），不会污染画笔 / 箭头的颜色
-- 聚光灯：拖一个窗口，画面其余部分整体压暗，窗口内保持清晰；多个窗口合成一层、不会互相压两次
-- 箭头四种样式照 capcap 的几何重做：渐宽箭头是「细尾 + 后掠宽头」，弯箭头（拖曲线手柄）沿曲线走、
-  箭头贴着终点切线；描边类的头做圆角描边，尖角不割手
-- 原地预览按**原图分辨率**渲染（透明标注层叠在冻结图上），线 / 箭头 / 文字都是 1:1，不会缩放发虚
-- 默认样式记忆：工具、颜色、线宽、字号、马赛克块、模糊半径沿用上次用法（设置页可一键恢复默认）
-- 移动 / 8 点缩放 / 旋转手柄；箭头端点与曲线；序号引线
-- 文字原地输入（所见即所得）、双击改文案；颜色、线宽、字号、马赛克块大小、模糊半径均可事后修改
-- 橡皮为画笔式擦除，露出底层画面，可调大小
-- 单条操作：置顶 / 置底、复制一份（⌘D）、复制样式（⌥⌘C）/ 粘贴样式（⌥⌘V）、删除（⌫）
-- 截后再裁剪：拖框 → 确认，底图被裁掉，标注与擦除笔迹跟着平移（可撤销）
-- 撤销 / 重做（快照式，连带底图一起回滚）：默认 **⌘Z / ⇧⌘Z**，键位可在设置页改
+### Annotation (Object-Based, Fully Editable)
+- Tools: Select, Rectangle, Ellipse, Arrow, Line, Pen, Highlighter, Spotlight, Pixelate, Blur, Text, Counter, Eraser, Crop
+- Inline editing — annotate directly on the capture overlay
+- Move / resize / rotate handles; undo / redo (⌘Z / ⇧⌘Z)
+- Style memory across sessions
 
-### 截选后流程（设置可切换）
-- **立即标注**（原地编辑）：选区确定后，工具栏就在选框下方弹出，直接在截图上标注，✓ / ✗ 决定
-- **浮窗预览**：截图先进浮窗卡片，点击卡片在居中原地编辑
+### More
+- 🔍 **Live Text (OCR)** — select & copy text from any screenshot or pin
+- 🌐 **Translation** — powered by macOS built-in Translation framework
+- 📌 **Pin to screen** — drag-resize, scroll-zoom, double-click to dismiss
+- 🎨 **Color picker** — magnifier + hex copy
+- ⌨️ **Global hotkeys** — 8 customizable actions (unbound by default)
+- 🌙 **Theme** — system / light / dark
+- 🌍 **i18n** — English & Simplified Chinese, auto-detected from system language
 
-### 实况文本（类 Apple Live Text）
-- 点工具栏「识别文字」自动进入选择工具并开启实况文本，悬停变文本光标，直接拖选复制
-- 钉图同样支持（点右下角实况文本按钮）
+## 📸 Screenshots
 
-### 翻译（钉图）
-- 入口在钉图上：左下角**「翻译」胶囊按钮**（悬停浮出），或右键菜单「翻译…」
-- 先对图做 OCR 再翻。识别不到文字会直接说「这张图里没有可以翻译的文字」；
-  首次装语言模型时识别可能要十几秒，这期间按钮压暗并提示「正在识别图上的文字…」
-- 翻译交给 **macOS 系统翻译面板**（`Translation.framework`）——选语言、朗读、换回原文都是系统能力，本 App 不自研翻译
+<!-- Add screenshots here when available -->
 
-### 交付
-- Quick Access 浮窗：**图片卡**只显示图片预览，悬停出现四角圆形按钮（复制 / 标注 / 钉图 / 关闭）+ 中间保存；
-  **视频卡**（录屏收工）封面正中挂「▶ 时长」胶囊，中央「播放」，上排是复制文件 / 裁剪 / 关闭、
-  下排是另存为… / 导出 GIF / 在访达中显示
-- 视频卡「播放」走 macOS 系统「快速查看」；拖出去给的是磁盘上那个 mp4，**关掉卡片不删原文件**
-- 多个截图队列堆叠（最新在上），到点向屏幕边缘侧滑；可配置停靠位置与自动关闭时间
-- 钉图：可拖动、拖边缩放、滚轮缩放、双击关闭、原地钉
-- 保存：PNG / JPEG（质量可调）、剪贴板（PNG + TIFF）、快门音；录屏固定 mp4（H.264）
-- 文件名模板：`{date}` / `{time}` / `{datetime}` / `{counter}`，默认 `Jietu {date} at {time}`
-- 保存反馈：系统通知（带缩略图，点击在访达中定位），可关闭
-- **最近记录**子菜单（320pt 预览卡片，可选 / 在访达中显示 / 复制 / 清空 / 打开文件夹）：
-  截图**和录屏**都在里面 —— 录屏条目带「▶ 时长」角标，点一下用系统快速查看播放；
-  录屏落盘后**立刻**进这里，所以收工浮窗自动关闭后依然找得到）、
-  打开保存文件夹、登录时启动
+## 📦 Installation
 
-## 设置页
+### Download DMG
 
-侧栏 8 个分类，每项一个 Form：
+Download the latest `.dmg` from [Releases](https://github.com/ixxxxoooo/jietu/releases/latest), open it, and drag `Jietu.app` to `/Applications`.
 
-| 分类 | 可调项（默认值） |
-|---|---|
-| 通用 | 登录时启动（关）、截图后播放快门音（开）、自动复制到剪贴板（开）、保存后显示系统通知（开）、主题（跟随系统 / 浅色 / 深色） |
-| 截图 | 自动保存到磁盘（关）、保存位置（默认 `~/Pictures/Jietu`）、保存格式（PNG / JPEG）、JPEG 质量（0.3–1.0，默认 0.9）、文件名模板、窗口截图阴影（开）、阴影大小（16–64 pt，默认 32 pt） |
-| 快捷键 | 「全局热键」八个动作各一行 + 「标注编辑」撤销 / 重做两条（默认 ⌘Z / ⇧⌘Z，可改可解绑，带「恢复默认」）；尾部录制器，悬停时右侧 ✕ 可清除 |
-| 浮窗 | 停靠位置（左下角 / 右下角，默认左下角）、自动关闭（1 / 3 / 5 / 10 / 30 / 60 秒 / 永不，默认 30 秒） |
-| 录屏 | 录制系统声音（关）、录制麦克风（关）、帧率（30 / 60，默认 30）、输出位置 + 在访达中显示 |
-| 标注 | 截选后流程（立即标注 / 浮窗预览）、默认样式摘要 + 恢复默认 |
-| 权限 | 屏幕录制、辅助功能：状态 / 重新检测 / 授权对象 / 拖拽授权…，必要时给「重启 Jietu」 |
-| 关于 | 图标、版本、构建渠道、Bundle ID、屏幕录制授权状态、GitHub 与问题反馈链接 |
+> **First launch note:** The app is self-signed (no Developer ID / notarization). macOS Gatekeeper will block the first launch. To bypass:
+>
+> - Right-click the app → **Open** → Confirm, **or**
+> - Run `xattr -dr com.apple.quarantine /Applications/Jietu.app`
 
-## 菜单栏
+### Grant Permissions
 
-状态栏图标（`camera.viewfinder`）下拉，分四组：
+1. **Screen Recording** (required) — go to **System Settings › Privacy & Security › Screen Recording**, add Jietu, then **restart the app** (macOS requires a relaunch after granting).
+2. **Accessibility** (optional) — only needed for auto-scroll in Scrolling Capture. Go to **System Settings › Privacy & Security › Accessibility** and add Jietu. No restart required.
 
-1. 区域截图 / 窗口截图 / 全屏截图 / 定时截图（3 / 5 / 10 秒）/ 滚动长图…
-2. 区域录制 / 窗口录制 / 全屏录制
-3. 最近记录（二级菜单承载预览卡片，空时是一条灰字「暂无最近记录」）/ 打开保存文件夹
-4. 屏幕录制权限状态、拖拽授权「屏幕录制」…、辅助功能权限状态、拖拽授权「辅助功能」…、权限引导…、
-   偏好设置…（⌘,）、重启 Jietu、退出 Jietu（⌘Q）
+## 🛠 Build from Source
 
-配了快捷键的动作会在菜单里显示那个组合键，没配就什么都不显示（菜单每次弹出时现刷）。
+### Requirements
 
-## 环境要求
-- macOS 26+（使用 Liquid Glass、VisionKit ImageAnalysisOverlayView）
+- macOS 26+ (Tahoe)
 - Xcode 26+ / Swift 6
 
-## 构建与运行
+### Build
 
 ```bash
-# 构建（工程使用自签名证书 Jietu，直接构建即可）
+# Debug build (Jietu Dev.app — separate bundle ID, won't interfere with release)
 xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
-  -destination 'platform=macOS' build
+  -destination 'platform=macOS' -derivedDataPath .build build
 
-# 单元测试
+# Run
+open ".build/Build/Products/Debug/Jietu Dev.app"
+```
+
+### Test
+
+```bash
 xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
   -destination 'platform=macOS' test
 ```
 
-首次运行需授予「屏幕录制」权限；授权后必须**重启 App**（macOS 限制）。
-
-### 打包分发（DMG）
+### Package DMG (Release)
 
 ```bash
 bash Scripts/build-dmg.sh
+# Output: dist/Jietu-<version>.dmg
 ```
 
-一条命令走完：构建 Release → 校验签名 → 打成 `dist/Jietu-<版本>.dmg` → 挂载复验。
-
-镜像里是 `Jietu.app` 加一个 `/Applications` 软链，拖进去即可安装。脚本会在打包前后各验一次
-签名（`codesign --verify --deep --strict`，挂载后再验一次能同时挡住镜像损坏），
-并核对镜像内的版本号与刚构建的一致；产物是 Debug 渠道（bundle id 带 `.dev`）时直接拒绝打包。
-退出时打印大小与 sha256。
-
-Release 与 Debug 是两个独立渠道（见 AGENTS.md）：产物是 `Jietu.app` /
-`com.ixxxxoooo.jietu`，通用二进制（arm64 + x86_64），与开发用的 `Jietu Dev.app` 互不干扰。
-
-**关于首次打开的拦截**：仓库用的是自签名证书 `Jietu Development`，没有 Developer ID、
-也没做公证，所以别人下载后 Gatekeeper 会拦一次。放行方式二选一：
-
-- 右键 App →「打开」→ 确认；
-- 或先执行 `xattr -dr com.apple.quarantine /Applications/Jietu.app`。
-
-### 命令行自检（DEBUG-only）
-
-```bash
-Jietu --selftest-capture <输出目录>        # 冻结全部屏幕 → 落 PNG → 打印报告
-Jietu --selftest-overlay <秒数> <输出目录>  # 冻结屏幕 → 弹遮罩 → 保持 N 秒
-Jietu --selftest-onboarding <秒数>         # 权限引导窗自检
-```
-
-`Core/Diagnostics/CaptureSelfTest.swift` 里还有一批 `--selftest-*` 子命令（区域 / 窗口 /
-会话 / 帧采集 / 就地工具栏 / 钉图等）与几个要真 App 接线的 `--app-level-*` 开关，
-完整清单见该文件头部注释。**全部只在 Debug 构建里编译**。
-
-## 目录结构
+## 🏗 Architecture
 
 ```
 Jietu/
-  App/            应用入口与 AppDelegate（流程编排）
+  App/            App lifecycle & AppDelegate orchestration
   Core/
-    Annotation/   标注模型、几何、命中测试、渲染器
-    Capture/      ScreenCaptureKit 捕获、坐标换算、像素采样、窗口信息
-    Diagnostics/  DEBUG 命令行自检
-    History/      最近记录历史（截图原图 + 录屏封面）
-    Hotkeys/      Carbon 全局热键、标注编辑器内的快捷键（撤销 / 重做）
-    ImageIO/      裁剪 / 编码 / 落盘 / 剪贴板 / 快门音
-    Notifications/系统通知
-    OCR/          Vision 文字识别
-    Permissions/  屏幕录制、辅助功能
-    Recording/    录屏引擎、双路混音（系统声 + 麦克风）、编码参数、视频封面、GIF 导出、成片裁剪
-    Scrolling/    自动滚动、行签名拼接、滚动会话
-    Settings/     设置存储、登录项
-    AppIdentity.swift  当前构建渠道身份（Debug / Release）
-  Overlay/        遮罩画布、选区交互、原地工具栏、Quick Access 浮窗、钉图
+    Annotation/   Annotation model, geometry, hit-testing, renderer
+    Capture/      ScreenCaptureKit capture, coordinate conversion, pixel sampling
+    Diagnostics/  DEBUG-only CLI self-tests
+    History/      Recent history (screenshots + recordings)
+    Hotkeys/      Carbon global hotkeys & editor shortcuts
+    ImageIO/      Crop / encode / save / clipboard / shutter sound
+    Notifications/System notifications
+    OCR/          Vision text recognition
+    Permissions/  Screen Recording & Accessibility permission handling
+    Recording/    Recording engine, dual-track audio mix, encoding, GIF export
+    Scrolling/    Auto-scroll, row-signature stitching
+    Settings/     Settings store, launch-at-login
+  Overlay/        Capture overlay, selection, inline toolbar, Quick Access, Pin
   UI/
-    Annotation/   实况文本覆盖层、文字输入辅助
-    DesignSystem/ 主题与磨砂背景、玻璃控件
-    History/      历史面板视图
-    MenuBar/      状态栏菜单
-    Onboarding/   权限引导
-    Permissions/  拖拽授权面板
-    Recording/    录制红框、控制条、视频快速查看
-    Scrolling/    滚动长图控制条与实时预览
-    Settings/     偏好设置（左分类 + 右内容）
-    Translation/  系统翻译面板桥接
-JietuTests/       Swift Testing 单元测试
+    Annotation/   Live Text overlay, text input
+    DesignSystem/ Theme, glass components, design tokens
+    History/      History panel views
+    MenuBar/      Status bar menu
+    Onboarding/   Permission onboarding wizard
+    Permissions/  Drag-to-authorize panel
+    Recording/    Recording border, control panel, video Quick Look
+    Scrolling/    Scrolling capture control & live preview
+    Settings/     Preferences window (sidebar + detail panes)
+    Translation/  System Translation bridge
+  Resources/      Assets, localization strings (en / zh-Hans)
+JietuTests/       Swift Testing unit tests
+Scripts/          Build & development scripts
 ```
 
-## 单元测试覆盖
-- 选区几何（矩形 / 锁比 / 调整 / 平移 / 命中）
-- 坐标换算（cg ↔ appKit ↔ local）、Y 轴翻转、缩放、图层 contentsRect 取像
-- 截图裁剪、PNG/JPEG 编码与落盘、同名追加序号、文件名模板展开与序号推断
-- 热键显示串与组合键解析、多热键的独立持久化与清除、旧版单热键迁移
-- 标注编辑快捷键（默认 ⌘Z / ⇧⌘Z、按键匹配只认键码与修饰键、改后持久化、解绑不被默认值填回、恢复默认）
-- 设置读写与默认值、最近记录队列（含录屏条目：只存封面不复制视频本体、路径归一化）
-- 菜单栏结构（三个录制入口平铺、拖拽授权回调、最近截图子菜单的卡片与动态高度）
-- 标注渲染（矩形描边 / 序号圆点 / 马赛克成块）与标注几何（平移 / 缩放 / 旋转 / 端点）
-- 标注样式复制（颜色 / 线宽 / 字号 / 马赛克块 / 模糊半径按类型各自生效）
-- 新工具渲染（直线笔迹、模糊软化硬边界）、标注编辑器布局
-- 标注默认样式的持久化与越界值兜底
-- 就地标注工具栏的按钮布局与命中
-- 滚动长图的行签名位移计算与逐帧拼接、自动滚动
-- 截后再裁剪（裁剪框夹取整、底图裁剪、标注与笔迹平移）
-- 钉图几何（缩放 / 边界夹取）与窗口交互
-- 浮窗图标层（贴边摆位、命中测试、首击即响应、胶囊与圆盘的差别、视频卡）
-- 录屏编码参数（宽高取偶、码率估算与夹取、H.264 + BT.709 + 关键帧间隔）与落盘命名
-- 录屏双路混音（重叠相加、按时间戳对齐、迟到丢弃、暂停回退重来、交织解 PCM、按需重采样）
-- GIF 导出参数（下采样步长、帧间隔、输出尺寸取偶且不放大）与成片裁剪区间归整
-- OCR 服务、屏幕快照换算、窗口截图特效
-- CaptureError 枚举消息与恢复建议
-- CaptureOutput Retina 多缩放因子裁剪（1x / 2x / 3x / 小数）
-- HotkeyCenter 注册/注销与 HotkeyAction 属性
-- FilenameTemplate 边界（Unicode / 超长 / 非法字符 / datetime 占位符）
-- 设置面板一致性（HotkeyAction 标题、SaveFormat / EditorMode / QuickAccessPosition 枚举值）
+### Design Principles
 
-## 说明
-- 「屏幕录制」授权对已运行进程不生效，需重启（代码内含引导）
-- 原地编辑的橡皮擦除使用清空混合，导出 PNG 中被擦处为透明
-- 录屏与截图是两条落盘策略：截图看「自动保存到磁盘」开关，录屏**总是**存到保存目录
+- **Dependency flow**: `App/ → Overlay/ & UI/ → Core/` (Core never imports UI)
+- **Design system**: All UI styling goes through `UI/DesignSystem/` tokens
+- **Single file ≤ ~500 lines**: Large types split into `+Extension` files
+- **One source file = one test file**: Shared scaffolding in `JietuTests/TestSupport/`
 
-## 作者
-@author ixxxxoooo
+## 🤝 Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+
+## 🙏 Acknowledgments
+
+- Built with [ScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit), [Vision](https://developer.apple.com/documentation/vision), and [Translation](https://developer.apple.com/documentation/translation)
+- Inspired by [CleanShot X](https://cleanshot.com/) and [CapCut](https://www.capcut.com/)

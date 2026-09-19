@@ -45,7 +45,7 @@ final class OnboardingWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "欢迎使用 Jietu"
+        window.title = L10n.onboardingWindowTitle
         // 内容通到栏下，读起来是一整块表面。
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
