@@ -56,54 +56,63 @@ trap 'rm -rf "$STAGE"' EXIT
 ditto "$APP" "$STAGE/$APP_NAME.app"
 ln -s /Applications "$STAGE/Applications"
 
-# 在 DMG 内放一份安装说明 + 可双击执行的「移除隔离」脚本。
-cat > "$STAGE/README - Installation.txt" <<'INSTALL'
-=== Jietu — Installation Guide ===
+# 在 DMG 内放安装说明 +「移除隔离」小工具。
+#
+# 注意：从网上下载的 DMG 里，任何可执行文件（.command / .app）第一次都会被
+# Gatekeeper 拦截——这正是「解除隔离」工具自己也打不开的原因。
+# 正确用法是：右键 → 打开（与打开自签名 Jietu.app 同一套流程）。
+cat > "$STAGE/00-请先读我.txt" <<'INSTALL'
+=== Jietu 安装说明 / Installation ===
 
-1. Drag "Jietu.app" into the "Applications" folder (the shortcut is right here).
+1. 把 Jietu.app 拖到右边的 Applications（应用程序）文件夹。
 
-2. FIRST LAUNCH (self-signed app)
-   Double-click "Remove Quarantine.command" in this DMG.
-   Or right-click Jietu.app → Open → Confirm.
-   Or run in Terminal:
-       xattr -dr com.apple.quarantine /Applications/Jietu.app
+2. 移除隔离（二选一）
+   【推荐】右键点击「Fix Gatekeeper.app」→ 打开 → 再点「打开」
+            （双击会被系统拦截，这是正常的，必须右键打开一次）
+   【或】在「终端」执行：
+            xattr -dr com.apple.quarantine /Applications/Jietu.app
+   【或】右键 Jietu.app → 打开 → 打开
 
-3. GRANT PERMISSIONS
-   • Screen Recording (REQUIRED):
-       System Settings › Privacy & Security › Screen Recording
-       → Click "+" → add Jietu → RESTART the app
-   • Accessibility (optional, for scrolling capture):
-       System Settings › Privacy & Security › Accessibility
-       → Click "+" → add Jietu (no restart needed)
-   • Notifications (optional):
-       Allow banners so save feedback appears
+3. 授权
+   • 屏幕录制（必需）：系统设置 › 隐私与安全性 › 屏幕录制 → 添加 Jietu → 重启 App
+   • 辅助功能（可选，滚动长图自动滚）：系统设置 › 隐私与安全性 › 辅助功能
+   • 通知（可选）：允许横幅，保存后才有系统通知
 
-4. You're all set! Enjoy Jietu.
-
-More info: https://github.com/ixxxxoooo/jietu
+更多：https://github.com/ixxxxoooo/jietu
 INSTALL
 
-# 双击即可执行：去掉 Gatekeeper 隔离属性（.command 会打开「终端」跑一遍）。
-cat > "$STAGE/Remove Quarantine.command" <<'CMD'
-#!/bin/bash
-# @author ygw
-set -euo pipefail
-APP="/Applications/Jietu.app"
-
-osascript <<'OSA' >/dev/null 2>&1 || true
-tell application "Terminal" to activate
+# 用 AppleScript 打成 .app，并签上与主 App 相同的「Jietu」证书。
+HELPER_SCRIPT="$(mktemp -t jietu-fix-gatekeeper).applescript"
+cat > "$HELPER_SCRIPT" <<'OSA'
+-- 移除 /Applications/Jietu.app 的隔离属性。
+-- 首次从下载的 DMG 打开时：请右键 → 打开（双击会被 Gatekeeper 拦）。
+-- @author ygw
+on run
+	set appPath to "/Applications/Jietu.app"
+	try
+		do shell script "test -d " & quoted form of appPath
+	on error
+		display dialog "请先把 Jietu.app 拖到「应用程序」文件夹，再运行本工具。" & return & return & "Please drag Jietu.app into Applications first." buttons {"OK"} default button 1 with title "Jietu" with icon caution
+		return
+	end try
+	try
+		do shell script "xattr -dr com.apple.quarantine " & quoted form of appPath
+		display dialog "已移除隔离属性，现在可以正常打开 Jietu。" & return & return & "Quarantine removed. You can open Jietu normally now." buttons {"OK"} default button 1 with title "Jietu"
+	on error errMsg
+		display dialog "失败 / Failed：" & return & errMsg buttons {"OK"} default button 1 with title "Jietu" with icon stop
+	end try
+end run
 OSA
 
-if [[ ! -d "$APP" ]]; then
-  osascript -e 'display dialog "请先把 Jietu.app 拖到「应用程序」文件夹，再双击本脚本。\n\nPlease drag Jietu.app into Applications first, then run this script again." buttons {"OK"} default button 1 with title "Jietu"'
-  exit 1
-fi
-
-xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
-
-osascript -e 'display dialog "已移除隔离属性，现在可以正常打开 Jietu。\n\nQuarantine removed. You can open Jietu normally now." buttons {"OK"} default button 1 with title "Jietu"'
-CMD
-chmod +x "$STAGE/Remove Quarantine.command"
+HELPER_APP="$STAGE/Fix Gatekeeper.app"
+rm -rf "$HELPER_APP"
+osacompile -o "$HELPER_APP" "$HELPER_SCRIPT"
+rm -f "$HELPER_SCRIPT"
+# 与主 App 同一自签名身份，用户对证书信任后体验更一致。
+codesign --force --sign "Jietu" --timestamp=none "$HELPER_APP" 2>/dev/null \
+	|| codesign --force --sign - "$HELPER_APP"
+# 确认可执行入口在。
+[ -d "$HELPER_APP" ] || { echo "未能生成 Fix Gatekeeper.app"; exit 1; }
 
 # ---------- 4/5 打包 ----------
 echo "==> 4/5 打包"

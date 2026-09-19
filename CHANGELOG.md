@@ -6,13 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
-### Added
-- Language picker in Settings (System / 简体中文 / English) with restart to apply
+## [0.0.2] — 2026-09-19
 
 ### Fixed
-- Save notifications request alert + sound + badge, and re-request when the toggle is enabled
-- README logo path and language switcher placement
-- DMG includes double-clickable `Remove Quarantine.command`
+- Replace `Remove Quarantine.command` with signed `Fix Gatekeeper.app` and document that the first open must be **right-click → Open** (Gatekeeper blocks plain double-clicks on any downloaded executable)
 
 ## [0.0.1] — 2026-09-19
 
