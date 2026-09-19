@@ -41,8 +41,8 @@ struct ToolbarPlacementTests {
 
     @Test("工具栏摆放：竖排时二级菜单也竖着贴在主栏旁边")
     func optionsToolbarSitsBesideVerticalMainBar() async throws {
-        // 贴屏幕底部、靠左的选区：下面没位置，右侧有足够位置摆「主栏 + 二级菜单」这一列。
-        let canvas = InlineEditScaffold.makeInlineRegionCanvas(region: CGRect(x: 20, y: 20, width: 300, height: 200))
+        // 几乎占满画布高度的选区：上下都塞不下，才轮到竖排（右侧有足够位置摆「主栏 + 二级菜单」这一列）。
+        let canvas = InlineEditScaffold.makeInlineRegionCanvas(region: CGRect(x: 200, y: 20, width: 600, height: 760))
         #expect(canvas.debugSelectTool(.text))
         // 二级菜单是随光标工具变化之后（下一个主队列周期）才重排的，等它跑完。
         await InlineEditScaffold.drainMainQueue()
@@ -58,6 +58,21 @@ struct ToolbarPlacementTests {
             abs(options.midY - layout.main.midY) <= 1,
             "与主栏上下居中（主栏 midY=\(layout.main.midY)，二级 midY=\(options.midY)）"
         )
+    }
+
+    @Test("工具栏摆放：主栏翻到选区上方时，二级菜单挂在主栏上面（不往选区里挤）")
+    func optionsToolbarSitsAboveWhenMainBarIsAbove() async throws {
+        // 贴画布底部的选区：主栏翻到上方横排。
+        let canvas = InlineEditScaffold.makeInlineRegionCanvas(region: CGRect(x: 200, y: 20, width: 600, height: 200))
+        #expect(canvas.debugSelectTool(.text))
+        await InlineEditScaffold.drainMainQueue()
+
+        let layout = canvas.debugToolbarLayout
+        let selection = try #require(canvas.debugSelection)
+        #expect(!layout.isVertical, "上面有位置，主栏横排")
+        let options = try #require(layout.options)
+        #expect(options.minY >= layout.main.maxY, "二级菜单挂在主栏更上面")
+        #expect(options.minY >= selection.maxY, "别压进选区里")
     }
 
     @Test("滑块 / 色板竖排：自己也竖过来（滑块变高、色板变一列）")
@@ -127,22 +142,48 @@ struct ToolbarPlacementTests {
         #expect(abs(layout.main.midX - canvas.debugSelection!.midX) <= 1, "与选区水平对齐")
     }
 
-    @Test("工具栏摆放：下面放不下就竖排停到右侧；两侧都没位置才退回上方")
-    func toolbarDocksToTheSideWhenNoRoomBelow() {
-        // 贴屏幕底部的窄选区：下面没位置，左右各有位置 → 停右侧、竖排。
-        let side = InlineEditScaffold.makeInlineRegionCanvas(region: CGRect(x: 200, y: 20, width: 600, height: 200))
-        let layout = side.debugToolbarLayout
-        #expect(layout.isVertical, "下面放不下就该竖排")
+    @Test("工具栏摆放：下面放不下就翻到选区上方横排（别急着竖排）")
+    func toolbarGoesAboveBeforeGoingVertical() {
+        // 贴画布底部的选区：下面没位置，上面一大片空着 —— 这种就该横排摆到上面去。
+        let canvas = InlineEditScaffold.makeInlineRegionCanvas(region: CGRect(x: 200, y: 20, width: 600, height: 200))
+        let layout = canvas.debugToolbarLayout
+        let selection = canvas.debugSelection!
+        #expect(!layout.isVertical, "上面有位置就别竖排")
         #expect(
-            abs(layout.main.minX - (side.debugSelection!.maxX + 10)) <= 1,
+            abs(layout.main.minY - (selection.maxY + 10)) <= 1,
+            "贴在选区上方（选区 maxY=\(selection.maxY) → 工具栏 minY≈\(selection.maxY + 10)）"
+        )
+        #expect(abs(layout.main.midX - selection.midX) <= 1, "与选区水平对齐")
+    }
+
+    @Test("工具栏摆放：上下都放不下才竖排，先右后左")
+    func toolbarDocksToTheSideOnlyWhenNoRoomAboveOrBelow() {
+        // 几乎占满画布高度的选区：上下都塞不下 → 竖排贴右侧。
+        let right = InlineEditScaffold.makeInlineRegionCanvas(region: CGRect(x: 200, y: 20, width: 600, height: 760))
+        let rightLayout = right.debugToolbarLayout
+        #expect(rightLayout.isVertical, "上下都没位置才竖排")
+        #expect(
+            abs(rightLayout.main.minX - (right.debugSelection!.maxX + 10)) <= 1,
             "要**贴着选区**右侧摆（选区 maxX=800 → 工具栏 minX≈810），不是贴到屏幕边上去"
         )
 
-        // 横跨整屏的选区：左右也塞不下 → 退回选区上方。
-        let wide = InlineEditScaffold.makeInlineRegionCanvas(region: CGRect(x: 20, y: 20, width: 960, height: 200))
-        let wideLayout = wide.debugToolbarLayout
-        #expect(!wideLayout.isVertical, "两侧都没位置就别硬竖排")
-        #expect(wideLayout.main.minY > 220, "退回选区上方")
+        // 同一块选区挪到右边：右侧没位置了 → 退到左侧。
+        let left = InlineEditScaffold.makeInlineRegionCanvas(region: CGRect(x: 600, y: 20, width: 380, height: 760))
+        let leftLayout = left.debugToolbarLayout
+        #expect(leftLayout.isVertical, "右侧放不下就退左侧，仍是竖排")
+        #expect(
+            abs(leftLayout.main.maxX - (left.debugSelection!.minX - 10)) <= 1,
+            "贴在选区左侧（选区 minX=600 → 工具栏 maxX≈590）"
+        )
+    }
+
+    @Test("工具栏摆放：上下左右都放不下也不弄丢——横排夹在画布内")
+    func toolbarStaysInsideCanvasWhenNothingFits() {
+        // 又宽又高、几乎盖满画布的选区：四个方向都没位置。
+        let canvas = InlineEditScaffold.makeInlineRegionCanvas(region: CGRect(x: 20, y: 20, width: 960, height: 760))
+        let layout = canvas.debugToolbarLayout
+        #expect(!layout.isVertical, "左右都塞不下就别硬竖排")
+        #expect(canvas.bounds.contains(layout.main), "工具栏必须留在画布内，别跑出去")
     }
 
     @Test("文字：选中之后切「描边 / 标注」，当场刷到这条文字上")

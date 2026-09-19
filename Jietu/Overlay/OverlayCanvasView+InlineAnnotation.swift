@@ -857,13 +857,15 @@ extension OverlayCanvasView {
         layoutToolbars()
     }
 
-    /// 摆工具栏：**默认贴在选区下面**；下面放不下，就看看左右两侧有没有位置，
-    /// 有就竖排停到那一侧；两边都放不下才退回选区上方（兜底，别把工具栏弄丢）。
+    /// 摆工具栏，优先级 **下 → 上 → 右 → 左**：
+    /// 先横排贴选区下面（最顺手）；下面放不下就翻到选区上方**横排**；
+    /// 上下都没位置才竖排停到右侧，右边也不行再退到左侧；四处都塞不下就夹进画布（别把工具栏弄丢）。
     func layoutToolbars() {
         guard let selection, let main = mainToolbarHost else { return }
         let inset: CGFloat = 8
         let gap: CGFloat = 10
 
+        // 1. 下面。
         let horizontalSize = measureMainToolbar(vertical: false)
         if selection.minY - gap - horizontalSize.height >= bounds.minY + inset {
             placeHorizontal(main, size: horizontalSize, below: selection, inset: inset, gap: gap)
@@ -871,6 +873,14 @@ extension OverlayCanvasView {
             return
         }
 
+        // 2. 上面。（以前这里是最后兜底，导致「下面没位置」就直接竖排了——上面明明空着。）
+        if selection.maxY + gap + horizontalSize.height <= bounds.maxY - inset {
+            placeHorizontal(main, size: horizontalSize, below: selection, inset: inset, gap: gap, above: true)
+            layoutOptions(beside: main.frame, side: nil, inset: inset, gap: gap, above: true)
+            return
+        }
+
+        // 3. 右 → 左（竖排）。
         let verticalSize = measureMainToolbar(vertical: true)
         if let side = verticalDockSide(for: selection, mainSize: verticalSize, inset: inset, gap: gap) {
             placeVertical(main, size: verticalSize, on: side, selection: selection, inset: inset, gap: gap)
@@ -878,10 +888,10 @@ extension OverlayCanvasView {
             return
         }
 
-        // 兜底：左右也没有位置 → 横排贴到选区上方。
+        // 4. 四处都没位置 → 横排贴到选区上方，靠 `placeHorizontal` 的夹取收进画布。
         let size = measureMainToolbar(vertical: false)
         placeHorizontal(main, size: size, below: selection, inset: inset, gap: gap, above: true)
-        layoutOptions(beside: main.frame, side: nil, inset: inset, gap: gap)
+        layoutOptions(beside: main.frame, side: nil, inset: inset, gap: gap, above: true)
     }
 
     /// 量一次主工具栏在某个方向上的尺寸（`isVerticalLayout` 变了要让它先重新排一遍）。
@@ -965,13 +975,16 @@ extension OverlayCanvasView {
 
     /// 摆二级菜单：贴着主工具栏。
     ///
-    /// - 横排（`side == nil`）：居中挂在主栏正下方，放不下就翻到主栏上面。
-    /// - 竖排：也跟着竖排，挂在主栏**外侧**（离选区远的那一边），顶部与主栏对齐。
+    /// - 横排（`side == nil`）：居中挂在主栏的**外侧**——主栏在选区下面（`above == false`）就挂在
+    ///   主栏更下面，主栏在选区上面（`above == true`）就挂在主栏更上面，总之别往选区里挤；
+    ///   那一侧放不下才翻回主栏与选区之间。
+    /// - 竖排：也跟着竖排，挂在主栏**外侧**（离选区远的那一边），与主栏上下居中。
     func layoutOptions(
         beside mainFrame: CGRect,
         side: VerticalDockSide?,
         inset: CGFloat,
-        gap: CGFloat
+        gap: CGFloat,
+        above: Bool = false
     ) {
         guard let options = optionsToolbarHost, let model = toolbarModel, model.isSubToolbarVisible else {
             optionsToolbarHost?.isHidden = true
@@ -998,10 +1011,12 @@ extension OverlayCanvasView {
             max(mainFrame.midX - size.width / 2, bounds.minX + inset),
             max(bounds.minX + inset, bounds.maxX - size.width - inset)
         )
-        var y = mainFrame.minY - inset - size.height
-        if y < bounds.minY + inset {
-            y = mainFrame.maxY + inset
-        }
+        let outer = above ? mainFrame.maxY + inset : mainFrame.minY - inset - size.height
+        let inner = above ? mainFrame.minY - inset - size.height : mainFrame.maxY + inset
+        let outerFits = above
+            ? outer + size.height <= bounds.maxY - inset
+            : outer >= bounds.minY + inset
+        var y = outerFits ? outer : inner
         y = min(max(y, bounds.minY + inset), max(bounds.minY + inset, bounds.maxY - size.height - inset))
         options.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
     }
