@@ -648,6 +648,23 @@ struct InlineToolbarTests {
         )
     }
 
+    @Test("马赛克 / 橡皮的二级菜单里只剩滑块，没有文字标签")
+    func mosaicAndEraserOptionsHaveNoLabel() {
+        // 竖排的宽度就是「最宽那一行」的宽度：只剩一条立起来的滑块时应当很窄，
+        // 以前那行「马赛克颗粒度」文字会把它撑到 100pt 以上。
+        for tool in [AnnotationTool.pixelate, .blur, .eraser] {
+            let model = InlineToolbarModel()
+            model.tool = tool
+            model.isVerticalLayout = true
+            let host = NSHostingView(rootView: InlineOptionsToolbar(model: model))
+            host.layoutSubtreeIfNeeded()
+            #expect(
+                host.fittingSize.width <= 60,
+                "\(tool.title) 的竖排面板应当只剩一条滑块，实际宽度 \(host.fittingSize.width)"
+            )
+        }
+    }
+
     @Test("二级菜单竖排时整体是窄窄一条")
     func verticalOptionsToolbarIsNarrow() {
         let model = InlineToolbarModel()

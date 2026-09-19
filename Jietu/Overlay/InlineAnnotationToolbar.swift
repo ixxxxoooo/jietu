@@ -381,27 +381,27 @@ struct InlineOptionsToolbar: View {
         }
     }
 
+    /// 马赛克 / 模糊：面板里就一条滑块，不写文字标签——留着它既占地方又会把竖排面板撑宽
+    /// （而且模糊工具还用着「马赛克颗粒度」这个名字），说明放到悬停提示里。
     private var mosaicOptions: some View {
-        optionGroup {
-            Text("马赛克颗粒度")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Theme.Colors.textSecondary)
-            HUDSlider(
-                value: model.tool == .pixelate ? $model.mosaicBlock : $model.blurRadius,
-                range: 4...40,
-                step: 1,
-                isVertical: model.isVerticalLayout
-            )
-        }
+        HUDSlider(
+            value: model.tool == .pixelate ? $model.mosaicBlock : $model.blurRadius,
+            range: 4...40,
+            step: 1,
+            isVertical: model.isVerticalLayout
+        )
+        .help(model.tool == .pixelate ? "马赛克颗粒度" : "模糊半径")
     }
 
+    /// 橡皮：同上，面板里只留一条滑块。
     private var eraserOptions: some View {
-        optionGroup {
-            Text("橡皮大小")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Theme.Colors.textSecondary)
-            HUDSlider(value: $model.eraserSize, range: 8...120, step: 2, isVertical: model.isVerticalLayout)
-        }
+        HUDSlider(
+            value: $model.eraserSize,
+            range: 8...120,
+            step: 2,
+            isVertical: model.isVerticalLayout
+        )
+        .help("橡皮大小")
     }
 
     private var scrollOptions: some View {
