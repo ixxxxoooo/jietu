@@ -45,9 +45,20 @@ BLEED_Y=12
 
 # ---------- 1/6 构建 ----------
 echo "==> 1/6 构建（${CONFIG}）"
+# CI runner 上没有本机那张自签名证书「Jietu」，直接构建会报
+# "No certificate matching 'Jietu' found"（GitHub 上前三次 Release 就是这么挂的）。
+# 有证书就用它（本地重签名后屏幕录制授权更稳），没有就退回 ad-hoc——
+# 但不能用 CODE_SIGNING_ALLOWED=NO，那样产物没有签名身份，TCC 会认不出来。
+SIGN_OVERRIDES=""
+if ! security find-identity -v -p codesigning 2>/dev/null | grep -q '"Jietu"'; then
+    echo "    未找到「Jietu」自签名证书 → 改用 ad-hoc 签名"
+    SIGN_OVERRIDES="CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Automatic"
+fi
 LOG="$(mktemp -t jietu-release)"
+# $SIGN_OVERRIDES 故意不加引号：要把两条 build setting 拆成两个参数传给 xcodebuild。
+# shellcheck disable=SC2086
 if ! xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration "$CONFIG" \
-    -destination 'platform=macOS' -derivedDataPath "$DERIVED" build > "$LOG" 2>&1; then
+    -destination 'platform=macOS' -derivedDataPath "$DERIVED" $SIGN_OVERRIDES build > "$LOG" 2>&1; then
     echo "构建失败，错误如下（完整日志：${LOG}）："
     grep -E "error:" "$LOG" | head -20 || tail -30 "$LOG"
     exit 1
@@ -79,7 +90,7 @@ echo "    签名 $(codesign -dv --verbose=4 "$APP" 2>&1 | sed -n 's/^Authority=/
 echo "==> 3/6 暂存"
 TMP="$(mktemp -d -t jietu-dmg)"
 STAGE="$TMP/stage"
-RW="$TMP/Jietu-rw.asif"
+RW="$TMP/Jietu-rw"
 # 挂载点的最后一段就是 Finder 认的卷名，所以带上 pid 保证唯一——
 # 重名时 Finder 会认到另一个同名卷（比如已经挂着的同名 DMG）上，版式就白排了。
 MNT="$TMP/mnt-$$"
@@ -87,11 +98,79 @@ VERIFY_MNT="$TMP/verify"
 MOUNTED=0
 VERIFY_MOUNTED=0
 cleanup() {
-    [ "$VERIFY_MOUNTED" -eq 1 ] && diskutil eject "$VERIFY_MNT" > /dev/null 2>&1 || true
-    [ "$MOUNTED" -eq 1 ] && diskutil eject "$MNT" > /dev/null 2>&1 || true
+    [ "$VERIFY_MOUNTED" -eq 1 ] && detach_mount "$VERIFY_MNT" || true
+    [ "$MOUNTED" -eq 1 ] && detach_mount "$MNT" || true
     rm -rf "$TMP"
 }
 trap cleanup EXIT
+
+# ---------- 镜像工具 ----------
+# macOS 26 起 hdiutil 已废弃（每次调用都警告），优先用 diskutil image；
+# CI 的 macOS 15 runner 上还没有这个子命令，回退 hdiutil。
+# 两条路都要留着：本地新系统走 diskutil，runner 走 hdiutil。
+# 可用 JIETU_IMAGE_TOOL=diskutil|hdiutil 强制，便于在两种系统上验证同一条路径。
+IMAGE_TOOL="${JIETU_IMAGE_TOOL:-}"
+if [ -z "$IMAGE_TOOL" ]; then
+    if diskutil image create blank --help > /dev/null 2>&1; then
+        IMAGE_TOOL="diskutil"
+    else
+        IMAGE_TOOL="hdiutil"
+    fi
+fi
+# ASIF（稀疏镜像）也是新系统才有；同样大小的逻辑卷，它落盘只有十几 MB。
+RW_SUFFIX=".dmg"
+RW_FORMAT="UDRW"
+if [ "$IMAGE_TOOL" = "diskutil" ]; then
+    RW_SUFFIX=".asif"
+    RW_FORMAT="RAW"
+    diskutil image create blank --help 2>&1 | grep -q ASIF && RW_FORMAT="ASIF"
+fi
+RW="$TMP/Jietu-rw$RW_SUFFIX"
+
+create_rw_image() {  # $1 路径  $2 卷名
+    # 两边都用「从暂存目录建可写镜像」这一形式：
+    # hdiutil 在 macOS 26 起不再接受「空白镜像 + -format」（要求 -format 必须配 -srcfolder），
+    # 而带 -srcfolder 的老写法在新旧系统上都能用。
+    if [ "$IMAGE_TOOL" = "diskutil" ]; then
+        diskutil image create from "$STAGE" --volumeName "$2" --format "$RW_FORMAT" "$1" > /dev/null
+    else
+        hdiutil create -srcfolder "$STAGE" -volname "$2" -fs APFS -format UDRW -ov "$1" > /dev/null
+    fi
+}
+
+attach_image() {  # $1 镜像  $2 挂载点  $3 只读(1/0)
+    if [ "$IMAGE_TOOL" = "diskutil" ]; then
+        if [ "$3" -eq 1 ]; then
+            diskutil image attach --readOnly --nobrowse --mountPoint "$2" "$1" > /dev/null
+        else
+            # 不能加 --nobrowse：排版那步要让 Finder 看见这个卷。
+            diskutil image attach --mountPoint "$2" "$1" > /dev/null
+        fi
+    else
+        if [ "$3" -eq 1 ]; then
+            hdiutil attach "$1" -readonly -nobrowse -mountpoint "$2" > /dev/null
+        else
+            hdiutil attach "$1" -nobrowse -mountpoint "$2" > /dev/null
+        fi
+    fi
+}
+
+detach_mount() {  # $1 挂载点
+    diskutil eject "$1" > /dev/null 2>&1 || hdiutil detach "$1" > /dev/null 2>&1 || true
+}
+
+convert_image() {  # $1 源镜像  $2 目标  $3 卷名
+    if [ "$IMAGE_TOOL" = "diskutil" ]; then
+        diskutil image create from "$1" --format UDZO --volumeName "$3" "$2" > /dev/null
+    else
+        hdiutil convert "$1" -format UDZO -imagekey zlib-level=9 -o "$2" > /dev/null
+    fi
+}
+
+# Finder 能不能被脚本指挥：CI / 没有图形会话时拿不到自动化授权，
+# 那种环境跳过版式（DMG 照样能用，只是回到系统默认版式），但要显眼地说出来。
+FINDER_OK=0
+osascript -e 'tell application "Finder" to get name of startup disk' > /dev/null 2>&1 && FINDER_OK=1
 
 mkdir -p "$STAGE"
 # ditto 比 cp -R 更能保真地带上资源分叉 / 扩展属性 / 权限位。
@@ -167,55 +246,56 @@ echo "==> 4/6 排版"
 mkdir -p "$DIST" "$MNT"
 rm -f "$DMG"
 # 先建一个可写镜像：Finder 的版式只能写进可写的卷里，写完再转成压缩镜像。
-# 用 ASIF（稀疏镜像）而不是 RAW——同样 200MB 的逻辑大小，落盘只有十几 MB。
-SIZE_MB=$(( $(du -sm "$STAGE" | cut -f1) + 64 ))
-diskutil image create blank --size "${SIZE_MB}m" --fs APFS \
-    --volumeName "$VOLNAME" --format ASIF "$RW" > /dev/null \
-    || { echo "创建可写镜像失败"; exit 1; }
-diskutil image attach --mountPoint "$MNT" "$RW" > /dev/null || { echo "挂载可写镜像失败"; exit 1; }
+# 内容在建镜像时就从暂存目录拷进去了，不用再 ditto 一遍。
+echo "    镜像工具 ${IMAGE_TOOL}（${RW_FORMAT}）"
+create_rw_image "$RW" "$VOLNAME" || { echo "创建可写镜像失败"; exit 1; }
+attach_image "$RW" "$MNT" 0 || { echo "挂载可写镜像失败"; exit 1; }
 MOUNTED=1
-
-ditto "$STAGE/." "$MNT/"
+[ -d "$MNT/$APP_NAME.app" ] || { echo "可写镜像里没有 $APP_NAME.app"; exit 1; }
+[ -L "$MNT/Applications" ] || { echo "可写镜像里没有 Applications 软链"; exit 1; }
 
 # Finder 排版：背景图、窗口尺寸、图标位置都靠这一步落到 .DS_Store。
 # Finder 写 .DS_Store 是异步的，偶尔要等一下才落盘，所以失败就重试几次。
-LAYOUT_LOG="$TMP/layout.log"
-LAYOUT_OK=0
-for attempt in 1 2 3; do
-    if osascript Scripts/dmg-layout.applescript \
-        "$(basename "$MNT")" "$VOLNAME" \
-        "$DMG_W" "$DMG_H" "$TITLEBAR" "$ICON_SIZE" "$TEXT_SIZE" \
-        ${SLOT_APP//,/ } ${SLOT_APPLICATIONS//,/ } ${SLOT_HELPER//,/ } \
-        > "$LAYOUT_LOG" 2>&1 && [ -f "$MNT/.DS_Store" ]; then
-        LAYOUT_OK=1
-        break
-    fi
-    [ "$attempt" -lt 3 ] && { echo "    第 ${attempt} 次排版没落盘，重试…"; sleep 2; }
-done
+if [ "$FINDER_OK" -eq 1 ]; then
+    LAYOUT_LOG="$TMP/layout.log"
+    LAYOUT_OK=0
+    for attempt in 1 2 3; do
+        if osascript Scripts/dmg-layout.applescript \
+            "$(basename "$MNT")" "$VOLNAME" \
+            "$DMG_W" "$DMG_H" "$TITLEBAR" "$ICON_SIZE" "$TEXT_SIZE" \
+            ${SLOT_APP//,/ } ${SLOT_APPLICATIONS//,/ } ${SLOT_HELPER//,/ } \
+            > "$LAYOUT_LOG" 2>&1 && [ -f "$MNT/.DS_Store" ]; then
+            LAYOUT_OK=1
+            break
+        fi
+        [ "$attempt" -lt 3 ] && { echo "    第 ${attempt} 次排版没落盘，重试…"; sleep 2; }
+    done
 
-if [ "$LAYOUT_OK" -eq 1 ]; then
-    echo "    版式已写入（$((DMG_W + BLEED_X))x$((DMG_H + BLEED_Y)) 出血，图标 ${ICON_SIZE}px）"
+    if [ "$LAYOUT_OK" -eq 1 ]; then
+        echo "    版式已写入（$((DMG_W + BLEED_X))x$((DMG_H + BLEED_Y)) 出血，图标 ${ICON_SIZE}px）"
+    else
+        # Finder 明明可用却排不上：这是真 bug（比如卷名撞车把版式写到别的卷上），别放过去。
+        echo "排版失败，最后一次的输出如下："
+        sed -n '1,10p' "$LAYOUT_LOG" | sed 's/^/      /'
+        exit 1
+    fi
 else
-    # 没有 .DS_Store 的版本体验差很多（图标堆在左上角、没有背景图），不当成小毛病放过。
-    echo "排版失败，最后一次的输出如下："
-    sed -n '1,10p' "$LAYOUT_LOG" | sed 's/^/      /'
-    exit 1
+    # CI / 无图形会话：拿不到 Finder 自动化授权，版式只能降级，但不该拦住发布。
+    echo "::warning::Finder 不可用（无图形会话或未授予自动化权限），跳过 DMG 窗口版式，本次用系统默认版式"
 fi
 
 sync
 sleep 1
-diskutil eject "$MNT" > /dev/null || { echo "卸载可写镜像失败"; exit 1; }
+detach_mount "$MNT" || { echo "卸载可写镜像失败"; exit 1; }
 MOUNTED=0
 
-diskutil image create from "$RW" --format UDZO --volumeName "$VOLNAME" "$DMG" > /dev/null \
-    || { echo "转换压缩镜像失败"; exit 1; }
+convert_image "$RW" "$DMG" "$VOLNAME" || { echo "转换压缩镜像失败"; exit 1; }
 rm -f "$RW"
 
 # ---------- 5/6 挂载复验 ----------
 echo "==> 5/6 挂载复验"
 mkdir -p "$VERIFY_MNT"
-diskutil image attach --readOnly --nobrowse --mountPoint "$VERIFY_MNT" "$DMG" > /dev/null \
-    || { echo "复验挂载失败：$DMG"; exit 1; }
+attach_image "$DMG" "$VERIFY_MNT" 1 || { echo "复验挂载失败：$DMG"; exit 1; }
 VERIFY_MOUNTED=1
 
 [ -d "$VERIFY_MNT/$APP_NAME.app" ] || { echo "镜像里没有 $APP_NAME.app"; exit 1; }
@@ -223,14 +303,16 @@ VERIFY_MOUNTED=1
 # 安装说明已经画进背景图，那份 txt 不该再出现——出现了就是这脚本漏改。
 [ ! -e "$VERIFY_MNT/00-请先读我.txt" ] || { echo "镜像里还留着 00-请先读我.txt"; exit 1; }
 [ -f "$VERIFY_MNT/.background/background.png" ] || { echo "镜像里没有窗口背景图"; exit 1; }
-[ -f "$VERIFY_MNT/.DS_Store" ] || { echo "镜像里没有 .DS_Store，版式会丢"; exit 1; }
+if [ "$FINDER_OK" -eq 1 ]; then
+    [ -f "$VERIFY_MNT/.DS_Store" ] || { echo "镜像里没有 .DS_Store，版式会丢"; exit 1; }
+fi
 # 挂载后再验一次签名：能同时挡住「镜像损坏」和「拷贝过程改了文件」。
 codesign --verify --deep --strict "$VERIFY_MNT/$APP_NAME.app" || { echo "镜像内签名校验不通过"; exit 1; }
 INSTALLED_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
     "$VERIFY_MNT/$APP_NAME.app/Contents/Info.plist")"
 [ "$INSTALLED_VERSION" = "$VERSION" ] || { echo "镜像内版本($INSTALLED_VERSION) 与构建($VERSION) 不一致"; exit 1; }
 
-diskutil eject "$VERIFY_MNT" > /dev/null || true
+detach_mount "$VERIFY_MNT"
 VERIFY_MOUNTED=0
 
 # ---------- 6/6 输出 ----------

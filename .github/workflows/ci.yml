@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -13,25 +14,36 @@ concurrency:
 jobs:
   build-and-test:
     name: Build & Test
-    runs-on: macos-15
+    # 工程的部署目标是 macOS 26，必须跑在 macOS 26 的 runner 上：
+    # macos-15 上既没有 Xcode 26，测试宿主也起不来（deployment target 对不上）。
+    runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.app || sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+        run: |
+          set -euo pipefail
+          XCODE="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+          [ -n "$XCODE" ] || XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Using ${XCODE}"
+          sudo xcode-select -s "$XCODE"
 
+      # pipefail 不能省：否则管道的状态取的是 xcbeautify（它总是返回 0），
+      # 构建失败也会判成功——之前 CI 一直显示绿，就是这么来的。
       - name: Build (Debug)
         run: |
+          set -o pipefail
           xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
             -destination 'platform=macOS' -derivedDataPath .build \
             CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Automatic \
             build \
-            | xcbeautify --renderer github-actions || true
+            | xcbeautify --renderer github-actions
 
       - name: Test
         run: |
+          set -o pipefail
           xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
             -destination 'platform=macOS' -derivedDataPath .build \
             CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Automatic \
             test \
-            | xcbeautify --renderer github-actions || true
+            | xcbeautify --renderer github-actions

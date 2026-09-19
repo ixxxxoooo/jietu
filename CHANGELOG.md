@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.0.3] — 2026-09-20
+
 ### Changed
 - Redesigned the DMG installer window: a 660×420 layout on custom artwork, with fixed positions for `Jietu.app`, `Applications` and `Fix Gatekeeper.app`, centered on screen and without toolbar/status bar
 - Install notes are now drawn on the DMG window artwork instead of shipped as a text file
@@ -13,6 +15,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Removed
 - `00-请先读我.txt` from the DMG — its install notes moved into the window artwork
+
+### Fixed
+- Release workflow: let `build-dmg.sh` do the build so it can fall back to ad-hoc signing when the self-signed `Jietu` certificate is absent, instead of failing with `No certificate matching 'Jietu' found`
+- Package the DMG with either `diskutil image` (macOS 26+) or `hdiutil` (older systems), so the same script works locally and on CI
+- Run CI and Release on `macos-26` — the project's deployment target is macOS 26, and on macOS 15 runners neither Xcode 26 nor the test host is usable
+- Stop masking CI failures: the build/test pipelines piped into `xcbeautify` without `pipefail`, so a failing build was reported as a success
 
 ## [0.0.2] — 2026-09-19
 
@@ -33,5 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Live Text (OCR), Translation, Pin, Color picker
 - Global hotkeys, theme support, recent history
 
-[Unreleased]: https://github.com/ixxxxoooo/jietu/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/ixxxxoooo/jietu/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/ixxxxoooo/jietu/compare/v0.0.2...v0.0.3
+[0.0.2]: https://github.com/ixxxxoooo/jietu/releases/tag/v0.0.2
 [0.0.1]: https://github.com/ixxxxoooo/jietu/releases/tag/v0.0.1

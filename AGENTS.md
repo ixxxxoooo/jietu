@@ -84,6 +84,24 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
   签名身份，「屏幕录制」授权会出现「API 说已授权、列表里却看不到这个 App」的怪状态。
   关掉后主可执行文件是完整二进制（~6.5MB）。
 
+## 发布（DMG / Release）
+
+打 tag（`v*`）会触发 `.github/workflows/release.yml` → `bash Scripts/build-dmg.sh`：
+构建、签名、窗口排版、打包、复验全在这一个脚本里，workflow 不再单独 `xcodebuild`
+（那样会绕开脚本里的签名回退，之前三次 Release 就是挂在 `No certificate matching 'Jietu'`）。
+
+- **签名**：本机有自签名证书 `Jietu` 就用它；没有（CI runner）自动退回 ad-hoc，
+  所以同一个脚本本地和 CI 都能跑。任何情况下都别用 `CODE_SIGNING_ALLOWED=NO`。
+- **镜像工具**：优先 `diskutil image`（macOS 26+），旧系统回退 `hdiutil`，脚本自己探测；
+  可用 `JIETU_IMAGE_TOOL=diskutil|hdiutil` 强制某条路径做验证。
+- **窗口版式**（背景图 + 图标位置）靠 Finder 把设置写进镜像的 `.DS_Store`：本机排不上直接失败
+  （那是真 bug）；CI 上拿不到 Finder 自动化授权则跳过并打 `::warning::`，DMG 照样出，
+  只是回到系统默认版式。
+- 只想验打包流程、不发布：在 Actions 里手动跑 `Release`（`workflow_dispatch`），
+  它只构建并上传 artifact，不建 release。
+- CI 与 Release 都跑在 **`macos-26`** runner 上：工程部署目标是 macOS 26，
+  macos-15 上既没有 Xcode 26，测试宿主也起不来。
+
 ## 单实例
 
 Debug / Release 各自只有一个实例：
