@@ -350,6 +350,14 @@ final class OverlayCanvasView: NSView {
         (restoredBaseImage, restoredImageFrame)
     }
 
+    /// 自检用：底图容器与底图图层在容器里的 frame。
+    ///
+    /// 裁剪框悬着（还没确认）时，底图必须**整张**画着：容器 = 底图 frame、图层 = 原点起满铺。
+    /// 要是容器收到裁剪框上，框外就会露出冻结屏幕，看着像在屏幕上重新框选区。
+    var debugRestoredLayerFrames: (container: CGRect, image: CGRect) {
+        (restoredContainerLayer.frame, restoredImageLayer.frame)
+    }
+
     /// 自检用：标注层的 frame。裁剪 / 缩放时它必须贴**底图**，不能跟着裁剪框缩。
     var debugAnnotationLayerFrame: CGRect { annotationLayer.frame }
 
@@ -821,18 +829,15 @@ final class OverlayCanvasView: NSView {
             restoredImageLayer.contents = nil
             return
         }
+        // 底图**整张**画在它自己的 frame 上，不跟着裁剪框裁。
+        //
+        // 裁剪框只标记「将要保留哪一块」，框外交给压暗层压暗就够了。要是把框外裁掉，
+        // 露出来的是下面那张冻结屏幕（压暗 α 只有 0.45，还看得清），看着就成了
+        // 「在屏幕上重新框一块区域」，而不是「在这张图上裁」。
         let baseFrame = restoredImageFrame ?? selection
-        restoredContainerLayer.frame = selection
+        restoredContainerLayer.frame = baseFrame
         restoredContainerLayer.isHidden = false
-
-        let relativeX = baseFrame.minX - selection.minX
-        let relativeY = baseFrame.minY - selection.minY
-        restoredImageLayer.frame = CGRect(
-            x: relativeX,
-            y: relativeY,
-            width: baseFrame.width,
-            height: baseFrame.height
-        )
+        restoredImageLayer.frame = CGRect(origin: .zero, size: baseFrame.size)
         restoredImageLayer.contents = restoredBaseImage
     }
 

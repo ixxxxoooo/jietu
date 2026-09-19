@@ -409,6 +409,67 @@ struct InlineToolbarTests {
         #expect(canvas.debugCropImageSize == CGSize(width: 500, height: 300))
     }
 
+    @Test("裁剪：拖动裁剪框时底图整张留在画面上（框外不该露出冻结屏幕）")
+    func baseImageStaysWholeWhileCropping() {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        #expect(canvas.debugSelectTool(.crop))
+
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 500, y: 435)))
+        canvas.mouseDragged(with: Self.mouse(.leftMouseDragged, at: NSPoint(x: 300, y: 300)))
+        canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 300, y: 300)))
+
+        let frames = canvas.debugRestoredLayerFrames
+        #expect(
+            frames.container == CGRect(x: 100, y: 135, width: 800, height: 600),
+            "容器要停在底图 frame 上，不能收到裁剪框上（否则框外露出屏幕，看着像重新选区）"
+        )
+        #expect(frames.image == CGRect(x: 0, y: 0, width: 800, height: 600), "底图整张画着")
+    }
+
+    @Test("裁剪：连着裁两次是在上一次的结果上继续裁（像素对得上）")
+    func cropIsCumulativeOnPreviousResult() throws {
+        // 渐变底图：任何偏移 / 用错基准都会在像素上露出来。
+        let original = Self.makeGradientImage(width: 1600, height: 1200)
+        let canvas = Self.makeCanvas(canvas: CGSize(width: 1000, height: 800))
+        canvas.restoreImageForInlineEditing(original)
+        // 底图 1600×1200 px（2x）居中：frame = (100, 135, 800, 600)。
+        #expect(canvas.debugSelectTool(.crop))
+
+        // 第 1 次：留屏幕 (200, 300, 500, 400)。
+        let first = CGRect(x: 200, y: 300, width: 500, height: 400)
+        Self.cropDrag(canvas, to: first)
+        Self.confirmCrop(canvas, atPoint: CGPoint(x: 400, y: 400))
+
+        let frame0 = CGRect(x: 100, y: 135, width: 800, height: 600)
+        let firstPixels = Self.pixelRect(first, in: frame0, imageOrigin: .zero, scale: 2)
+        let firstBase = try #require(canvas.debugRestoredBase.image)
+        #expect(canvas.debugRestoredBase.frame == first)
+        #expect(
+            Self.samePixels(firstBase, original.cropping(to: firstPixels)),
+            "第一次裁剪要正好留下原图对应的那一片"
+        )
+
+        // 第 2 次：在**上一次的结果**里再留一块 (250, 350, 300, 250)。
+        #expect(canvas.debugSelectTool(.crop))
+        let second = CGRect(x: 250, y: 350, width: 300, height: 250)
+        Self.cropDrag(canvas, to: second)
+        Self.confirmCrop(canvas, atPoint: CGPoint(x: 400, y: 450))
+
+        let inner = Self.pixelRect(second, in: first, imageOrigin: .zero, scale: 2)
+        let expected = original.cropping(to: CGRect(
+            x: firstPixels.minX + inner.minX,
+            y: firstPixels.minY + inner.minY,
+            width: inner.width,
+            height: inner.height
+        ))
+        let finalBase = try #require(canvas.debugRestoredBase.image)
+        #expect(finalBase.width == 600 && finalBase.height == 500)
+        #expect(
+            Self.samePixels(finalBase, expected),
+            "第二次裁剪要基于第一次的结果继续裁，而不是回到原图重新选区"
+        )
+    }
+
     // MARK: - 就地编辑测试脚手架
 
     /// 造一块普通原地编辑画布：快照底图与画布同比例（`effectiveScale` == `scale`）。
@@ -473,6 +534,85 @@ struct InlineToolbarTests {
             clickCount: clickCount,
             pressure: type == .leftMouseDown ? 1 : 0
         )!
+    }
+
+    /// 裁剪工具下从矩形右下角拖到左上角（即「从中间框出这块」），松手不确认。
+    private static func cropDrag(_ canvas: OverlayCanvasView, to rect: CGRect) {
+        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: rect.maxX, y: rect.maxY)))
+        canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: rect.minX, y: rect.minY)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: rect.minX, y: rect.minY)))
+    }
+
+    /// 双击确认裁剪。
+    private static func confirmCrop(_ canvas: OverlayCanvasView, atPoint point: CGPoint) {
+        canvas.mouseDown(with: mouse(.leftMouseDown, at: point, clickCount: 2))
+        canvas.mouseUp(with: mouse(.leftMouseUp, at: point, clickCount: 2))
+    }
+
+    /// 屏幕矩形 → 图像像素矩形。`frame` 是该图在屏幕上的位置，`imageOrigin` 是这张图左上角在
+    /// **原始底图**里的像素坐标（第一次裁剪传 .zero，之后传上一层裁出来的原点）。
+    private static func pixelRect(
+        _ rect: CGRect,
+        in frame: CGRect,
+        imageOrigin: CGPoint,
+        scale: CGFloat
+    ) -> CGRect {
+        CGRect(
+            x: imageOrigin.x + (rect.minX - frame.minX) * scale,
+            y: imageOrigin.y + (frame.maxY - rect.maxY) * scale,
+            width: rect.width * scale,
+            height: rect.height * scale
+        )
+    }
+
+    /// 渐变底图：斜向红→绿→蓝，任何位置差错都会在像素上露出来。
+    private static func makeGradientImage(width: Int, height: Int) -> CGImage {
+        let space = CGColorSpaceCreateDeviceRGB()
+        let ctx = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: space,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        let gradient = CGGradient(
+            colorsSpace: space,
+            colors: [
+                CGColor(red: 1, green: 0, blue: 0, alpha: 1),
+                CGColor(red: 0, green: 1, blue: 0, alpha: 1),
+                CGColor(red: 0, green: 0, blue: 1, alpha: 1),
+            ] as CFArray,
+            locations: [0, 0.5, 1]
+        )!
+        ctx.drawLinearGradient(
+            gradient,
+            start: .zero,
+            end: CGPoint(x: width, y: height),
+            options: []
+        )
+        return ctx.makeImage()!
+    }
+
+    /// 逐点比较两张图（尺寸一致时）。
+    private static func samePixels(_ a: CGImage?, _ b: CGImage?) -> Bool {
+        guard let a, let b, a.width == b.width, a.height == b.height else { return false }
+        let stepX = max(1, a.width / 12)
+        let stepY = max(1, a.height / 9)
+        for y in stride(from: 0, to: a.height, by: stepY) {
+            for x in stride(from: 0, to: a.width, by: stepX) {
+                let point = CGPoint(x: x, y: y)
+                guard
+                    let left = PixelSampler.sample(a, atPixel: point),
+                    let right = PixelSampler.sample(b, atPixel: point),
+                    left.red == right.red,
+                    left.green == right.green,
+                    left.blue == right.blue
+                else { return false }
+            }
+        }
+        return true
     }
 
     @Test("原地编辑模式下滚轮与捏合可缩放图片选区")
