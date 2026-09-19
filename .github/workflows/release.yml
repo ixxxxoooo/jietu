@@ -47,7 +47,7 @@ jobs:
           echo "dmg_name=$(basename "$DMG_PATH")" >> "$GITHUB_OUTPUT"
 
       - name: Upload DMG as artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: Jietu-${{ github.ref_name }}
           path: ${{ steps.checksum.outputs.dmg_path }}
