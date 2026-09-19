@@ -104,7 +104,6 @@ final class QuickAccessPanelController {
                 self?.onSave?(image)
             },
             onAnnotate: { [weak self] in
-                self?.dismissEntry(id, animated: false)
                 self?.onAnnotate?(image)
             },
             onPin: { [weak self] in

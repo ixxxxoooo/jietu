@@ -374,6 +374,34 @@ struct QuickAccessTests {
         #expect(QuickAccessControlsView.diameter == 28)
     }
 
+    @Test("点击浮窗卡片进入预览不销毁浮窗")
+    func clickingCardToAnnotateKeepsCardAlive() {
+        let controller = QuickAccessPanelController()
+        let image = TestImage.solidBlack(side: 100)
+        var annotated = false
+        controller.onAnnotate = { _ in annotated = true }
+
+        controller.present(
+            image: image,
+            onDisplay: CGMainDisplayID(),
+            saveDirectory: FileManager.default.temporaryDirectory
+        )
+
+        #expect(controller.isVisible)
+        #expect(controller.panelsForTesting.count == 1)
+
+        // 模拟外部点击卡片触发 onAnnotate
+        controller.onAnnotate?(image)
+        #expect(annotated)
+        // 浮窗依然存在
+        #expect(controller.isVisible)
+        #expect(controller.panelsForTesting.count == 1)
+
+        // 只有手动关闭或超时才销毁
+        controller.dismiss()
+        #expect(!controller.isVisible)
+    }
+
     // MARK: - Helpers
 
     private func makeHostedControls() -> (NSView, QuickAccessControlsView) {

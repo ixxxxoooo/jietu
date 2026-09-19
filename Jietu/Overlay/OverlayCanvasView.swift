@@ -1506,6 +1506,13 @@ final class OverlayCanvasView: NSView {
         }
         cursorPoint = point
 
+        let wasSelecting: Bool
+        if case .selecting = interaction {
+            wasSelecting = true
+        } else {
+            wasSelecting = false
+        }
+
         switch interaction {
         case .pressing:
             // 单击：命中窗口
@@ -1581,6 +1588,12 @@ final class OverlayCanvasView: NSView {
             return
         }
 
+        // 浮窗预览模式：框选区域一松开鼠标就直接完成截图（不用双击 / 回车），交付浮窗与剪贴板。
+        if !inlineMode, !isRegionPickMode, !isRecordMode, wasSelecting, isSettled, selection != nil {
+            commit()
+            return
+        }
+
         // 滚动长图：松手也立刻把「手动 / 自动」浮出来（不用等鼠标停住，
         // 更不用按 ↵）；在点模式之前选区还能继续拖 / 缩放。
         if isRegionPickMode {
@@ -1621,6 +1634,90 @@ final class OverlayCanvasView: NSView {
     override func rightMouseDown(with event: NSEvent) {
         guard isInputArmed else { return }
         onCancel?()
+    }
+
+    // MARK: - Mouse Zoom (Wheel & Pinch) in Annotating Phase
+
+    override func scrollWheel(with event: NSEvent) {
+        guard isInputArmed, phase == .annotating, selection != nil else {
+            super.scrollWheel(with: event)
+            return
+        }
+
+        let delta: CGFloat
+        if event.hasPreciseScrollingDeltas {
+            delta = event.scrollingDeltaY * 0.005
+        } else {
+            delta = event.deltaY * 0.05
+        }
+        guard abs(delta) > 0.0001 else { return }
+
+        let factor = max(0.2, min(5.0, 1.0 + delta))
+        let point = convert(event.locationInWindow, from: nil)
+        zoomSelection(by: factor, at: point)
+    }
+
+    override func magnify(with event: NSEvent) {
+        guard isInputArmed, phase == .annotating, selection != nil else {
+            super.magnify(with: event)
+            return
+        }
+
+        let factor = 1.0 + event.magnification
+        guard factor > 0.01 else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        zoomSelection(by: factor, at: point)
+    }
+
+    private func zoomSelection(by factor: CGFloat, at point: CGPoint) {
+        guard let selection, selection.width > 0, selection.height > 0 else { return }
+        let currentBase = restoredBaseImage ?? cropImage
+        guard let image = currentBase else { return }
+
+        // 若之前尚未接管底图（普通截图原地编辑），缩放时提升到底图图层实现无拉伸高保真缩放
+        if restoredBaseImage == nil {
+            restoredBaseImage = image
+            restoredImageFrame = selection
+            preparePreviewBase()
+        }
+
+        let baseFrame = restoredImageFrame ?? selection
+        let mouseInSelection = CGPoint(x: point.x - selection.minX, y: point.y - selection.minY)
+        let aspectRatio = selection.width / selection.height
+
+        let screen = NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID } ?? NSScreen.main
+        let screenSize = screen?.visibleFrame.size ?? CGSize(width: 1920, height: 1080)
+        let maxSize = CGSize(width: screenSize.width * 3, height: screenSize.height * 3)
+
+        let newSelection = PinGeometry.zoomedFrame(
+            currentFrame: selection,
+            factor: factor,
+            mouseLocationInWindow: mouseInSelection,
+            aspectRatio: aspectRatio,
+            minSide: 60,
+            maxSize: maxSize
+        )
+
+        guard newSelection != selection else { return }
+
+        let scale = newSelection.width / selection.width
+        let newBaseFrame = CGRect(
+            x: newSelection.minX + (baseFrame.minX - selection.minX) * scale,
+            y: newSelection.minY + (baseFrame.minY - selection.minY) * scale,
+            width: baseFrame.width * scale,
+            height: baseFrame.height * scale
+        )
+
+        self.selection = newSelection
+        self.restoredImageFrame = newBaseFrame
+
+        updateRestoredImageLayer()
+        updateDimPath()
+        updateSelectionLayers()
+        updateAnnotationLayer()
+        updateInlineSelectionLayers()
+        fitInlineTextField()
+        layoutToolbars()
     }
 
     override func keyDown(with event: NSEvent) {

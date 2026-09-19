@@ -1070,7 +1070,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.saveAs(image)
         }
         quickAccess.onAnnotate = { [weak self] image in
-            self?.quickAccess.dismiss()
             self?.openInlineEditor(image)
         }
         quickAccess.onPin = { image in
