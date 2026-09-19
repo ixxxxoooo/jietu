@@ -43,6 +43,29 @@ struct MenuBarTests {
         #expect(callbackCalled == true)
     }
 
+    @Test("菜单里有「取色器」，点它走 onPickColor")
+    @MainActor
+    func colorPickerMenuItemTriggersCallback() {
+        let menuBar = MenuBarController()
+        var callbackCalled = false
+        menuBar.onPickColor = {
+            callbackCalled = true
+        }
+
+        let menu = menuBar.menuForTesting
+        guard let item = menu.items.first(where: { $0.title == "取色器" }) else {
+            Issue.record("未找到取色器菜单项")
+            return
+        }
+
+        #expect(item.action != nil)
+        #expect(item.target != nil)
+        if let target = item.target, let action = item.action {
+            _ = target.perform(action, with: item)
+        }
+        #expect(callbackCalled == true)
+    }
+
     @Test("区域 / 窗口 / 全屏三个录制入口平铺在顶层（与截图同一列，中间一条分隔线），各走各的回调")
     @MainActor
     func recordingMenuItemsAreDistinct() {
@@ -56,14 +79,14 @@ struct MenuBarTests {
         // 两家族都平铺在顶层，中间**只用一条分隔线**隔开（不收起子菜单）。
         #expect(!menu.items.contains { $0.title == "截图" && $0.submenu != nil })
         #expect(!menu.items.contains { $0.title == "录制" && $0.submenu != nil })
-        let head = menu.items.prefix(9).map { $0.isSeparatorItem ? "———" : $0.title }
+        let head = menu.items.prefix(10).map { $0.isSeparatorItem ? "———" : $0.title }
         #expect(
             Array(head) == [
-                "区域截图", "窗口截图", "全屏截图", "定时截图", "滚动长图…",
+                "区域截图", "窗口截图", "全屏截图", "定时截图", "滚动长图…", "取色器",
                 "———",
                 "区域录制", "窗口录制", "全屏录制",
             ],
-            "截图与录制该是相邻两组，中间一条分隔线"
+            "截图（含滚动长图 / 取色器）与录制该是相邻两组，中间一条分隔线"
         )
 
         let want = ["区域录制", "窗口录制", "全屏录制"]

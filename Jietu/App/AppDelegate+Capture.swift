@@ -101,4 +101,22 @@ extension AppDelegate {
             handleAreaCapture()
         }
     }
+
+    /// 菜单「取色器」：弹系统放大镜选一个像素，选中直接复制色号（`#RRGGBB`）。
+    ///
+    /// 取色与复制都在 `ScreenColorPicker` 里（它包的是系统采样器），这里只补一条回执——
+    /// 放大镜一收，用户没法确认到底复制到没有。
+    func pickColorFromScreen() {
+        ScreenColorPicker.shared.pick { [weak self] picked in
+            guard let self, let picked else { return }  // nil = 用户按 Esc 取消，什么都不做
+            logger.notice("picked color \(picked.hex, privacy: .public)")
+            let toast = colorToast ?? ToastPanel()
+            colorToast = toast
+            toast.present(
+                "已复制 \(picked.hex)",
+                swatchColor: picked.color,
+                near: NSEvent.mouseLocation
+            )
+        }
+    }
 }

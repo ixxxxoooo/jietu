@@ -24,6 +24,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onRecordWindow: (() -> Void)?
     var onRecordFullScreen: (() -> Void)?
     var onOpenRecent: ((URL) -> Void)?
+    /// 取色器：弹系统放大镜选一个像素，选中直接复制色号。
+    var onPickColor: (() -> Void)?
     var onClearRecents: (() -> Void)?
     var onOpenFolder: (() -> Void)?
 
@@ -107,6 +109,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(
             hotkeyItem(.scrollingCapture, "滚动长图…", #selector(handleCaptureScrolling), "scroll")
         )
+        menu.addItem(item("取色器", #selector(handlePickColor), symbol: "eyedropper.halffull"))
 
         menu.addItem(.separator())
 
@@ -389,6 +392,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func handleCaptureScrolling() {
         onCaptureScrolling?()
+    }
+
+    @objc private func handlePickColor() {
+        onPickColor?()
     }
 
     @objc private func handleOpenRecent(_ sender: NSMenuItem) {

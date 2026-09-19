@@ -45,6 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// GIF 导出的进度浮窗。
     var gifExportPanel: GifExportPanel?
 
+    /// 取色完成后的回执浮窗（复制到色号后说一句「已复制 #RRGGBB」）。
+    var colorToast: ToastPanel?
+
     /// 滚动长图的右侧实时预览。
     var scrollingPreview: ScrollingPreviewPanel?
     /// 本次滚动长图的选区（含三套换算好的坐标）：用户中途改选区时跟着更新。
@@ -125,6 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onCaptureFullScreen = { [weak self] in self?.handleFullScreenCapture() }
         menuBar.onCaptureTimed = { [weak self] seconds in self?.handleTimedCapture(after: seconds) }
         menuBar.onCaptureScrolling = { [weak self] in self?.handleScrollingCapture() }
+        menuBar.onPickColor = { [weak self] in self?.pickColorFromScreen() }
         menuBar.hotkeyProvider = { [weak self] action in self?.settings.hotkey(for: action) }
         menuBar.onRecordRegion = { [weak self] in self?.handleScreenRecording(mode: .region) }
         menuBar.onRecordWindow = { [weak self] in self?.handleScreenRecording(mode: .window) }

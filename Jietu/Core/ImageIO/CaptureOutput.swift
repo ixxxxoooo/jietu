@@ -71,6 +71,14 @@ enum CaptureOutput {
         return pasteboard.writeObjects([item])
     }
 
+    /// 往剪贴板写一段文本（取色器复制色号用）。
+    @discardableResult
+    static func copyToPasteboard(_ text: String) -> Bool {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        return pasteboard.setString(text, forType: .string)
+    }
+
     // MARK: - Disk
 
     /// 保存为图片，文件名由模板展开（默认 `Jietu 2026-09-15 at 20.01.23.png`，同名自动加序号）。
