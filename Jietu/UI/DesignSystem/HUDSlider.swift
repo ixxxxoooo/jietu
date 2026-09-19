@@ -10,11 +10,70 @@ struct HUDSlider: View {
     var step: CGFloat = 1
     var trackWidth: CGFloat = 96
     var trackHeight: CGFloat = 14
+    /// 竖排（主工具栏停到左右侧、二级菜单也竖着排时）：轨道立起来，往上拖 = 调大。
+    var isVertical: Bool = false
 
     private let thumbWidth: CGFloat = 32
     private let thumbHeight: CGFloat = 18
 
     var body: some View {
+        if isVertical {
+            verticalBody
+        } else {
+            horizontalBody
+        }
+    }
+
+    /// 竖排：轨道从下往上由细到粗，药丸在轨道上滑动。
+    private var verticalBody: some View {
+        ZStack(alignment: .bottom) {
+            verticalWedgePath(CGSize(width: thumbHeight, height: trackWidth))
+                .fill(
+                    Theme.Colors.adaptive(
+                        dark: .srgbInk(1, alpha: 0.85),
+                        light: .srgbInk(0, alpha: 0.92)
+                    )
+                )
+                .frame(width: thumbHeight, height: trackWidth)
+
+            thumb(size: CGSize(width: thumbHeight, height: thumbWidth))
+                .offset(y: -verticalThumbOffset)
+        }
+        .frame(width: thumbHeight, height: trackWidth)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { gesture in
+                    updateValue(atTouchY: gesture.location.y)
+                }
+        )
+    }
+
+    /// 竖排轨道：把横排那条楔形转 90°（下细上粗）。
+    private func verticalWedgePath(_ size: CGSize) -> Path {
+        wedgePath(width: size.height, height: size.width)
+            .applying(CGAffineTransform(a: 0, b: -1, c: 1, d: 0, tx: 0, ty: size.height))
+    }
+
+    /// 竖排时药丸的位移（向上为正）。
+    private var verticalThumbOffset: CGFloat {
+        let span = range.upperBound - range.lowerBound
+        guard span > 0 else { return 0 }
+        let progress = (value - range.lowerBound) / span
+        let clampedProgress = min(max(progress, 0), 1)
+        let travel = max(0, trackWidth - thumbWidth)
+        return clampedProgress * travel
+    }
+
+    /// 竖排的取值：视图坐标原点在左上，越往上值越大。
+    private func updateValue(atTouchY touchY: CGFloat) {
+        let travel = max(1, trackWidth - thumbWidth)
+        let clampedY = min(max(touchY - thumbWidth / 2, 0), travel)
+        let progress = 1 - clampedY / travel
+        setValue(progress: progress)
+    }
+
+    private var horizontalBody: some View {
         ZStack(alignment: .leading) {
             // 楔形轨道底图
             wedgePath(width: trackWidth, height: trackHeight)
@@ -26,9 +85,24 @@ struct HUDSlider: View {
                 )
                 .frame(width: trackWidth, height: trackHeight)
 
-            // 药丸徽标（Thumb）
-            ZStack {
-                RoundedRectangle(cornerRadius: thumbHeight / 2, style: .continuous)
+            thumb(size: CGSize(width: thumbWidth, height: thumbHeight))
+                .offset(x: thumbOffset)
+        }
+        .frame(width: trackWidth, height: thumbHeight)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { gesture in
+                    updateValue(at: gesture.location.x)
+                }
+        )
+    }
+
+    /// 药丸徽标（Thumb）：横排竖排共用，只是长边朝着轨道方向、圆角按短边算。
+    private func thumb(size: CGSize) -> some View {
+            let radius = min(size.width, size.height) / 2
+            return ZStack {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(
                         Theme.Colors.adaptive(
                             dark: .srgbInk(0.22, alpha: 0.98),
@@ -36,7 +110,7 @@ struct HUDSlider: View {
                         )
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: thumbHeight / 2, style: .continuous)
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
                             .strokeBorder(
                                 Theme.Colors.adaptive(
                                     dark: .srgbInk(1, alpha: 0.18),
@@ -63,17 +137,7 @@ struct HUDSlider: View {
                     .lineLimit(1)
                     .allowsHitTesting(false)
             }
-            .frame(width: thumbWidth, height: thumbHeight)
-            .offset(x: thumbOffset)
-        }
-        .frame(width: trackWidth, height: thumbHeight)
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { gesture in
-                    updateValue(at: gesture.location.x)
-                }
-        )
+            .frame(width: size.width, height: size.height)
     }
 
     /// 绘制细到粗楔形轨道
@@ -128,7 +192,11 @@ struct HUDSlider: View {
     private func updateValue(at touchX: CGFloat) {
         let travelWidth = max(1, trackWidth - thumbWidth)
         let clampedX = min(max(touchX - thumbWidth / 2, 0), travelWidth)
-        let progress = clampedX / travelWidth
+        setValue(progress: clampedX / travelWidth)
+    }
+
+    /// 按进度（0…1）落到最近的档位上。
+    private func setValue(progress: CGFloat) {
         let raw = range.lowerBound + progress * (range.upperBound - range.lowerBound)
         let stepped = round(raw / step) * step
         let clamped = min(max(stepped, range.lowerBound), range.upperBound)

@@ -65,9 +65,11 @@ struct ShapeFillModeIcon: View {
 struct ShapeFillModePicker: View {
     @Binding var selectedMode: ShapeFillMode
     var isCircle: Bool = false
+    /// 竖排（二级菜单竖着排时）。
+    var isVertical: Bool = false
 
     var body: some View {
-        HStack(spacing: 3) {
+        stack {
             ForEach(ShapeFillMode.allCases) { mode in
                 let isSelected = selectedMode == mode
                 Button {
@@ -90,6 +92,15 @@ struct ShapeFillModePicker: View {
                 .focusEffectDisabled()
                 .help(mode.title)
             }
+        }
+    }
+
+    /// 横排 / 竖排两种走向（竖排时二级菜单是窄窄一条）。
+    @ViewBuilder private func stack<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        if isVertical {
+            VStack(spacing: 2, content: content)
+        } else {
+            HStack(spacing: 3, content: content)
         }
     }
 }

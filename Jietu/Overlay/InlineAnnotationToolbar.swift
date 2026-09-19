@@ -307,37 +307,38 @@ struct InlineOptionsToolbar: View {
 
     private var shapeOptions: some View {
         optionGroup {
-            HUDSlider(value: $model.lineWidth, range: 1...24, step: 1)
+            HUDSlider(value: $model.lineWidth, range: 1...24, step: 1, isVertical: model.isVerticalLayout)
             vSeparator
-            ColorSwatchesView(selectedColor: $model.color)
+            ColorSwatchesView(selectedColor: $model.color, isVertical: model.isVerticalLayout)
             vSeparator
             ShapeFillModePicker(
                 selectedMode: $model.shapeFillMode,
-                isCircle: model.tool == .ellipse
+                isCircle: model.tool == .ellipse,
+                isVertical: model.isVerticalLayout
             )
             vSeparator
             // 圆角只对矩形有意义：圆本身没有「角」。
             if model.tool == .rectangle {
-                RectCornerStylePicker(selectedStyle: $model.rectCornerStyle)
+                RectCornerStylePicker(selectedStyle: $model.rectCornerStyle, isVertical: model.isVerticalLayout)
             }
         }
     }
 
     private var arrowOptions: some View {
         optionGroup {
-            HUDSlider(value: $model.lineWidth, range: 1...24, step: 1)
+            HUDSlider(value: $model.lineWidth, range: 1...24, step: 1, isVertical: model.isVerticalLayout)
             vSeparator
-            ColorSwatchesView(selectedColor: $model.color)
+            ColorSwatchesView(selectedColor: $model.color, isVertical: model.isVerticalLayout)
             vSeparator
-            ArrowStylePicker(selectedStyle: $model.arrowStyle)
+            ArrowStylePicker(selectedStyle: $model.arrowStyle, isVertical: model.isVerticalLayout)
         }
     }
 
     private var lineOptions: some View {
         optionGroup {
-            HUDSlider(value: $model.lineWidth, range: 1...24, step: 1)
+            HUDSlider(value: $model.lineWidth, range: 1...24, step: 1, isVertical: model.isVerticalLayout)
             vSeparator
-            ColorSwatchesView(selectedColor: $model.color)
+            ColorSwatchesView(selectedColor: $model.color, isVertical: model.isVerticalLayout)
         }
     }
 
@@ -347,18 +348,19 @@ struct InlineOptionsToolbar: View {
             HUDSlider(
                 value: $model.highlightLineWidth,
                 range: Annotation.highlightWidthRange,
-                step: 1
+                step: 1,
+                isVertical: model.isVerticalLayout
             )
             vSeparator
-            ColorSwatchesView(selectedColor: $model.highlightColor)
+            ColorSwatchesView(selectedColor: $model.highlightColor, isVertical: model.isVerticalLayout)
         }
     }
 
     private var textOptions: some View {
         optionGroup {
-            HUDSlider(value: $model.fontSize, range: 12...72, step: 1)
+            HUDSlider(value: $model.fontSize, range: 12...72, step: 1, isVertical: model.isVerticalLayout)
             vSeparator
-            ColorSwatchesView(selectedColor: $model.color)
+            ColorSwatchesView(selectedColor: $model.color, isVertical: model.isVerticalLayout)
             vSeparator
             HUDCheckboxButton(title: "描边", isSelected: model.textHasStroke) {
                 model.textHasStroke.toggle()
@@ -373,9 +375,9 @@ struct InlineOptionsToolbar: View {
 
     private var counterOptions: some View {
         optionGroup {
-            HUDSlider(value: $model.lineWidth, range: 2...16, step: 1)
+            HUDSlider(value: $model.lineWidth, range: 2...16, step: 1, isVertical: model.isVerticalLayout)
             vSeparator
-            ColorSwatchesView(selectedColor: $model.color)
+            ColorSwatchesView(selectedColor: $model.color, isVertical: model.isVerticalLayout)
         }
     }
 
@@ -387,7 +389,8 @@ struct InlineOptionsToolbar: View {
             HUDSlider(
                 value: model.tool == .pixelate ? $model.mosaicBlock : $model.blurRadius,
                 range: 4...40,
-                step: 1
+                step: 1,
+                isVertical: model.isVerticalLayout
             )
         }
     }
@@ -397,7 +400,7 @@ struct InlineOptionsToolbar: View {
             Text("橡皮大小")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Theme.Colors.textSecondary)
-            HUDSlider(value: $model.eraserSize, range: 8...120, step: 2)
+            HUDSlider(value: $model.eraserSize, range: 8...120, step: 2, isVertical: model.isVerticalLayout)
         }
     }
 
@@ -431,6 +434,9 @@ struct InlineOptionsToolbar: View {
             Text("拖拽框选要保留的区域（拖控制点微调）")
                 .font(Theme.Typography.bar)
                 .foregroundStyle(Theme.Colors.textSecondary)
+                // 竖排时二级菜单是窄窄一条，提示文字折行成一小块。
+                .frame(maxWidth: model.isVerticalLayout ? 120 : nil, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
 
             vSeparator
 

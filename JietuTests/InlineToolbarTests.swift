@@ -622,6 +622,43 @@ struct InlineToolbarTests {
         #expect(abs(options.maxY - layout.main.maxY) <= 1, "与主栏顶部对齐")
     }
 
+    @Test("滑块 / 色板竖排：自己也竖过来（滑块变高、色板变一列）")
+    func controlsTurnVerticalToo() {
+        let slider = HUDSlider(value: .constant(7), range: 1...24)
+        let verticalSlider = HUDSlider(value: .constant(7), range: 1...24, isVertical: true)
+        let sliderHost = NSHostingView(rootView: slider)
+        let verticalHost = NSHostingView(rootView: verticalSlider)
+        sliderHost.layoutSubtreeIfNeeded()
+        verticalHost.layoutSubtreeIfNeeded()
+        #expect(sliderHost.fittingSize.width > sliderHost.fittingSize.height, "横排滑块是横的")
+        #expect(verticalHost.fittingSize.height > verticalHost.fittingSize.width, "竖排滑块要立起来")
+
+        let palette = NSHostingView(
+            rootView: ColorSwatchesView(selectedColor: .constant(.red))
+        )
+        let verticalPalette = NSHostingView(
+            rootView: ColorSwatchesView(selectedColor: .constant(.red), isVertical: true)
+        )
+        palette.layoutSubtreeIfNeeded()
+        verticalPalette.layoutSubtreeIfNeeded()
+        #expect(palette.fittingSize.width > palette.fittingSize.height, "横排色板是一行")
+        #expect(
+            verticalPalette.fittingSize.height > verticalPalette.fittingSize.width,
+            "竖排色板要变成一列"
+        )
+    }
+
+    @Test("二级菜单竖排时整体是窄窄一条")
+    func verticalOptionsToolbarIsNarrow() {
+        let model = InlineToolbarModel()
+        model.tool = .rectangle
+        let host = NSHostingView(rootView: InlineOptionsToolbar(model: model))
+        model.isVerticalLayout = true
+        host.layoutSubtreeIfNeeded()
+        #expect(host.fittingSize.width <= 90, "竖排的二级菜单应当是窄窄一条，实际 \(host.fittingSize.width)")
+        #expect(host.fittingSize.height > host.fittingSize.width)
+    }
+
     @Test("工具栏摆放：下面放得下就横排贴在选区下面")
     func toolbarDocksBelowWhenThereIsRoom() {
         // 图 600×400 px → 300×200 点居中（选区下方还有 ~330pt）。

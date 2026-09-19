@@ -9,11 +9,21 @@ import SwiftUI
 struct ColorSwatchesView: View {
     @Binding var selectedColor: RGBAColor
     var palette: [RGBAColor] = RGBAColor.palette
+    /// 竖排（二级菜单竖着排时）：色板变成一列。
+    var isVertical: Bool = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(palette, id: \.self) { swatch in
-                swatchButton(swatch)
+        if isVertical {
+            VStack(spacing: 4) {
+                ForEach(palette, id: \.self) { swatch in
+                    swatchButton(swatch)
+                }
+            }
+        } else {
+            HStack(spacing: 6) {
+                ForEach(palette, id: \.self) { swatch in
+                    swatchButton(swatch)
+                }
             }
         }
     }

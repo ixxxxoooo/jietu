@@ -31,9 +31,11 @@ struct RectCornerStyleIcon: View {
 /// @author ixxxxoooo
 struct RectCornerStylePicker: View {
     @Binding var selectedStyle: RectCornerStyle
+    /// 竖排（二级菜单竖着排时）。
+    var isVertical: Bool = false
 
     var body: some View {
-        HStack(spacing: 3) {
+        stack {
             ForEach(RectCornerStyle.allCases) { style in
                 let isSelected = selectedStyle == style
                 Button {
@@ -55,6 +57,15 @@ struct RectCornerStylePicker: View {
                 .focusEffectDisabled()
                 .help(style.title)
             }
+        }
+    }
+
+    /// 横排 / 竖排两种走向（竖排时二级菜单是窄窄一条）。
+    @ViewBuilder private func stack<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        if isVertical {
+            VStack(spacing: 2, content: content)
+        } else {
+            HStack(spacing: 3, content: content)
         }
     }
 }
