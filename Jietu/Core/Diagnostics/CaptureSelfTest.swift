@@ -2170,10 +2170,13 @@ enum CaptureSelfTest {
     private static func activeLoupeState(
         _ coordinator: OverlayCoordinator
     ) -> (displayID: CGDirectDisplayID, state: OverlayCanvasView.DebugLoupeState)? {
-        coordinator.debugSelections.compactMap { entry in
+        // 闭包返回类型要写全（含元组标签）：只靠返回值推断时，Xcode 26 的编译器会
+        // 报 "generic parameter 'ElementOfResult' could not be inferred"。
+        coordinator.debugSelections.compactMap {
+            entry -> (displayID: CGDirectDisplayID, state: OverlayCanvasView.DebugLoupeState)? in
             guard let state = coordinator.debugLoupeState(displayID: entry.displayID)
             else { return nil }
-            return (entry.displayID, state)
+            return (displayID: entry.displayID, state: state)
         }.first
     }
 
