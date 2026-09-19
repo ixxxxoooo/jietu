@@ -47,6 +47,10 @@ enum CaptureSelfTest {
     /// 真接线打开裁剪窗口：复现「点裁剪就退出应用」这类只在完整接线里出现的问题。
     static let appLevelTrimFlag = "--selftest-app-trim"
 
+    /// 麦克风采集：真开一次输入设备，验「硬件格式 → 写入格式」的转换链路。
+    /// 只读设备、不建窗口，可以和正式实例同时在跑。
+    static let microphoneFlag = "--selftest-microphone"
+
     /// 「最近截图」子菜单长什么样：空历史 / 有截图各弹一次拍一张。
     static let appLevelRecentMenuFlag = "--selftest-app-recent-menu"
 
@@ -146,6 +150,11 @@ enum CaptureSelfTest {
                     isDirectory: true
                 )
             )
+            return true
+
+        case microphoneFlag:
+            // 麦克风采集：硬件格式（可能是 48kHz 单声道）→ 写入格式（44.1kHz 双声道）。
+            MicrophoneSelfTest.run()
             return true
 
         case "--selftest-inline-draw":
@@ -3273,6 +3282,15 @@ enum CaptureSelfTest {
         for line in lines { print(line) }
         print("======================")
         fflush(stdout)
+        // 再落一份文件：有些场景必须走 LaunchServices 启动（TCC 才认权限，见麦克风自检），
+        // 那种情况下看不到 stdout，报告只能从文件读。
+        let report = (["=== Jietu selftest ==="] + lines + ["======================"])
+            .joined(separator: "\n")
+        try? report.write(
+            to: URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("jietu-selftest-report.txt"),
+            atomically: true, encoding: .utf8
+        )
         exit(code)
     }
 
@@ -3280,6 +3298,11 @@ enum CaptureSelfTest {
     ///
     /// 跨 Actor 访问：`exit()` 前同步执行，与自检的 MainActor 上下文无关。
     nonisolated(unsafe) static var cleanupBeforeExit: [() -> Void] = []
+
+    /// 报告里用的矩形文本（几何类断言读起来省事）。
+    static func rectText(_ rect: CGRect) -> String {
+        String(format: "(%.0f,%.0f %.0f×%.0f)", rect.minX, rect.minY, rect.width, rect.height)
+    }
 }
 
 #endif

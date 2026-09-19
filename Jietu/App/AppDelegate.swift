@@ -39,6 +39,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 框选好了、**还没点「开始」**的那一档：红框 + 控制条先停着（`phase = .ready`）。
     var pendingRecording: (displayID: CGDirectDisplayID, region: CGRect)?
 
+    /// 本次录屏的选区（AppKit 全局坐标）：控制条 / 红框都贴它摆，自检也用它验「没遮挡」。
+    var recordingSelectionRect: CGRect?
+
     /// 正在开着的那一个裁剪窗口（同时只允许一个）。
     var videoTrimController: VideoTrimController?
     /// GIF 导出的进度浮窗。
@@ -350,7 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for flag in [
             CaptureSelfTest.appLevelInlineScrollFlag, CaptureSelfTest.appLevelRecordingFlag,
             CaptureSelfTest.appLevelRecentMenuFlag, CaptureSelfTest.videoToolsFlag,
-            CaptureSelfTest.appLevelTrimFlag,
+            CaptureSelfTest.appLevelTrimFlag, CaptureSelfTest.microphoneFlag,
         ] where CommandLine.arguments.contains(flag) {
             return false
         }

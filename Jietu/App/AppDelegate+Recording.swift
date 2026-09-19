@@ -86,12 +86,24 @@ extension AppDelegate {
         border.present(around: target.selectionRect)
         let hud = RecordingControlPanel()
         hud.present(near: target.selectionRect, in: screen, phase: .ready)
-        // 待开始态就亮明麦克风：设置里开着显示「会录」，关着显示「不录」——
-        // 别让用户录完才发现没声音。
+        // 待开始态就亮明音频配置：两个开关可以直接点（CapCut 那类录屏的「录前先配好」），
+        // 不必为了开麦克风再跑去设置页。
+        hud.setSystemAudio(settings.recordSystemAudio)
         hud.setMicrophone(settings.recordMicrophone ? .active : .off)
+        hud.onToggleSystemAudio = { [weak self] in
+            guard let self, self.recordingEngine == nil else { return }  // 录制中不生效
+            self.settings.recordSystemAudio.toggle()
+            self.recordingHUD?.setSystemAudio(self.settings.recordSystemAudio)
+        }
+        hud.onToggleMicrophone = { [weak self] in
+            guard let self, self.recordingEngine == nil else { return }
+            self.settings.recordMicrophone.toggle()
+            self.recordingHUD?.setMicrophone(self.settings.recordMicrophone ? .active : .off)
+        }
         recordingBorder = border
         recordingHUD = hud
         pendingRecording = (displayID: snapshot.displayID, region: target.region)
+        recordingSelectionRect = target.selectionRect
 
         hud.onStart = { [weak self] in self?.startRecording() }
         hud.onTogglePause = { [weak self] in self?.toggleRecordingPause() }
@@ -266,6 +278,7 @@ extension AppDelegate {
         recordingBorder = nil
         recordingEngine = nil
         pendingRecording = nil
+        recordingSelectionRect = nil
     }
 
     /// Esc = 取消（不保存）；⌘⇧P 暂停 / 继续；⌘⇧S 完成（待开始态则是「开始」）。

@@ -76,7 +76,13 @@ final class GlassControlButton: NSControl {
     private let labelText: String?
     private let diameter: CGFloat
     /// 图标着色（功能色，如停止键的红）。nil = 跟随外观的墨色。
-    private let iconTint: NSColor?
+    /// 可以在运行时换：录屏控制条的音频开关用它表示「开 / 关 / 想开没启用」。
+    var iconTint: NSColor? {
+        didSet {
+            guard iconTint != oldValue else { return }
+            updateIcon()
+        }
+    }
 
     /// 当前实际画出来的符号（点亮后是 `checkmark`），测试用。
     private var currentSymbolName = ""

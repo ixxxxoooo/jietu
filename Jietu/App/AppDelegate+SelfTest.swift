@@ -221,6 +221,22 @@ extension AppDelegate {
                 budgets.append(("选完停在待开始（没自动开录）", waiting ? 0 : nil, 0))
                 budgets.append(("控制条可见", hudUp ? 0 : nil, 0))
                 budgets.append(("红框可见", borderUp ? 0 : nil, 0))
+
+                // 控制条**不能压在选区上**：它虽然被排除在成片之外，但压在选区里会挡住
+                // 用户盯着看的内容（用户报的「开始录屏之后有点遮挡」）。
+                if let hudFrame = recordingHUD?.panelFrame, let selection = recordingSelectionRect {
+                    let overlaps = hudFrame.intersects(selection)
+                    let outside = hudFrame.minY >= selection.maxY
+                        || hudFrame.maxY <= selection.minY
+                        || hudFrame.maxX <= selection.minX
+                        || hudFrame.minX >= selection.maxX
+                    report.append(
+                        "控制条 \(CaptureSelfTest.rectText(hudFrame)) vs 选区 "
+                            + "\(CaptureSelfTest.rectText(selection))："
+                            + "重叠=\(overlaps ? "**是**" : "否")，在选区外=\(outside ? "是" : "**否**")"
+                    )
+                    budgets.append(("控制条不遮挡选区", overlaps ? nil : 0, 0))
+                }
                 // 待开始那条控制条长什么样：截一张（「准备录制」+ 取消 + 开始）。
                 if let shots = try? await capture.captureAllDisplays(excludingOwnApplication: false),
                     let shot = shots.first(where: { $0.displayID == NSScreen.main?.jietu_displayID })
