@@ -318,4 +318,16 @@ struct InlineTextFieldTests {
         #expect(strokeRect.contains(onBorder, tolerance: 4))
         #expect(filledRect.contains(onBorder, tolerance: 4))
     }
+
+    @Test("InlineTextField 结束编辑（失去焦点）自动提交文本")
+    func controlTextDidEndEditingTriggersCommit() {
+        let field = InlineTextField(frame: .zero)
+        var committed = false
+        field.onCommit = {
+            committed = true
+        }
+        let notification = Notification(name: NSControl.textDidEndEditingNotification, object: field)
+        field.controlTextDidEndEditing(notification)
+        #expect(committed == true)
+    }
 }

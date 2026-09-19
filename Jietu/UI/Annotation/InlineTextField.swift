@@ -121,6 +121,13 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
         onTextChanged?(currentText())
     }
 
+    func controlTextDidEndEditing(_ obj: Notification) {
+        if let editor = currentEditor() as? NSTextView, editor.hasMarkedText() {
+            return
+        }
+        onCommit?()
+    }
+
     override func becomeFirstResponder() -> Bool {
         let result = super.becomeFirstResponder()
         attachEditorObservers()

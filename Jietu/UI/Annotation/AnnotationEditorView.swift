@@ -299,6 +299,10 @@ struct AnnotationEditorView: View {
                     .onContinuousHover { phase in
                         switch phase {
                         case .active(let location):
+                            guard tool != .eraser else {
+                                hoveredID = nil
+                                break
+                            }
                             let px = imagePoint(from: location)
                             hoveredID = topmostAnnotation(at: px)?.id
                         case .ended:
@@ -341,7 +345,7 @@ struct AnnotationEditorView: View {
     private var selectionOverlay: some View {
         Canvas { context, _ in
             let target = selectedAnnotation ?? (hoveredID.flatMap { id in annotations.first { $0.id == id } })
-            guard let target, editingTextID == nil else { return }
+            guard let target, editingTextID == nil, tool != .eraser else { return }
 
             let corners = target.rotatedCorners().map(viewPoint)
             var border = Path()
@@ -703,7 +707,7 @@ struct AnnotationEditorView: View {
     private var textOptions: some View {
         HStack(spacing: Theme.Spacing.md) {
             HUDSlider(value: $fontSize, range: 12...72, step: 1)
-                .onChange(of: fontSize) { _, val in applyToSelected { $0.withFontSize(val) } }
+                .onChange(of: fontSize) { _, val in applyToSelected { $0.withFontSize(val * max(1, displayScale)) } }
             vSeparator
             ColorSwatchesView(selectedColor: $color)
                 .onChange(of: color) { _, val in applyToSelected { $0.withColor(val) } }
@@ -794,7 +798,8 @@ struct AnnotationEditorView: View {
         switch hit.kind {
         case .pixelate(_, let block): mosaicBlock = block
         case .blur(_, let radius): blurRadius = radius
-        case .text(_, _, let size), .callout(_, _, _, _, let size): fontSize = size
+        case .text(_, _, let size), .callout(_, _, _, _, let size):
+            fontSize = max(12, (size / max(1, displayScale)).rounded())
         default: break
         }
     }
@@ -806,6 +811,12 @@ struct AnnotationEditorView: View {
             help: item.title,
             tooltipPlacement: toolbarTooltipPlacement,
             action: {
+                if editingTextID != nil {
+                    commitInlineText()
+                }
+                if item == .eraser {
+                    hoveredID = nil
+                }
                 if tool == item {
                     if item != .select {
                         tool = .select
@@ -906,13 +917,13 @@ struct AnnotationEditorView: View {
         if tool == .eraser {
             pushUndo()
             dragMode = .erasing
-            let radius = max(3, (eraserSize / 2) / max(0.0001, pointsPerPixel))
+            let radius = max(3, (eraserSize / 2) * max(1, displayScale))
             let eraserAnnotation = Annotation(
                 kind: .eraser(points: [startPx], radius: radius),
                 color: .white,
                 lineWidth: radius * 2
             )
-            annotations.append(eraserAnnotation)
+            draft = eraserAnnotation
             lastErasePoint = startPx
             return
         }
@@ -965,9 +976,9 @@ struct AnnotationEditorView: View {
         case .none:
             break
         case .erasing:
-            if let last = annotations.last, case .eraser(var points, let radius) = last.kind {
+            if case .eraser(var points, let radius)? = draft?.kind {
                 points.append(currentPx)
-                annotations[annotations.count - 1].kind = .eraser(points: points, radius: radius)
+                draft?.kind = .eraser(points: points, radius: radius)
             }
             lastErasePoint = currentPx
         case .creating(let start):
@@ -1031,6 +1042,9 @@ struct AnnotationEditorView: View {
                 if case .counter = draft.kind { counterValue += 1 }
             }
         case .erasing:
+            if let draft {
+                annotations.append(draft)
+            }
             lastErasePoint = nil
         default:
             break
@@ -1088,7 +1102,11 @@ struct AnnotationEditorView: View {
             )
         case .text:
             return Annotation(
-                kind: .text(origin: start, string: "", fontSize: fontSize),
+                kind: .text(
+                    origin: start,
+                    string: "",
+                    fontSize: max(12, fontSize * max(1, displayScale))
+                ),
                 color: color,
                 lineWidth: lineWidth,
                 textHasStroke: textHasStroke,
@@ -1116,6 +1134,9 @@ struct AnnotationEditorView: View {
     }
 
     private func undo() {
+        if editingTextID != nil {
+            commitInlineText()
+        }
         guard let previous = undoStack.popLast() else { return }
         redoStack.append(
             EditorSnapshot(
@@ -1128,6 +1149,9 @@ struct AnnotationEditorView: View {
     }
 
     private func redo() {
+        if editingTextID != nil {
+            commitInlineText()
+        }
         guard let next = redoStack.popLast() else { return }
         undoStack.append(
             EditorSnapshot(
@@ -1165,6 +1189,9 @@ struct AnnotationEditorView: View {
     }
 
     private func deleteSelected() {
+        if editingTextID != nil {
+            commitInlineText()
+        }
         guard let selectedID else { return }
         pushUndo()
         annotations.removeAll { $0.id == selectedID }
@@ -1271,7 +1298,7 @@ struct AnnotationEditorView: View {
             pushUndo()
             annotations[index] = annotations[index]
                 .withText(trimmed)
-                .withFontSize(inlineFontSize)
+                .withFontSize(max(12, fontSize * max(1, displayScale)))
                 .withColor(color)
                 .withTextStroke(textHasStroke)
                 .withTextCallout(textHasCallout)
@@ -1432,16 +1459,19 @@ struct AnnotationEditorView: View {
     }
 
     private func exportToCopy() {
+        if editingTextID != nil { commitInlineText() }
         guard let rendered = renderedImage() else { return }
         onCopy(rendered)
     }
 
     private func exportToSave() {
+        if editingTextID != nil { commitInlineText() }
         guard let rendered = renderedImage() else { return }
         onSave(rendered)
     }
 
     private func exportToPin() {
+        if editingTextID != nil { commitInlineText() }
         guard let rendered = renderedImage() else { return }
         onPin(rendered, canvasGlobalFrame)
     }

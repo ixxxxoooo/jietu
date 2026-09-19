@@ -86,6 +86,8 @@ struct ShapeFillModePicker: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .focusEffectDisabled()
                 .help(mode.title)
             }
         }
