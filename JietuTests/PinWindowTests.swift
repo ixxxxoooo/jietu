@@ -98,7 +98,7 @@ struct PinWindowTests {
             return
         }
         #expect(!button.isHidden, "悬停后翻译按钮应当出现")
-        #expect(button.renderedLabel == "翻译")
+        #expect(button.renderedLabel == L10n.pinTranslate)
         #expect(view.hitTest(NSPoint(x: button.frame.midX, y: button.frame.midY)) === button, "点击必须落在按钮上，不是边缘缩放手柄")
 
         // 预置原文（真跑一次 OCR 要几百毫秒，这里只验接线）。
