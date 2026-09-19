@@ -3,6 +3,8 @@ import Carbon.HIToolbox
 import Testing
 @testable import Jietu
 
+// 断言一律走 `L10n`，不写死中文文案：菜单标题本身就是 L10n 出来的，
+// 写死的话测试只在中文环境下通过（CI 是英文环境，会整片红）。
 @Suite("菜单栏与权限授权项")
 struct MenuBarTests {
 
@@ -14,10 +16,13 @@ struct MenuBarTests {
         let menu = menuBar.menuForTesting
 
         let titles = menu.items.map(\.title)
-        #expect(titles.contains { $0.contains("拖拽授权「屏幕录制」") })
-        #expect(titles.contains { $0.contains("拖拽授权「辅助功能」") })
-        #expect(titles.contains { $0.contains("屏幕录制权限：") })
-        #expect(titles.contains { $0.contains("辅助功能权限：") })
+        #expect(titles.contains { $0.contains(L10n.menuDragAuthorizeScreenRecording) })
+        #expect(titles.contains { $0.contains(L10n.menuDragAuthorizeAccessibility) })
+        // 权限状态项的文字跟当前授权状态走，两种都算「在」。
+        let screenRecordingTitles = [true, false].map { L10n.menuScreenRecordingPermission(granted: $0) }
+        let accessibilityTitles = [true, false].map { L10n.menuAccessibilityPermission(granted: $0) }
+        #expect(titles.contains { screenRecordingTitles.contains($0) })
+        #expect(titles.contains { accessibilityTitles.contains($0) })
     }
 
     @Test("点击拖拽授权「辅助功能」触发 onAuthorizeAccessibility 回调")
@@ -30,7 +35,7 @@ struct MenuBarTests {
         }
 
         let menu = menuBar.menuForTesting
-        guard let item = menu.items.first(where: { $0.title.contains("拖拽授权「辅助功能」") }) else {
+        guard let item = menu.items.first(where: { $0.title.contains(L10n.menuDragAuthorizeAccessibility) }) else {
             Issue.record("未找到辅助功能拖拽授权菜单项")
             return
         }
@@ -53,7 +58,7 @@ struct MenuBarTests {
         }
 
         let menu = menuBar.menuForTesting
-        guard let item = menu.items.first(where: { $0.title == "取色器" }) else {
+        guard let item = menu.items.first(where: { $0.title == L10n.menuColorPicker }) else {
             Issue.record("未找到取色器菜单项")
             return
         }
@@ -77,19 +82,22 @@ struct MenuBarTests {
 
         let menu = menuBar.menuForTesting
         // 两家族都平铺在顶层，中间**只用一条分隔线**隔开（不收起子菜单）。
+        // 「截图」「录制」是分组名、本来就不该作为菜单项存在，所以这两条是反向断言，
+        // 跟语言无关（任何语言下都不该出现），保留字面量即可。
         #expect(!menu.items.contains { $0.title == "截图" && $0.submenu != nil })
         #expect(!menu.items.contains { $0.title == "录制" && $0.submenu != nil })
         let head = menu.items.prefix(10).map { $0.isSeparatorItem ? "———" : $0.title }
         #expect(
             Array(head) == [
-                "区域截图", "窗口截图", "全屏截图", "定时截图", "滚动长图…", "取色器",
+                L10n.menuAreaCapture, L10n.menuWindowCapture, L10n.menuFullScreenCapture,
+                L10n.menuTimedCapture, L10n.menuScrollingCapture, L10n.menuColorPicker,
                 "———",
-                "区域录制", "窗口录制", "全屏录制",
+                L10n.menuRegionRecording, L10n.menuWindowRecording, L10n.menuFullScreenRecording,
             ],
             "截图（含滚动长图 / 取色器）与录制该是相邻两组，中间一条分隔线"
         )
 
-        let want = ["区域录制", "窗口录制", "全屏录制"]
+        let want = [L10n.menuRegionRecording, L10n.menuWindowRecording, L10n.menuFullScreenRecording]
         for title in want {
             guard let item = menu.items.first(where: { $0.title == title }) else {
                 Issue.record("菜单里没有「\(title)」")
@@ -120,11 +128,15 @@ struct MenuBarTests {
         func item(_ title: String) -> NSMenuItem? {
             menuBar.menuForTesting.items.first { $0.title == title }
         }
-        let area = item("区域截图")
+        let area = item(L10n.menuAreaCapture)
         #expect(area?.keyEquivalent == "1")
         #expect(area?.keyEquivalentModifierMask == [.command, .shift])
 
-        for title in ["窗口截图", "全屏截图", "滚动长图…", "区域录制", "窗口录制", "全屏录制"] {
+        let unconfigured = [
+            L10n.menuWindowCapture, L10n.menuFullScreenCapture, L10n.menuScrollingCapture,
+            L10n.menuRegionRecording, L10n.menuWindowRecording, L10n.menuFullScreenRecording,
+        ]
+        for title in unconfigured {
             #expect(item(title)?.keyEquivalent == "", "\(title) 没配快捷键，就不该显示")
             #expect(item(title)?.keyEquivalentModifierMask == [])
         }
@@ -132,7 +144,7 @@ struct MenuBarTests {
         // 清掉配置再刷一次：显示跟着变。
         menuBar.hotkeyProvider = { _ in nil }
         menuBar.refresh()
-        #expect(item("区域截图")?.keyEquivalent == "")
+        #expect(item(L10n.menuAreaCapture)?.keyEquivalent == "")
     }
 
     @Test("点击拖拽授权「屏幕录制」触发 onAuthorizeScreenRecording 回调")
@@ -145,7 +157,7 @@ struct MenuBarTests {
         }
 
         let menu = menuBar.menuForTesting
-        guard let item = menu.items.first(where: { $0.title.contains("拖拽授权「屏幕录制」") }) else {
+        guard let item = menu.items.first(where: { $0.title.contains(L10n.menuDragAuthorizeScreenRecording) }) else {
             Issue.record("未找到屏幕录制拖拽授权菜单项")
             return
         }
@@ -175,10 +187,10 @@ struct MenuBarTests {
         let menu = menuBar.menuForTesting
 
         let titles = menu.items.map(\.title)
-        #expect(titles.contains("最近记录"))
-        #expect(!titles.contains { $0.contains("截图历史") })
+        #expect(titles.contains(L10n.menuRecentHistory))
+        #expect(!titles.contains(L10n.historyTitle))
 
-        guard let recentItem = menu.items.first(where: { $0.title == "最近记录" }) else {
+        guard let recentItem = menu.items.first(where: { $0.title == L10n.menuRecentHistory }) else {
             Issue.record("未找到「最近记录」菜单项")
             return
         }
@@ -210,7 +222,7 @@ struct MenuBarTests {
         let recentMenu = menuBar.recentMenuForTesting
         #expect(recentMenu.items.count == 1)
         let only = recentMenu.items[0]
-        #expect(only.title == "暂无最近记录")
+        #expect(only.title == L10n.menuNoRecentHistory)
         #expect(only.isEnabled == false)
         #expect(only.view == nil, "空状态不该再塞那张 320pt 宽的卡片视图")
 
@@ -233,21 +245,15 @@ struct MenuBarTests {
         menuBar.refresh()
         let menu = menuBar.menuForTesting
 
-        // 屏幕录制
-        let screenRecordingItem = menu.items.first { $0.title.contains("屏幕录制权限") }
+        // 屏幕录制：文字必须是两种状态文案之一（是哪一种取决于本机授权，不写死）。
+        let screenRecordingTitles = [true, false].map { L10n.menuScreenRecordingPermission(granted: $0) }
+        let screenRecordingItem = menu.items.first { screenRecordingTitles.contains($0.title) }
         #expect(screenRecordingItem != nil, "菜单中应有屏幕录制权限状态项")
-        if let item = screenRecordingItem {
-            let valid = item.title == "屏幕录制权限：已授权" || item.title == "屏幕录制权限：未授权"
-            #expect(valid, "屏幕录制权限状态应为 '已授权' 或 '未授权'，实际为 '\(item.title)'")
-        }
 
         // 辅助功能
-        let axItem = menu.items.first { $0.title.contains("辅助功能权限") }
+        let accessibilityTitles = [true, false].map { L10n.menuAccessibilityPermission(granted: $0) }
+        let axItem = menu.items.first { accessibilityTitles.contains($0.title) }
         #expect(axItem != nil, "菜单中应有辅助功能权限状态项")
-        if let item = axItem {
-            let valid = item.title == "辅助功能权限：已授权" || item.title == "辅助功能权限：未授权"
-            #expect(valid, "辅助功能权限状态应为 '已授权' 或 '未授权'，实际为 '\(item.title)'")
-        }
     }
 
     @Test("权限状态项不可点击")
@@ -257,9 +263,13 @@ struct MenuBarTests {
         menuBar.refresh()
         let menu = menuBar.menuForTesting
 
-        let items = menu.items.filter {
-            $0.title.contains("屏幕录制权限：") || $0.title.contains("辅助功能权限：")
+        let statusTitles = [true, false].flatMap { granted in
+            [
+                L10n.menuScreenRecordingPermission(granted: granted),
+                L10n.menuAccessibilityPermission(granted: granted),
+            ]
         }
+        let items = menu.items.filter { statusTitles.contains($0.title) }
         #expect(items.count == 2)
         for item in items {
             #expect(!item.isEnabled, "\(item.title) 应为禁用（纯展示状态）")
@@ -303,5 +313,3 @@ struct MenuBarTests {
         #expect(h20 <= screenMax)
     }
 }
-
-
