@@ -1702,12 +1702,7 @@ struct CaptureRegionTarget {
         scrollingTarget = target
         isScrollingCancelled = false
 
-        let panel = ScrollingCapturePanelController()
-        scrollingPanel = panel
-        panel.onStartManual = { [weak self] in self?.beginScrollingSession(mode: .manual) }
-        panel.onStartAuto = { [weak self] in self?.beginScrollingSession(mode: .automatic) }
-        panel.onFinish = { [weak self] in self?.scrollingSession?.stop() }
-        panel.onCancel = { [weak self] in self?.cancelScrollingCapture() }
+        let panel = makeScrollingPanel()
         // 直接从「进行中」起：模式已经选过了，不要再闪一下「手动 / 自动」那条。
         panel.present(near: target.selectionRect, stage: .running(mode))
         registerScrollingEscapeMonitor()
@@ -1728,17 +1723,22 @@ struct CaptureRegionTarget {
             return
         }
 
+        let panel = makeScrollingPanel()
+        panel.present(near: target.selectionRect)
+        registerScrollingEscapeMonitor()
+    }
+
+    /// 创建并接线滚动长图控制条（统一创建入口，避免重复接线）。
+    @discardableResult
+    private func makeScrollingPanel() -> ScrollingCapturePanelController {
         let panel = ScrollingCapturePanelController()
         scrollingPanel = panel
         isScrollingCancelled = false
-
         panel.onStartManual = { [weak self] in self?.beginScrollingSession(mode: .manual) }
         panel.onStartAuto = { [weak self] in self?.beginScrollingSession(mode: .automatic) }
         panel.onFinish = { [weak self] in self?.scrollingSession?.stop() }
         panel.onCancel = { [weak self] in self?.cancelScrollingCapture() }
-
-        panel.present(near: target.selectionRect)
-        registerScrollingEscapeMonitor()
+        return panel
     }
 
     /// 选区被拖动 / 缩放 / 清空：模式条一路贴着选框走；选区没了就把它收掉。

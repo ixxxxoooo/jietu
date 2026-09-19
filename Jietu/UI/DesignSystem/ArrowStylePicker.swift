@@ -100,35 +100,16 @@ struct ArrowStylePicker: View {
     var isVertical: Bool = false
 
     var body: some View {
-        stack {
-            ForEach(ArrowStyle.allCases) { style in
-                let isSelected = selectedStyle == style
-                Button {
-                    selectedStyle = style
-                } label: {
-                    ArrowStyleIcon(
-                        style: style,
-                        color: isSelected ? Theme.Colors.selectionGreen : Theme.Colors.toolbarIcon
-                    )
-                    .frame(width: 28, height: 24)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(isSelected ? Theme.Colors.controlSurface : Color.black.opacity(0.001))
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(style.title)
+        StyleIconPicker(
+            selected: $selectedStyle,
+            isVertical: isVertical,
+            title: \.title,
+            icon: { style, isSelected in
+                ArrowStyleIcon(
+                    style: style,
+                    color: isSelected ? Theme.Colors.selectionGreen : Theme.Colors.toolbarIcon
+                )
             }
-        }
-    }
-
-    /// 横排 / 竖排两种走向（竖排时二级菜单是窄窄一条）。
-    @ViewBuilder private func stack<C: View>(@ViewBuilder _ content: () -> C) -> some View {
-        if isVertical {
-            VStack(spacing: 2, content: content)
-        } else {
-            HStack(spacing: 3, content: content)
-        }
+        )
     }
 }

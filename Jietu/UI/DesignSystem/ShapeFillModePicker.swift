@@ -69,38 +69,17 @@ struct ShapeFillModePicker: View {
     var isVertical: Bool = false
 
     var body: some View {
-        stack {
-            ForEach(ShapeFillMode.allCases) { mode in
-                let isSelected = selectedMode == mode
-                Button {
-                    selectedMode = mode
-                } label: {
-                    ShapeFillModeIcon(
-                        mode: mode,
-                        color: isSelected ? Theme.Colors.selectionGreen : Theme.Colors.toolbarIcon,
-                        isCircle: isCircle
-                    )
-                    .frame(width: 28, height: 24)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(isSelected ? Theme.Colors.controlSurface : Color.black.opacity(0.001))
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .focusEffectDisabled()
-                .help(mode.title)
+        StyleIconPicker(
+            selected: $selectedMode,
+            isVertical: isVertical,
+            title: \.title,
+            icon: { mode, isSelected in
+                ShapeFillModeIcon(
+                    mode: mode,
+                    color: isSelected ? Theme.Colors.selectionGreen : Theme.Colors.toolbarIcon,
+                    isCircle: isCircle
+                )
             }
-        }
-    }
-
-    /// 横排 / 竖排两种走向（竖排时二级菜单是窄窄一条）。
-    @ViewBuilder private func stack<C: View>(@ViewBuilder _ content: () -> C) -> some View {
-        if isVertical {
-            VStack(spacing: 2, content: content)
-        } else {
-            HStack(spacing: 3, content: content)
-        }
+        )
     }
 }
