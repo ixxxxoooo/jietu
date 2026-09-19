@@ -127,6 +127,11 @@ if [ "$IMAGE_TOOL" = "diskutil" ]; then
 fi
 RW="$TMP/Jietu-rw$RW_SUFFIX"
 
+# 最终镜像用 LZMA（ULMO）而不是 zlib（UDZO）：同样内容实测 4238KB → 3489KB（小 18%），
+# 画面、版式、图标位置逐像素不变（比对过）。app 部署目标就是 macOS 26，
+# 不存在「旧系统打不开 LZMA 镜像」的问题。
+IMAGE_FORMAT="ULMO"
+
 create_rw_image() {  # $1 路径  $2 卷名
     # 两边都用「从暂存目录建可写镜像」这一形式：
     # hdiutil 在 macOS 26 起不再接受「空白镜像 + -format」（要求 -format 必须配 -srcfolder），
@@ -161,9 +166,9 @@ detach_mount() {  # $1 挂载点
 
 convert_image() {  # $1 源镜像  $2 目标  $3 卷名
     if [ "$IMAGE_TOOL" = "diskutil" ]; then
-        diskutil image create from "$1" --format UDZO --volumeName "$3" "$2" > /dev/null
+        diskutil image create from "$1" --format "$IMAGE_FORMAT" --volumeName "$3" "$2" > /dev/null
     else
-        hdiutil convert "$1" -format UDZO -imagekey zlib-level=9 -o "$2" > /dev/null
+        hdiutil convert "$1" -format "$IMAGE_FORMAT" -o "$2" > /dev/null
     fi
 }
 
@@ -205,10 +210,21 @@ OSA
 HELPER_APP="$STAGE/Fix Gatekeeper.app"
 osacompile -o "$HELPER_APP" "$HELPER_SCRIPT"
 rm -f "$HELPER_SCRIPT"
+
+# 换成自己画的图标：osacompile 会白送一套通用图标资源（Assets.car 409KB + applet.icns 55KB，
+# 占这个小工具七成体积），图形还是通用的「卷轴＋印章」，放 DMG 里既不说明用途也不好看。
+# 自绘的那枚只有 47KB（琥珀方块 + 盾牌勾，与品牌蓝的 Jietu.app 明显区分）。
+HELPER_ICONSET="$TMP/helper.iconset"
+swift Scripts/helper-icon.swift --out "$HELPER_ICONSET" || { echo "图标渲染失败"; exit 1; }
+rm -f "$HELPER_APP/Contents/Resources/Assets.car"
+iconutil -c icns "$HELPER_ICONSET" -o "$HELPER_APP/Contents/Resources/applet.icns" \
+    || { echo "图标打包失败"; exit 1; }
+
 # 与主 App 同一自签名身份，用户对证书信任后体验更一致。
 codesign --force --sign "Jietu" --timestamp=none "$HELPER_APP" 2>/dev/null \
 	|| codesign --force --sign - "$HELPER_APP"
 [ -d "$HELPER_APP" ] || { echo "未能生成 Fix Gatekeeper.app"; exit 1; }
+[ ! -e "$HELPER_APP/Contents/Resources/Assets.car" ] || { echo "通用图标资源没删掉"; exit 1; }
 
 # 窗口背景图：安装说明（原来那份 00-请先读我.txt）画在上面。
 echo "    渲染窗口背景图"
@@ -225,12 +241,15 @@ swift Scripts/dmg-background.swift \
     --repo "$REPO_URL" \
     || { echo "背景图渲染失败"; exit 1; }
 
-# 守门：背景图必须是「2 倍像素 + 144dpi」。Finder 只加载被指定的这个 PNG，
-# 同目录的 background@2x.png 它不认——一旦退回 1x，Retina 上字就会发虚（踩过一次）。
-ART_INFO="$(sips -g pixelWidth -g pixelHeight -g dpiWidth "$STAGE/.background/background.png" 2>/dev/null)"
+# 守门：背景图必须是「2 倍像素 + 144dpi + 不带 alpha」。前两条是为了清晰度——
+# Finder 只加载被指定的这个 PNG，同目录的 background@2x.png 它不认，一旦退回 1x
+# Retina 上字就会发虚（踩过一次）；第三条是因为画面整幅不透明，带 alpha 白占约 180KB。
+ART_INFO="$(sips -g pixelWidth -g pixelHeight -g dpiWidth -g hasAlpha \
+    "$STAGE/.background/background.png" 2>/dev/null)"
 ART_PX_W="$(printf '%s\n' "$ART_INFO" | sed -n 's/.*pixelWidth: //p')"
 ART_PX_H="$(printf '%s\n' "$ART_INFO" | sed -n 's/.*pixelHeight: //p')"
 ART_DPI="$(printf '%s\n' "$ART_INFO" | sed -n 's/.*dpiWidth: //p')"
+ART_ALPHA="$(printf '%s\n' "$ART_INFO" | sed -n 's/.*hasAlpha: //p')"
 EXPECT_PX_W=$(( (DMG_W + BLEED_X) * 2 ))
 EXPECT_PX_H=$(( (DMG_H + BLEED_Y) * 2 ))
 if [ "$ART_PX_W" != "$EXPECT_PX_W" ] || [ "$ART_PX_H" != "$EXPECT_PX_H" ]; then
@@ -240,6 +259,7 @@ case "$ART_DPI" in
     144*) ;;
     *) echo "背景图不是 144dpi（当前 ${ART_DPI}），Finder 会放大成 1x 画质"; exit 1 ;;
 esac
+[ "$ART_ALPHA" = "no" ] || { echo "背景图带 alpha 通道（白占约 180KB），应为 RGB"; exit 1; }
 
 # ---------- 4/6 排版并入镜像 ----------
 echo "==> 4/6 排版"
@@ -311,6 +331,11 @@ codesign --verify --deep --strict "$VERIFY_MNT/$APP_NAME.app" || { echo "镜像�
 INSTALLED_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
     "$VERIFY_MNT/$APP_NAME.app/Contents/Info.plist")"
 [ "$INSTALLED_VERSION" = "$VERSION" ] || { echo "镜像内版本($INSTALLED_VERSION) 与构建($VERSION) 不一致"; exit 1; }
+
+# 压缩格式退回 zlib 会白涨约 750KB，容易在改脚本时被顺手改回去，盯一下。
+SHIPPED_FORMAT="$(hdiutil imageinfo "$DMG" 2>/dev/null | sed -n 's/^Format: //p' | head -1)"
+[ "$SHIPPED_FORMAT" = "$IMAGE_FORMAT" ] \
+    || { echo "镜像压缩格式是 ${SHIPPED_FORMAT}，应为 ${IMAGE_FORMAT}"; exit 1; }
 
 detach_mount "$VERIFY_MNT"
 VERIFY_MOUNTED=0

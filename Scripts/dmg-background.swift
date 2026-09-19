@@ -115,13 +115,15 @@ func renderImage(_ config: Config, scale: CGFloat) -> NSBitmapImageRep? {
     let canvasW = width + config.bleed.width
     let canvasH = height + config.bleed.height
     guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+          // 不带 alpha 通道：画面整幅不透明，RGBA 那份的 alpha 是白占体积
+          // （同一张图 RGBA 1148KB → RGB 972KB，逐像素完全一致）。
           let cg = CGContext(data: nil,
                              width: Int(canvasW * scale),
                              height: Int(canvasH * scale),
                              bitsPerComponent: 8,
                              bytesPerRow: 0,
                              space: space,
-                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+                             bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
     else { return nil }
 
     // 把 CTM 翻成「左上角为原点、y 向下」，同时把上下文标记为 flipped，
