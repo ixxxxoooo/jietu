@@ -97,7 +97,7 @@ struct QuickAccessView: View {
         // 底色：后方色彩模糊的玻璃（透明 PNG / 悬停模糊时才透出来）。
         // 与拖拽授权面板同款：静态 `.regular` 玻璃 + `Radius.menuPanel`，**不描边**。
         .glassPanel(cornerRadius: Self.cornerRadius)
-        .help("点击打开标注编辑器，拖拽到其它 App 或文件夹可导出")
+        .help("点击原地编辑，拖拽到其它 App 或文件夹可导出")
         // 克制：只做一次短淡入，缩放 / 位移一概不做。
         .animation(.easeOut(duration: Theme.Duration.hover), value: isHovering)
     }

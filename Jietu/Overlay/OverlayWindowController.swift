@@ -3,6 +3,7 @@ import AppKit
 final class OverlayWindowController {
     let window: OverlayWindow
     let snapshot: DisplaySnapshot
+    let screen: NSScreen
     private let canvas: OverlayCanvasView
 
     var onCancel: (() -> Void)? {
@@ -95,6 +96,11 @@ final class OverlayWindowController {
         window.makeFirstResponder(canvas)
     }
 
+    /// 从浮窗恢复居中原地编辑。
+    func restoreImageForInlineEditing(_ image: CGImage) {
+        canvas.restoreImageForInlineEditing(image)
+    }
+
     #if DEBUG
     var debugSelection: CGRect? { canvas.debugSelection }
 
@@ -150,6 +156,7 @@ final class OverlayWindowController {
         editorShortcuts: EditorShortcuts = .standard
     ) {
         self.snapshot = snapshot
+        self.screen = screen
         canvas = OverlayCanvasView(
             snapshot: snapshot,
             session: session,

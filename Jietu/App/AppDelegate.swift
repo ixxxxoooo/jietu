@@ -898,17 +898,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let pinImage = try? CaptureSelfTest.makeTestImage(width: 520, height: 340) {
                     PinWindowController.pin(image: pinImage, on: NSScreen.main)
                     try? await Task.sleep(for: .milliseconds(700))
-                    let editorsBefore = annotationEditors.count
                     let pinnedVisible = NSApp.windows.contains { $0 is PinPanel && $0.isVisible }
                     PinWindowController.onRequestEdit?(pinImage, .zero)
                     try? await Task.sleep(for: .milliseconds(700))
-                    let editorOpened = annotationEditors.count > editorsBefore
-                        && (annotationEditors.last?.isVisible ?? false)
+                    let editorOpened = overlays.isPresenting
                     report.append(
-                        "钉图「编辑」→ 标注编辑器：钉图在=\(pinnedVisible ? "是" : "**否**")"
-                            + "，编辑器=\(editorOpened ? "打开了" : "**没打开**")"
+                        "钉图「编辑」→ 原地编辑器：钉图在=\(pinnedVisible ? "是" : "**否**")"
+                            + "，原地编辑器=\(editorOpened ? "打开了" : "**没打开**")"
                     )
-                    budgets.append(("钉图「编辑」→ 编辑器", editorOpened ? 0 : nil, 0))
+                    budgets.append(("钉图「编辑」→ 原地编辑器", editorOpened ? 0 : nil, 0))
+                    overlays.cancel()
                 }
 
                 report.append("延迟预算：")
@@ -1073,7 +1072,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.saveAs(image)
         }
         quickAccess.onAnnotate = { [weak self] image in
-            self?.openAnnotationEditor(image)
+            self?.quickAccess.dismiss()
+            self?.openInlineEditor(image)
         }
         quickAccess.onPin = { image in
             PinWindowController.pin(image: image, on: NSScreen.main)
@@ -1138,9 +1138,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // 就地编辑工具栏里的「滚动截图 → 手动 / 自动」：用户已经选过模式了，
         // 直接拿当前选区开跑，不再弹「手动 / 自动」模式条。
-        // 钉图上的「编辑」：把钉图收掉，用同一张图开标注编辑器（回到编辑窗口）。
-        PinWindowController.onRequestEdit = { [weak self] image, _ in
-            self?.openAnnotationEditor(image)
+        // 钉图上的「编辑」：把钉图收掉，恢复到原地编辑模式（居中预览并展示原地工具栏）。
+        PinWindowController.onRequestEdit = { [weak self] image, frame in
+            self?.openInlineEditor(image, anchor: frame)
         }
         // 录屏：框好区域（或点一下窗口）就把遮罩收掉、开录。
         overlays.onRecordRegionPicked = { [weak self] snapshot, localRect in
@@ -1960,7 +1960,7 @@ struct CaptureRegionTarget {
             // 截完立刻进剪贴板：原地编辑期间（甚至取消编辑）也能直接去别处粘贴。
             // 编辑器中点 ✓ 会再写一次，把带标注的成图覆盖上去。
             copyToClipboard(image)
-            openAnnotationEditor(image, anchor: screenRect)
+            openInlineEditor(image, anchor: screenRect)
         case .window:
             deliver(image, onDisplay: displayID)
         }
@@ -1993,6 +1993,37 @@ struct CaptureRegionTarget {
             onDisplay: displayID,
             saveDirectory: settings.saveDirectory
         )
+    }
+
+    /// 从浮窗（钉图或快速访问）恢复到原地编辑模式：图片在屏幕中央居中展示，下方出现工具栏。
+    private func openInlineEditor(_ image: CGImage, anchor: CGRect? = nil) {
+        guard !overlays.isPresenting else { return }
+        guard requireScreenCapturePermission() else { return }
+
+        // 确定目标屏幕：优先包含 anchor 的屏幕，否则主屏幕
+        let targetScreen: NSScreen
+        if let anchor, anchor.width > 0, anchor.height > 0 {
+            targetScreen = NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main ?? NSScreen.screens.first!
+        } else {
+            targetScreen = NSScreen.main ?? NSScreen.screens.first!
+        }
+
+        Task { @MainActor in
+            do {
+                let snapshots = try await capture.captureAllDisplays()
+                let windows = WindowHitTester.onScreenWindows(excludingPID: getpid())
+                let session = CaptureSession(snapshots: snapshots, windows: windows)
+                overlays.present(
+                    session: session,
+                    inlineMode: true,
+                    restoredImage: image,
+                    targetScreen: targetScreen
+                )
+            } catch {
+                logger.error("failed to open inline editor: \(error.localizedDescription)")
+                openAnnotationEditor(image, anchor: anchor)
+            }
+        }
     }
 
     /// 打开标注编辑器。

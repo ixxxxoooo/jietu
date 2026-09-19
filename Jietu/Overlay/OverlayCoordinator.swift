@@ -81,12 +81,20 @@ final class OverlayCoordinator {
         }
     }
 
-    func present(session: CaptureSession, inlineMode: Bool) {
+    func present(
+        session: CaptureSession,
+        inlineMode: Bool,
+        restoredImage: CGImage? = nil,
+        targetScreen: NSScreen? = nil
+    ) {
         guard !isPresenting else { return }
         guard !session.snapshots.isEmpty else { return }
 
         self.session = session
         previousApplication = NSWorkspace.shared.frontmostApplication
+
+        let effectiveInlineMode = restoredImage != nil ? true : inlineMode
+        let chosenTargetScreen = targetScreen ?? NSScreen.main ?? NSScreen.screens.first
 
         let screens = NSScreen.screens
         for (index, snapshot) in session.snapshots.enumerated() {
@@ -100,7 +108,7 @@ final class OverlayCoordinator {
                 screen: screen,
                 displayIndex: index + 1,
                 displayCount: session.snapshots.count,
-                inlineMode: inlineMode,
+                inlineMode: effectiveInlineMode,
                 annotationDefaults: annotationDefaults,
                 editorShortcuts: editorShortcutsProvider?() ?? .standard
             )
@@ -150,6 +158,9 @@ final class OverlayCoordinator {
                 self?.annotationDefaults = updated
                 self?.onAnnotationDefaultsChange?(updated)
             }
+            if let restoredImage, screen.jietu_displayID == chosenTargetScreen?.jietu_displayID || screen == chosenTargetScreen {
+                controller.restoreImageForInlineEditing(restoredImage)
+            }
             controllers.append(controller)
         }
 
@@ -180,10 +191,16 @@ final class OverlayCoordinator {
             controller.show()
         }
 
-        // 初始焦点给鼠标所在的那块屏，这样 ↵ / 方向键一开始就作用在正确的显示器上。
-        let mouseLocation = NSEvent.mouseLocation
-        let focused = controllers.first { $0.screenFrame.contains(mouseLocation) }
-            ?? controllers.first
+        // 初始焦点：如果有恢复的底图，优先聚焦在目标屏上；否则给鼠标所在的那块屏。
+        let focused: OverlayWindowController?
+        if restoredImage != nil, let chosenTargetScreen {
+            focused = controllers.first { $0.screen.jietu_displayID == chosenTargetScreen.jietu_displayID || $0.screen == chosenTargetScreen }
+                ?? controllers.first
+        } else {
+            let mouseLocation = NSEvent.mouseLocation
+            focused = controllers.first { $0.screenFrame.contains(mouseLocation) }
+                ?? controllers.first
+        }
         focused?.focus()
     }
 

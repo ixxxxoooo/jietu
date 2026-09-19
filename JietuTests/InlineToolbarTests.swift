@@ -100,4 +100,61 @@ struct InlineToolbarTests {
         #expect(expected.first == .select)
         #expect(expected.last == .eraser)
     }
+
+    @Test("恢复静态图片时主工具栏紧凑隐藏滚动与录屏按钮")
+    func restoredImageToolbarOmitsScrollAndRecord() {
+        let standardModel = InlineToolbarModel()
+        let standardHost = NSHostingView(rootView: InlineMainToolbar(model: standardModel))
+        let standardWidth = standardHost.fittingSize.width
+
+        let restoredModel = InlineToolbarModel()
+        restoredModel.isRestoredImage = true
+        let restoredHost = NSHostingView(rootView: InlineMainToolbar(model: restoredModel))
+        let restoredWidth = restoredHost.fittingSize.width
+
+        #expect(restoredWidth > 0)
+        #expect(restoredWidth < standardWidth, "隐藏滚动与录屏后，恢复模式工具栏宽度应更加紧凑")
+    }
+
+    @Test("restoreImageForInlineEditing 使图片在画布居中并直接进入原地标注状态")
+    func restoreImageForInlineEditingCentersSelection() {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let ctx = CGContext(
+            data: nil,
+            width: 400,
+            height: 300,
+            bitsPerComponent: 8,
+            bytesPerRow: 400 * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        let image = ctx.makeImage()!
+
+        let snapshot = DisplaySnapshot(
+            displayID: 1,
+            screenFrameInPoints: CGRect(x: 0, y: 0, width: 1000, height: 800),
+            nominalScaleFactor: 2,
+            image: image
+        )
+        let session = CaptureSession(snapshots: [snapshot], windows: [])
+        let canvas = OverlayCanvasView(
+            snapshot: snapshot,
+            session: session,
+            displayIndex: 1,
+            displayCount: 1
+        )
+
+        canvas.restoreImageForInlineEditing(image)
+
+        #expect(canvas.isAnnotationPhase, "恢复后应直接进入标注阶段")
+        guard let selection = canvas.debugSelection else {
+            Issue.record("未生成居中选区")
+            return
+        }
+
+        // 验证水平居中（允许 1pt 四舍五入误差）
+        let expectedCenterX = 500.0
+        #expect(abs(selection.midX - expectedCenterX) <= 1.0, "选区应在水平方向严格居中")
+        #expect(selection.width > 0 && selection.height > 0)
+    }
 }

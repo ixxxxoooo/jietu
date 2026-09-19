@@ -27,6 +27,8 @@ final class InlineToolbarModel {
     var showScroll = false
     /// 实况文本是否开启（OCR 按钮触发）。
     var isLiveTextActive = false
+    /// 是否为从浮窗恢复的静态图片（不显示滚动截图和录屏）。
+    var isRestoredImage = false
     /// 撤销 / 重做的当前快捷键；只用于把组合键显示在 tooltip 里（真正按键由画布处理）。
     var editorShortcuts: EditorShortcuts = .standard
 
@@ -118,20 +120,22 @@ struct InlineMainToolbar: View {
                 }
             }
 
-            BarIconButton(
-                title: "滚动截图",
-                systemImage: "scroll",
-                isSelected: model.showScroll
-            ) {
-                model.showScroll.toggle()
-                if model.showScroll {
-                    model.tool = nil
+            if !model.isRestoredImage {
+                BarIconButton(
+                    title: "滚动截图",
+                    systemImage: "scroll",
+                    isSelected: model.showScroll
+                ) {
+                    model.showScroll.toggle()
+                    if model.showScroll {
+                        model.tool = nil
+                    }
                 }
-            }
 
-            // 录屏：拿当前这块选区去录（点了收掉遮罩、上红框与「准备录制」控制条）。
-            BarIconButton(title: "录屏", systemImage: "record.circle") {
-                model.onRecord?()
+                // 录屏：拿当前这块选区去录（点了收掉遮罩、上红框与「准备录制」控制条）。
+                BarIconButton(title: "录屏", systemImage: "record.circle") {
+                    model.onRecord?()
+                }
             }
 
             BarIconButton(

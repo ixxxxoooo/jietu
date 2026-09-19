@@ -548,6 +548,14 @@ final class PinContentView: NSView {
         actualSizeItem.target = self
         menu.addItem(actualSizeItem)
 
+        let editItem = NSMenuItem(
+            title: "编辑 (⌘E)",
+            action: #selector(handleEdit),
+            keyEquivalent: "e"
+        )
+        editItem.target = self
+        menu.addItem(editItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let liveTextTitle = isLiveTextOn ? "退出识别文本" : "识别文本"
@@ -595,6 +603,10 @@ final class PinContentView: NSView {
         window.setFrame(NSRect(origin: origin, size: naturalSize), display: true, animate: true)
         window.invalidateShadow()
         window.invalidateCursorRects(for: self)
+    }
+
+    @objc private func handleEdit() {
+        onRequestEdit?()
     }
 
     // MARK: - Close & Live Text Buttons
