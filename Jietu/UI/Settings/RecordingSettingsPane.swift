@@ -10,7 +10,11 @@ struct RecordingSettingsPane: View {
             Section {
                 Toggle(isOn: $settings.recordSystemAudio) {
                     Text("录制系统声音")
-                    Text("把页面里的视频 / 音乐一起录进去（麦克风暂不支持）。")
+                    Text("把页面里的视频 / 音乐一起录进去。")
+                }
+                Toggle(isOn: $settings.recordMicrophone) {
+                    Text("录制麦克风")
+                    Text("录下讲解旁白，与系统声音混成一条音轨；首次开启会请求麦克风权限。")
                 }
                 Picker(selection: $settings.recordFrameRate) {
                     Text("30 fps").tag(30)

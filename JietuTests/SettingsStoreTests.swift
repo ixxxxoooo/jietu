@@ -23,6 +23,20 @@ struct SettingsStoreTests {
         #expect(store.hotkeyAreaCapture == nil)
     }
 
+    @Test("录屏默认不开麦克风，开关可持久化")
+    func recordMicrophoneDefaultsAndPersists() {
+        let (defaults, suite) = TestUserDefaults.make()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let store = SettingsStore(defaults: defaults)
+        #expect(store.recordMicrophone == false)
+        #expect(store.recordSystemAudio == false)
+
+        store.recordMicrophone = true
+        let reloaded = SettingsStore(defaults: defaults)
+        #expect(reloaded.recordMicrophone == true)
+    }
+
     @Test("默认不设置任何热键")
     func defaultHotkeysAreEmpty() {
         let (defaults, suite) = TestUserDefaults.make()

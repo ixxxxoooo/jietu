@@ -39,6 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 框选好了、**还没点「开始」**的那一档：红框 + 控制条先停着（`phase = .ready`）。
     var pendingRecording: (displayID: CGDirectDisplayID, region: CGRect)?
 
+    /// 正在开着的那一个裁剪窗口（同时只允许一个）。
+    var videoTrimController: VideoTrimController?
+    /// GIF 导出的进度浮窗。
+    var gifExportPanel: GifExportPanel?
+
     /// 滚动长图的右侧实时预览。
     var scrollingPreview: ScrollingPreviewPanel?
     /// 本次滚动长图的选区（含三套换算好的坐标）：用户中途改选区时跟着更新。
@@ -259,6 +264,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         quickAccess.onSaveVideo = { [weak self] url in
             self?.saveVideoAs(url)
+        }
+        quickAccess.onTrimVideo = { [weak self] url in
+            self?.openVideoTrim(url)
+        }
+        quickAccess.onExportGif = { [weak self] url in
+            self?.exportVideoAsGif(url)
         }
         overlays.onFinish = { [weak self] outcome in
             guard let self else { return }

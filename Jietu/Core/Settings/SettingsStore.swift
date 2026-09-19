@@ -5,6 +5,7 @@ import Observation
 final class SettingsStore {
     private enum Key {
         static let recordSystemAudio = "recording.systemAudio"
+        static let recordMicrophone = "recording.microphone"
         static let recordFrameRate = "recording.frameRate"
         /// 多热键映射（动作 rawValue → 组合键）。
         static let hotkeys = "hotkeys.map"
@@ -116,6 +117,11 @@ final class SettingsStore {
         didSet { defaults.set(recordSystemAudio, forKey: Key.recordSystemAudio) }
     }
 
+    /// 录屏时是否录麦克风（旁白讲解）。默认关；开着的当次没给权限就自动按关处理。
+    var recordMicrophone: Bool {
+        didSet { defaults.set(recordMicrophone, forKey: Key.recordMicrophone) }
+    }
+
     /// 录屏帧率（30 / 60）。60 更顺，文件也更大。
     var recordFrameRate: Int {
         didSet { defaults.set(recordFrameRate, forKey: Key.recordFrameRate) }
@@ -210,6 +216,8 @@ final class SettingsStore {
         self.launchAtLogin = defaults.object(forKey: Key.launchAtLogin) as? Bool ?? false
         self.recordSystemAudio =
             defaults.object(forKey: Key.recordSystemAudio) as? Bool ?? false
+        self.recordMicrophone =
+            defaults.object(forKey: Key.recordMicrophone) as? Bool ?? false
         self.recordFrameRate = defaults.object(forKey: Key.recordFrameRate) as? Int ?? 30
         self.recentCapturePaths = defaults.stringArray(forKey: Key.recentCapturePaths) ?? []
         self.saveFormat =

@@ -115,13 +115,20 @@ extension AppDelegate {
         engine.onFail = { [weak self] error in self?.failRecording(error) }
         recordingEngine = engine
 
-        let options = RecordingEngine.Options(
-            fps: settings.recordFrameRate,
-            capturesSystemAudio: settings.recordSystemAudio
-        )
         let excluded = [recordingHUD?.windowNumber, recordingBorder?.windowNumber].compactMap { $0 }
         Task { @MainActor in
             do {
+                // 麦克风开着的：开录前先过权限。拒绝 / 不是 Determinate 的弹一次系统授权，
+                // 用户不给就当这次没开——录屏本身不该被声音挡住。
+                var wantsMicrophone = false
+                if settings.recordMicrophone {
+                    wantsMicrophone = await MicrophoneCapture.requestPermission()
+                }
+                let options = RecordingEngine.Options(
+                    fps: settings.recordFrameRate,
+                    capturesSystemAudio: settings.recordSystemAudio,
+                    capturesMicrophone: wantsMicrophone
+                )
                 try await engine.start(
                     displayID: pending.displayID,
                     regionInPoints: pending.region,

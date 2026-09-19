@@ -88,6 +88,28 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// 导出 / 裁剪完成的通知：GIF、裁剪片段这类从成片派生的文件。
+    ///
+    /// 标题由调用方给（「GIF 已导出」/「裁剪完成」），点击通知在访达中定位文件。
+    func notifyExported(fileURL: URL, title: String) {
+        guard isAvailable else { return }
+        pendingURL = fileURL
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = fileURL.lastPathComponent
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error {
+                NSLog("[Jietu] post export notification failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
     // MARK: - UNUserNotificationCenterDelegate
 
     /// App 在前台时也要出横幅（Jietu 是菜单栏代理 App，截完基本算前台）。

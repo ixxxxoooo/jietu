@@ -1,6 +1,6 @@
 # 测试覆盖对照表
 
-> 截至 2026-09-19，307 个 `@Test`，34 个 `@Suite`。
+> 截至 2026-09-19，326 个 `@Test`，37 个 `@Suite`。
 >
 > 「selftest」列标注了 `AppDelegate+SelfTest.swift` 中的 DEBUG 自检命令覆盖情况。
 > selftest 在真实窗口环境里跑，能覆盖单元测试难以触达的 UI 层。
@@ -97,9 +97,14 @@
 
 | 源文件 | 单元测试 | selftest |
 |--------|----------|----------|
+| `AudioMixer.swift` | `AudioMixerTests` | — |
+| `GifExporter.swift` | `GifExporterTests` | — |
+| `MicrophoneCapture.swift` | — | ✅ 录屏（`--selftest-record`） |
 | `RecordingEngine.swift` | `RecordingTests` | ✅ 录屏 |
+| `RecordingWriter.swift` | `AudioMixerTests`（混音接线） | ✅ 录屏 |
 | `VideoEncodingSettings.swift` | `RecordingTests` | — |
 | `VideoThumbnail.swift` | — | — |
+| `VideoTrimmer.swift` | `VideoTrimmerTests` | — |
 
 ## Core/Scrolling
 
@@ -208,7 +213,9 @@
 |--------|----------|----------|
 | `RecordingBorderPanel.swift` | — | ✅ 录屏红框 |
 | `RecordingControlPanel.swift` | — | ✅ 录屏 HUD |
+| `GifExportPanel.swift` | — | — |
 | `VideoQuickLookPresenter.swift` | — | — |
+| `VideoTrimController.swift` | `VideoTrimmerTests`（时间文本） | — |
 
 ## UI/Scrolling
 

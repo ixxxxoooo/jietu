@@ -33,6 +33,8 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Jietu 需要访问麦克风才能在录屏时录下你的讲解。音频仅保存在本机，不会上传。</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Jietu 需要「屏幕录制」权限才能截取你的屏幕内容。所有截图仅保存在本机，不会上传。</string>
 	<key>NSPrincipalClass</key>

@@ -4,8 +4,9 @@ import SwiftUI
 /// 录屏收工后的浮窗卡片（Quick Access Overlay 的视频版）。
 ///
 /// 与图片卡（`QuickAccessView`）同一套表面与交互：卡片尺寸按封面等比算、悬停模糊露出毛玻璃、
-/// 浮出同一套 `GlassControlButton`、拖出去就是那个文件。动作与图片卡同构：
-/// - 四角：**复制文件 / 关闭 / 保存 / 在访达中显示**；
+/// 浮出同一套 `GlassControlButton`、拖出去就是那个文件。动作：
+/// - 上排：**复制文件 / 裁剪 / 关闭**；
+/// - 下排：**保存（另存为…）/ 导出 GIF / 在访达中显示**；
 /// - 中央胶囊：**播放**（点击 = 用 macOS 自带的「预览」打开）。
 ///
 /// 封面正中挂一枚「▶ 0:12」胶囊：一眼看出这是段视频、多长；悬停时它淡出，
@@ -26,6 +27,10 @@ struct QuickAccessVideoView: View {
     var onCopyFile: () -> Void
     /// 中央「保存」：把成片另存一份到用户挑的地方（原片留在保存目录）。
     var onSave: () -> Void
+    /// 「裁剪」：开裁剪窗口，掐头去尾另存一段。
+    var onTrim: () -> Void
+    /// 「导出 GIF」：转一份动图。
+    var onExportGif: () -> Void
     var onClose: () -> Void
     var onHoverChange: (Bool) -> Void
     /// 拖拽导出：直接给磁盘上那个 mp4（不是临时文件）。
@@ -104,7 +109,7 @@ struct QuickAccessVideoView: View {
         return String(format: "%d:%02d", minutes, secs)
     }
 
-    /// 四角圆盘（播放 / 在访达中显示 / 复制文件 / 关闭）+ 中央「保存」胶囊，
+    /// 六个圆盘（复制文件 / 裁剪 / 关闭 / 保存 / 导出 GIF / 在访达中显示）+ 中央「播放」，
     /// 与图片卡共用同一套玻璃按钮与同一套摆位。
     private var controls: some View {
         QuickAccessControlLayer(
@@ -115,6 +120,8 @@ struct QuickAccessVideoView: View {
                 case .reveal: onReveal()
                 case .copyFile: onCopyFile()
                 case .saveVideo: onSave()
+                case .trimVideo: onTrim()
+                case .exportGif: onExportGif()
                 case .close: onClose()
                 default: break
                 }

@@ -52,10 +52,14 @@ struct QuickAccessView: View {
     /// 夹住之后图片按比例居中留白（`.fit`），既不拉伸，按钮也永远有地方站。
     /// 卡片尺寸：等比缩放到上下限之间，**不放大**。
     ///
-    /// - Parameter imagePointSize: 图片的自然点尺寸（不是像素）。
-    static func panelSize(for imagePointSize: CGSize) -> CGSize {
+    /// - Parameters:
+    ///   - imagePointSize: 图片的自然点尺寸（不是像素）。
+    ///   - minimum: 尺寸下限（视频卡要放两排各三个圆盘，比图片卡更宽）。
+    static func panelSize(
+        for imagePointSize: CGSize,
+        minimum minSize: CGSize = Theme.Size.quickAccessCardMin
+    ) -> CGSize {
         let maxSize = Theme.Size.quickAccessCardMax
-        let minSize = Theme.Size.quickAccessCardMin
         let imageSize = imagePointSize
         guard imageSize.width > 0, imageSize.height > 0 else { return maxSize }
         // `min(1, ...)`：小图**不放大**（截了 20×10 点的图就按 20×10 显示，
