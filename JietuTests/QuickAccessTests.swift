@@ -142,35 +142,38 @@ struct QuickAccessTests {
         }
     }
 
-    @Test("视频卡（录屏收工）：上/下两排各三个圆盘 + 中央「播放」")
-    func videoCardHasFourDiscsAndACenterCapsule() {
+    @Test("视频卡（录屏收工）：上排圆盘 + 下排胶囊/圆盘 + 中央播放")
+    func videoCardHasDiscsCapsulesAndCenterPlay() {
         let card = CGSize(width: 260, height: 146)
-        let frames: [(String, NSRect)] = QuickAccessAction.videoCard.map {
-            ($0.title, QuickAccessControlsView.frame(of: $0, in: card))
+        let frames: [(QuickAccessAction, NSRect)] = QuickAccessAction.videoCard.map {
+            ($0, QuickAccessControlsView.frame(of: $0, in: card))
         }
-        #expect(frames.count == 7, "两排各三个 + 中央：上排复制/裁剪/关闭、下排保存/GIF/在访达中显示")
+        #expect(frames.count == 7, "两排各三个 + 中央")
         #expect(QuickAccessAction.videoCard.contains(.saveVideo), "操作栏要能保存（另存为…）")
         #expect(QuickAccessAction.videoCard.contains(.trimVideo), "操作栏要能裁剪成片")
         #expect(QuickAccessAction.videoCard.contains(.exportGif), "操作栏要能导出 GIF")
-        // 视频卡五颗全是圆盘（图片卡中央那颗才是胶囊）：中央「播放」正好落在
-        // 静止时「▶ 0:12」胶囊的位子上——点正中就是预览。
+        // 中央「播放」是圆盘
         let play = QuickAccessControlsView.frame(of: .play, in: card)
         #expect(play.width == QuickAccessControlsView.diameter)
         #expect(play.midX == card.width / 2 && play.midY == card.height / 2)
-        for (title, frame) in frames {
-            #expect(frame.width == QuickAccessControlsView.diameter, "\(title) 是圆盘")
-            #expect(frame.height == QuickAccessControlsView.diameter)
-            #expect(frame.minX >= 0 && frame.maxX <= card.width, "\(title) 越界")
-            #expect(frame.minY >= 0 && frame.maxY <= card.height, "\(title) 越界")
+        // saveVideo 和 exportGif 是胶囊（比圆盘宽），其余是圆盘
+        for (action, frame) in frames {
+            if action == .saveVideo || action == .exportGif {
+                #expect(frame.width > QuickAccessControlsView.diameter, "\(action.title) 是胶囊")
+            } else {
+                #expect(frame.width == QuickAccessControlsView.diameter, "\(action.title) 是圆盘")
+            }
+            #expect(frame.minX >= 0 && frame.maxX <= card.width, "\(action.title) 越界")
+            #expect(frame.minY >= 0 && frame.maxY <= card.height, "\(action.title) 越界")
         }
         for (index, first) in frames.enumerated() {
             for second in frames[(index + 1)...] {
-                #expect(!first.1.intersects(second.1), "\(first.0) 与 \(second.0) 重叠")
+                #expect(!first.1.intersects(second.1), "\(first.0.title) 与 \(second.0.title) 重叠")
             }
         }
 
-        // 位子：上排「复制文件 / 在访达中显示 / 关闭」（工具类），
-        // 下排「保存 MP4 / 裁剪 / 导出 GIF」（产出类），**中央播放**。
+        // 位子：上排「复制文件 / 在访达中显示 / 关闭」（工具类圆盘），
+        // 下排「MP4(胶囊) / 裁剪(圆盘) / GIF(胶囊)」（产出类），**中央播放**。
         let copyFile = QuickAccessControlsView.frame(of: .copyFile, in: card)
         let reveal = QuickAccessControlsView.frame(of: .reveal, in: card)
         let close = QuickAccessControlsView.frame(of: .close, in: card)
@@ -188,11 +191,11 @@ struct QuickAccessTests {
         #expect(QuickAccessAction.play.slot == .center)
     }
 
-    @Test("视频卡最窄也放得下两排各三个圆盘（卡片下限比图片卡宽一档）")
-    func videoCardFitsThreeDiscsPerRow() {
-        // 竖长录屏（9:16）夹到最小尺寸时：如果把图片卡的下限（96pt）拿来用，
-        // 同一排的三个圆盘会两两相压——所以视频卡自己有 120pt 的下限。
+    @Test("视频卡最窄也放得下两排控件（胶囊 + 圆盘不重叠）")
+    func videoCardFitsControlsAtMinimumWidth() {
+        // 下排有两个胶囊（MP4/GIF）+ 一个圆盘（裁剪），需要比纯圆盘更宽的下限。
         let minimum = Theme.Size.quickAccessVideoCardMin
+        #expect(minimum.width >= 200, "两个胶囊 + 一个圆盘至少要 200pt")
         let card = QuickAccessView.panelSize(
             for: CGSize(width: 90, height: 400), minimum: minimum
         )

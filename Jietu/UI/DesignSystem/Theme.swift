@@ -188,9 +188,9 @@ enum Theme {
         /// QAO 卡片的**最小**尺寸：极端宽高比（竖长截图 / 超宽截图）按原始比例算出来只有几十点宽
         /// （甚至十几点高），按钮就会互相压住、胶囊也放不下。兜一个下限，图片居中留白，不拉伸。
         static let quickAccessCardMin = CGSize(width: 96, height: 112)
-        /// QAO **视频卡**的最小宽度：上下两排各三个圆盘（3×28 + 两侧 8pt = 100pt），
-        /// 96 宽会让相邻两个压在一起，所以视频卡兜 120。
-        static let quickAccessVideoCardMin = CGSize(width: 120, height: 112)
+        /// QAO **视频卡**的最小宽度：下排有两个胶囊（MP4 ~75pt + GIF ~69pt）+ 一个圆盘（裁剪 28pt），
+        /// 按 `frame(of:in:)` 的居中布局，至少 200pt 才不会互相压住（胶囊比圆盘宽得多）。
+        static let quickAccessVideoCardMin = CGSize(width: 200, height: 112)
         /// QAO 距屏幕边缘。
         static let quickAccessInset: CGFloat = 20
 

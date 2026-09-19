@@ -24,8 +24,8 @@ enum QuickAccessAction: String, CaseIterable {
     /// 图片卡的动作与摆位：左上复制 / 右上关闭 / 左下标注 / 右下钉图 / 中央保存。
     static let imageCard: [QuickAccessAction] = [.copy, .close, .annotate, .pin, .save]
     /// 视频卡的动作与摆位：
-    /// - 上排「复制文件 / 在访达中显示 / 关闭」（工具类操作）；
-    /// - 下排「保存 MP4 / 裁剪 / 导出 GIF」（产出类操作，三者紧挨——都是「从成片导出一个文件」）；
+    /// - 上排「复制文件 / 在访达中显示 / 关闭」（工具类操作，圆盘）；
+    /// - 下排「MP4(胶囊) / 裁剪(圆盘) / GIF(胶囊)」（格式导出操作，MP4 和 GIF 用胶囊标明格式）；
     /// - **中央播放**。
     static let videoCard: [QuickAccessAction] = [
         .copyFile, .reveal, .close, .saveVideo, .trimVideo, .exportGif, .play,
@@ -68,12 +68,13 @@ enum QuickAccessAction: String, CaseIterable {
         case .pin: "钉图"
         case .annotate: "标注"
         case .copy: "复制"
-        case .save, .saveVideo: "保存"
+        case .save: "保存"
+        case .saveVideo: "MP4"        // 胶囊上显示「MP4」，一眼知道这是保存 MP4
         case .play: "播放"
         case .reveal: "在访达中显示"
         case .copyFile: "复制文件"
         case .trimVideo: "裁剪"
-        case .exportGif: "GIF"
+        case .exportGif: "GIF"        // 胶囊上显示「GIF」，与 MP4 并列
         }
     }
 
@@ -88,8 +89,14 @@ enum QuickAccessAction: String, CaseIterable {
         }
     }
 
-    /// 四角是圆盘图标；中央的「保存」是胶囊（图标 + 文字，它是主操作）。
-    var isCircle: Bool { self != .save }
+    /// 胶囊（图标 + 文字）用在有明确格式含义的操作上，其余是圆盘。
+    /// 视频卡的 MP4 / GIF 用胶囊——用户一眼就知道这两个是「格式选择」入口。
+    var isCircle: Bool {
+        switch self {
+        case .save, .saveVideo, .exportGif: return false
+        default: return true
+        }
+    }
 }
 
 /// 浮窗的图标层：**与钉图共用 `GlassControlButton`**，所以两边看着、点着都是同一套手感

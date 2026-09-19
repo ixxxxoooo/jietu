@@ -1,4 +1,5 @@
 import AVFoundation
+import Accelerate
 import Foundation
 
 /// 录屏音频的公共目标格式：44.1kHz / 双声道 / Float32 **非交织**。
@@ -144,13 +145,17 @@ nonisolated final class RealtimeAudioMixer {
         else { return }
         let offset = max(0, windowStart - entryStart)
         let srcFrames = Int64(entry.buffer.frameLength) - offset
-        let usable = Int(min(srcFrames, Int64(count) - (entryStart - windowStart)))
-        guard usable > 0 else { return }
         let skip = Int(max(0, entryStart - windowStart))
+        // ⚠️ 关键修正：`usable` 必须夹在 `count - skip` 以内——
+        // 老公式 `count - (entryStart - windowStart)` 当 entryStart < windowStart 时
+        // 会产生大于 count 的值，写越界导致杂音 / 爆音。
+        let usable = Int(min(srcFrames, Int64(count - skip)))
+        guard usable > 0 else { return }
         for channel in 0..<Int(RecordingAudioFormat.channels) {
             let source = src[channel].advanced(by: Int(offset))
             let target = out[channel].advanced(by: skip)
-            for i in 0..<usable { target[i] += source[i] }
+            // vDSP 向量加法：比逐样本循环快几倍，音频线程上更不易卡。
+            vDSP_vadd(source, 1, target, 1, target, 1, vDSP_Length(usable))
         }
     }
 

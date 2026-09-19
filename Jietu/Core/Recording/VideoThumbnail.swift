@@ -28,6 +28,46 @@ enum VideoThumbnail {
         return (image, duration)
     }
 
+    /// 为裁剪界面的电影胶片条批量取缩略图。
+    ///
+    /// 沿时间轴均匀取 `count` 帧，每帧缩到 `height` 高度（宽度按比例算）。
+    /// 用 `AVAssetImageGenerator.images(for:)` 批量请求——引擎可以优化解码顺序，
+    /// 比逐帧循环 `image(at:)` 快得多，20 帧 ~0.3 秒（SSD 上的典型录屏）。
+    static func filmstrip(
+        for url: URL, count: Int = 20, height: CGFloat = 50
+    ) async -> [CGImage] {
+        let asset = AVURLAsset(url: url)
+        guard let seconds = try? await asset.load(.duration),
+            CMTimeGetSeconds(seconds) > 0
+        else { return [] }
+        let total = CMTimeGetSeconds(seconds)
+
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        // 高度 50pt × 2x = 100px，足够清晰而不会拖慢解码。
+        generator.maximumSize = CGSize(width: height * 4, height: height * 2)
+        // 允许一些容差：精确取帧很慢，这里只是缩略图不需要帧精确。
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.5, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.5, preferredTimescale: 600)
+
+        let times = (0..<count).map { i in
+            CMTime(
+                seconds: total * Double(i) / Double(max(1, count - 1)),
+                preferredTimescale: 600
+            )
+        }
+
+        var images: [CGImage] = []
+        do {
+            for try await result in generator.images(for: times) {
+                images.append(try result.image)
+            }
+        } catch {
+            // 部分成功也返回——比起空条好得多。
+        }
+        return images
+    }
+
     /// 取不到封面时的占位图（中性灰底）。
     ///
     /// 用途：录屏**必须**能进「最近记录」——封面只是好看，缺了它不能让整条记录消失

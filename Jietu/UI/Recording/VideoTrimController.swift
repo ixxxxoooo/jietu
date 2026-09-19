@@ -2,9 +2,9 @@ import AVKit
 import AppKit
 import SwiftUI
 
-/// 裁剪视频的窗口：上面播放器（系统那套控制条），下面一条双柄时间轴。
+/// 裁剪视频的窗口：上面播放器（系统那套控制条），下面电影胶片条（iMovie 风格的拖拽裁剪）。
 ///
-/// 交互刻意做小：拖两个柄选区间，「设为开头 / 设为结尾」按当前播放头取点，保存就直通导出。
+/// 交互刻意做小：拖手柄选区间，「设为开头 / 设为结尾」按当前播放头取点，保存就直通导出。
 /// 不做逐帧预览、不做多段拼接——录屏裁剪要的是「掐头去尾」，一屏搞定。
 ///
 /// @author ixxxxoooo
@@ -33,6 +33,7 @@ final class VideoTrimController: NSObject, NSWindowDelegate {
         }
         let root = VideoTrimView(
             player: player,
+            videoURL: url,
             loadDuration: { [url] in
                 let asset = AVURLAsset(url: url)
                 return CMTimeGetSeconds((try? await asset.load(.duration)) ?? .zero)
@@ -121,11 +122,12 @@ final class VideoTrimController: NSObject, NSWindowDelegate {
     }
 }
 
-/// 裁剪界面本体。
-///
+// MARK: - 裁剪界面本体
+
 /// @author ixxxxoooo
 struct VideoTrimView: View {
     let player: AVPlayer
+    let videoURL: URL
     let loadDuration: () async -> TimeInterval
     let onSeek: (TimeInterval) -> Void
     let onExport: (TimeInterval, TimeInterval) -> Void
@@ -134,6 +136,9 @@ struct VideoTrimView: View {
     @State private var duration: TimeInterval = 0
     @State private var start: TimeInterval = 0
     @State private var end: TimeInterval = 0
+    @State private var thumbnails: [CGImage] = []
+    @State private var currentTime: TimeInterval = 0
+    @State private var timeObserver: AnyObject?
 
     var body: some View {
         VStack(spacing: Theme.Spacing.lg) {
@@ -142,7 +147,14 @@ struct VideoTrimView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                TrimRangeSlider(duration: duration, start: $start, end: $end)
+                FilmstripTrimBar(
+                    duration: duration,
+                    start: $start,
+                    end: $end,
+                    currentTime: currentTime,
+                    thumbnails: thumbnails,
+                    onSeek: onSeek
+                )
                 HStack(spacing: Theme.Spacing.md) {
                     Text(rangeText)
                         .font(Theme.Typography.numeric)
@@ -154,7 +166,7 @@ struct VideoTrimView: View {
             }
 
             HStack(spacing: Theme.Spacing.md) {
-                Text("拖两个圆点选一段，或用播放头取点。裁剪点会对齐到最近的关键帧。")
+                Text("拖手柄选区间，或用播放头取点。裁剪点会对齐到最近的关键帧。")
                     .font(Theme.Typography.rowSubtitle)
                     .foregroundStyle(Theme.Colors.textSecondary)
                 Spacer()
@@ -168,11 +180,9 @@ struct VideoTrimView: View {
         }
         .padding(Theme.Spacing.xl)
         .frame(minWidth: 560, minHeight: 420)
-        .task {
-            let loaded = await loadDuration()
-            duration = max(0, loaded)
-            if end <= 0 { end = duration }
-        }
+        .task { await loadContent() }
+        .onAppear { startTimeObserver() }
+        .onDisappear { stopTimeObserver() }
     }
 
     private var rangeText: String {
@@ -191,6 +201,32 @@ struct VideoTrimView: View {
         onSeek(end)
     }
 
+    private func loadContent() async {
+        let loaded = await loadDuration()
+        duration = max(0, loaded)
+        if end <= 0 { end = duration }
+        // 加载电影胶片缩略图（~20 帧，后台异步取）。
+        thumbnails = await VideoThumbnail.filmstrip(for: videoURL)
+    }
+
+    private func startTimeObserver() {
+        let interval = CMTime(seconds: 1.0 / 30, preferredTimescale: 600)
+        let observer = player.addPeriodicTimeObserver(
+            forInterval: interval, queue: .main
+        ) { [weak player] time in
+            guard player != nil else { return }
+            Task { @MainActor in currentTime = CMTimeGetSeconds(time) }
+        }
+        timeObserver = observer as AnyObject
+    }
+
+    private func stopTimeObserver() {
+        if let observer = timeObserver {
+            player.removeTimeObserver(observer)
+            timeObserver = nil
+        }
+    }
+
     /// `m:ss.d`——裁剪要精确到 0.1 秒，纯 `m:ss` 看不出拖了多少。
     static func timeText(_ seconds: TimeInterval) -> String {
         let total = max(0, seconds)
@@ -199,6 +235,8 @@ struct VideoTrimView: View {
         return String(format: "%d:%04.1f", minutes, rest)
     }
 }
+
+// MARK: - 播放器视图
 
 /// 带系统控制条的播放器视图。
 ///
@@ -225,53 +263,162 @@ private struct TrimPlayerView: NSViewRepresentable {
     }
 }
 
-/// 双柄时间轴：一条轨道 + 两个圆点，拖出要保留的区间。
+// MARK: - 电影胶片条
+
+/// iMovie 风格的电影胶片裁剪条：缩略图序列 + 黄色选区框 + 拖拽手柄。
+///
+/// 交互逻辑：
+/// - 拖左手柄 → 调整起点，夹在 `[0, end - 最短长度]`；
+/// - 拖右手柄 → 调整终点，夹在 `[start + 最短长度, 总时长]`；
+/// - 点击胶片空白处 → 跳到那个时间点（快速定位）；
+/// - 白色竖线 = 当前播放头位置。
 ///
 /// @author ixxxxoooo
-private struct TrimRangeSlider: View {
+private struct FilmstripTrimBar: View {
     let duration: TimeInterval
     @Binding var start: TimeInterval
     @Binding var end: TimeInterval
+    let currentTime: TimeInterval
+    let thumbnails: [CGImage]
+    var onSeek: ((TimeInterval) -> Void)?
 
-    private let handleSize: CGFloat = 18
+    /// 胶片条高度（50pt，iPhone / iMovie 常用档——足够看清画面又不挤播放器）。
+    private let barHeight: CGFloat = 50
+    /// 手柄宽度（拖拽热区）。
+    private let handleWidth: CGFloat = 12
+    /// 选区边框宽度（顶部 / 底部黄线）。
+    private let borderWidth: CGFloat = 3
 
     var body: some View {
         GeometryReader { geometry in
             let width = max(1, geometry.size.width)
-            let startX = fraction(start) * width
-            let endX = fraction(end) * width
-            ZStack(alignment: .topLeading) {
-                Capsule()
-                    .fill(Theme.Colors.controlSurface)
-                    .frame(width: width, height: 4)
-                    .offset(y: (handleSize - 4) / 2)
-                Capsule()
-                    .fill(Theme.Colors.accent)
-                    .frame(width: max(0, endX - startX), height: 4)
-                    .offset(x: startX, y: (handleSize - 4) / 2)
-                handle.offset(x: startX - handleSize / 2)
-                    .gesture(drag(width: width, isStart: true))
-                handle.offset(x: endX - handleSize / 2)
-                    .gesture(drag(width: width, isStart: false))
+            ZStack(alignment: .leading) {
+                // 底层：缩略图铺满
+                thumbnailStrip(width: width)
+
+                // 选区之外的暗化遮罩
+                dimOverlay(width: width)
+
+                // 选区边框（黄色 U 形框：上 + 下 + 左手柄 + 右手柄）
+                selectionFrame(width: width)
+
+                // 播放头（白色竖线）
+                playhead(width: width)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { location in
+                guard duration > 0 else { return }
+                let seconds = Double(location.x / width) * duration
+                onSeek?(min(max(0, seconds), duration))
             }
         }
-        .frame(height: handleSize)
+        .frame(height: barHeight)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
-    private var handle: some View {
-        Circle()
+    // MARK: - 缩略图条
+
+    private func thumbnailStrip(width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            if thumbnails.isEmpty {
+                // 占位：还没加载出来时显示深灰底
+                Rectangle()
+                    .fill(Theme.Colors.controlSurface)
+                    .frame(width: width, height: barHeight)
+            } else {
+                ForEach(thumbnails.indices, id: \.self) { i in
+                    Image(nsImage: NSImage(cgImage: thumbnails[i], size: .zero))
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(
+                            width: width / CGFloat(thumbnails.count),
+                            height: barHeight
+                        )
+                        .clipped()
+                }
+            }
+        }
+    }
+
+    // MARK: - 暗化遮罩
+
+    private func dimOverlay(width: CGFloat) -> some View {
+        let sx = startFraction(width)
+        let ex = endFraction(width)
+        return ZStack(alignment: .leading) {
+            // 左侧暗区
+            Rectangle()
+                .fill(.black.opacity(0.55))
+                .frame(width: max(0, sx))
+            // 右侧暗区
+            Rectangle()
+                .fill(.black.opacity(0.55))
+                .frame(width: max(0, width - ex))
+                .offset(x: ex)
+        }
+    }
+
+    // MARK: - 选区边框（黄色 U 形框）
+
+    private func selectionFrame(width: CGFloat) -> some View {
+        let sx = startFraction(width)
+        let ex = endFraction(width)
+        let selWidth = max(0, ex - sx)
+        return ZStack(alignment: .leading) {
+            // 上边线
+            Rectangle()
+                .fill(Theme.Colors.accent)
+                .frame(width: selWidth, height: borderWidth)
+                .offset(x: sx)
+            // 下边线
+            Rectangle()
+                .fill(Theme.Colors.accent)
+                .frame(width: selWidth, height: borderWidth)
+                .offset(x: sx, y: barHeight - borderWidth)
+
+            // 左手柄
+            trimHandle(isStart: true, width: width)
+            // 右手柄
+            trimHandle(isStart: false, width: width)
+        }
+    }
+
+    /// 手柄：黄色竖条 + 中心小抓手指示符。
+    private func trimHandle(isStart: Bool, width: CGFloat) -> some View {
+        let x = isStart ? startFraction(width) - handleWidth : endFraction(width)
+        return RoundedRectangle(cornerRadius: 3)
+            .fill(Theme.Colors.accent)
+            .frame(width: handleWidth, height: barHeight)
+            .overlay {
+                // 三条小横线（抓手）
+                VStack(spacing: 2) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 0.5)
+                            .fill(.white.opacity(0.8))
+                            .frame(width: 6, height: 1)
+                    }
+                }
+            }
+            .offset(x: x)
+            .gesture(handleDrag(isStart: isStart, width: width))
+    }
+
+    // MARK: - 播放头
+
+    private func playhead(width: CGFloat) -> some View {
+        let fraction = duration > 0 ? CGFloat(currentTime / duration) : 0
+        let x = min(max(0, fraction), 1) * width
+        return Rectangle()
             .fill(.white)
-            .frame(width: handleSize, height: handleSize)
-            .overlay(Circle().stroke(Theme.Colors.accent, lineWidth: 2))
-            .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+            .frame(width: 2, height: barHeight)
+            .shadow(color: .black.opacity(0.4), radius: 1, x: 0, y: 0)
+            .offset(x: x - 1)
+            .allowsHitTesting(false)
     }
 
-    private func fraction(_ seconds: TimeInterval) -> CGFloat {
-        guard duration > 0 else { return 0 }
-        return CGFloat(min(max(0, seconds / duration), 1))
-    }
+    // MARK: - 手势
 
-    private func drag(width: CGFloat, isStart: Bool) -> some Gesture {
+    private func handleDrag(isStart: Bool, width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 guard duration > 0 else { return }
@@ -282,5 +429,21 @@ private struct TrimRangeSlider: View {
                     end = max(seconds, min(duration, start + TrimRange.minimumLength))
                 }
             }
+            .onEnded { _ in
+                // 松手后把播放头吸到手柄位置，方便预览裁剪点。
+                onSeek?(isStart ? start : end)
+            }
+    }
+
+    // MARK: - 坐标转换
+
+    private func startFraction(_ width: CGFloat) -> CGFloat {
+        guard duration > 0 else { return 0 }
+        return CGFloat(min(max(0, start / duration), 1)) * width
+    }
+
+    private func endFraction(_ width: CGFloat) -> CGFloat {
+        guard duration > 0 else { return width }
+        return CGFloat(min(max(0, end / duration), 1)) * width
     }
 }
