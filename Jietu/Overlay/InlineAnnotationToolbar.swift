@@ -364,7 +364,7 @@ struct InlineOptionsToolbar: View {
 
     private var cropOptions: some View {
         HStack(spacing: Theme.Spacing.md) {
-            Text("拖拽边框调整区域")
+            Text("拖拽框选要保留的区域（拖控制点微调）")
                 .font(Theme.Typography.bar)
                 .foregroundStyle(Theme.Colors.textSecondary)
 

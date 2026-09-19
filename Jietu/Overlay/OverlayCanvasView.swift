@@ -63,6 +63,9 @@ final class OverlayCanvasView: NSView {
     /// 上 / 左右只留一点呼吸感，够放得下就按原尺寸来。
     private static let inlineEditorEdgeInset: CGFloat = 40
 
+    /// 裁剪框的最小边长：比它小的一拖当作「没拖」（单击误触），不参与裁剪。
+    private static let minimumCropSide: CGFloat = 10
+
     // MARK: - State
 
     private enum Interaction {
@@ -187,6 +190,8 @@ final class OverlayCanvasView: NSView {
     var restoredBaseImage: CGImage?
     private var restoredImageFrame: CGRect?
     private var cropInitialState: Snapshot?
+    /// 正在拖的那个新裁剪框锁定在哪块范围里（见 `cropMouseDown`）。
+    private var cropDragBounds: CGRect?
     private let restoredContainerLayer = CALayer()
     private let restoredImageLayer = CALayer()
 
@@ -330,6 +335,30 @@ final class OverlayCanvasView: NSView {
         selection = rect
         interaction = .settled
         updateAllLayers()
+    }
+
+    /// 自检用：等价于点一下工具栏里的某个工具（nil = 取消选择）。
+    @discardableResult
+    func debugSelectTool(_ tool: AnnotationTool?) -> Bool {
+        guard let model = toolbarModel else { return false }
+        model.tool = tool
+        return true
+    }
+
+    /// 自检用：当前底图与它在屏幕上的 frame。
+    var debugRestoredBase: (image: CGImage?, frame: CGRect?) {
+        (restoredBaseImage, restoredImageFrame)
+    }
+
+    /// 自检用：标注层的 frame。裁剪 / 缩放时它必须贴**底图**，不能跟着裁剪框缩。
+    var debugAnnotationLayerFrame: CGRect { annotationLayer.frame }
+
+    /// 自检用：当前标注数量（画几条验对齐用）。
+    var debugAnnotationCount: Int { annotations.count }
+
+    /// 自检用：当前预览底图的像素尺寸。
+    var debugCropImageSize: CGSize? {
+        cropImage.map { CGSize(width: $0.width, height: $0.height) }
     }
 
     /// 自检用：放大镜的「模型 frame」与「当前呈现 frame」。
@@ -1347,6 +1376,10 @@ final class OverlayCanvasView: NSView {
         if phase == .annotating {
             requestFocusIfNeeded()
             cursorPoint = point
+            // 裁剪工具自己接管鼠标：在图上任意位置（含正中）按下就能拖出新的裁剪框。
+            if cropMouseDown(point, clickCount: event.clickCount) {
+                return
+            }
             // 选区边缘优先接管：绿框还在，抓着边缘就是继续调区域，框内照旧用来标注。
             if let selection,
                 let handle = SelectionGeometry.handle(
@@ -1360,10 +1393,6 @@ final class OverlayCanvasView: NSView {
                     pushUndo()
                 }
                 interaction = .resizing(handle: handle, original: selection)
-                return
-            }
-            if toolbarModel?.tool == .crop, event.clickCount >= 2 {
-                applyCrop()
                 return
             }
             inlineMouseDown(point, clickCount: event.clickCount)
@@ -1422,6 +1451,10 @@ final class OverlayCanvasView: NSView {
         guard isInputArmed else { return }
         let point = convert(event.locationInWindow, from: nil)
         if phase == .annotating {
+            // 裁剪工具正拖着一个新裁剪框 → 只更新框，不画标注。
+            if cropMouseDragged(point, lockAspect: event.modifierFlags.contains(.shift)) {
+                return
+            }
             // 正在拖选区边缘 → 继续改区域；否则交给原地标注。
             if case .resizing(let handle, let original) = interaction {
                 cursorPoint = point
@@ -1507,6 +1540,10 @@ final class OverlayCanvasView: NSView {
         guard isInputArmed else { return }
         let point = convert(event.locationInWindow, from: nil)
         if phase == .annotating {
+            // 裁剪框拖拽收手：框留着（不立刻裁），按 ↵ / 双击 / 「完成裁剪」才动刀。
+            if cropMouseUp() {
+                return
+            }
             // 拖选区边缘或整体移动收手：回到「已定」状态，不把它当成一次标注。
             if case .resizing = interaction {
                 interaction = .settled
@@ -1927,12 +1964,95 @@ final class OverlayCanvasView: NSView {
 
     // MARK: - Crop actions
 
+    /// 裁剪工具下的按下：双击直接完成裁剪；抓到裁剪框边缘就微调；**在图上任意位置按下
+    /// （包括正中间）则拖出一个新的裁剪框**——这正是裁剪与「拖外面那个选框」的区别。
+    ///
+    /// - Returns: `true` 表示这次按下归裁剪管，调用方不必再走标注那条路。
+    private func cropMouseDown(_ point: CGPoint, clickCount: Int) -> Bool {
+        guard toolbarModel?.tool == .crop, let bounds = cropBaseFrame else { return false }
+        if clickCount >= 2 {
+            applyCrop()
+            return true
+        }
+        if let selection,
+            let handle = SelectionGeometry.handle(
+                at: point,
+                in: selection,
+                tolerance: Theme.selectionHandleHitTolerance
+            )
+        {
+            interaction = .resizing(handle: handle, original: selection)
+            return true
+        }
+        // 图外（压暗区 / 工具栏）按下不归裁剪管。
+        guard bounds.contains(point) else { return false }
+        cropDragBounds = bounds
+        interaction = .pressing(anchor: point)
+        return true
+    }
+
+    /// 裁剪框拖拽中：从按下点拉出一个矩形，范围锁在当前底图之内。
+    ///
+    /// - Returns: `true` 表示这一拖归裁剪管。
+    private func cropMouseDragged(_ point: CGPoint, lockAspect: Bool) -> Bool {
+        guard toolbarModel?.tool == .crop, let bounds = cropDragBounds else { return false }
+        if case .pressing(let anchor) = interaction {
+            // 没超过拖拽阈值就什么都不做：单击不该毁掉已有的裁剪框。
+            guard hypot(point.x - anchor.x, point.y - anchor.y) >= Theme.dragActivationDistance else {
+                return true
+            }
+            interaction = .selecting(anchor: anchor)
+        }
+        guard case .selecting(let anchor) = interaction else { return false }
+        cursorPoint = point
+        let updated = SelectionGeometry.selectionRect(
+            from: anchor,
+            to: point,
+            clampTo: bounds,
+            square: lockAspect
+        )
+        applyRegionResize(from: selection ?? updated, to: updated)
+        return true
+    }
+
+    /// 裁剪框拖拽收手：框留着等确认（↵ / 双击 / 「完成裁剪」）；太小的框当作没拖，退回原范围。
+    ///
+    /// - Returns: `true` 表示这一次收手归裁剪管。
+    private func cropMouseUp() -> Bool {
+        switch interaction {
+        case .pressing:
+            // 只是点了一下：保持原裁剪框。
+            interaction = .settled
+            cropDragBounds = nil
+            return true
+        case .selecting:
+            interaction = .settled
+            let bounds = cropDragBounds
+            cropDragBounds = nil
+            if let bounds, let selection,
+                selection.width < Self.minimumCropSide || selection.height < Self.minimumCropSide
+            {
+                // 一拖就松的小框：当作单击误触，把范围还回去（顺带把标注的位移还原）。
+                applyRegionResize(from: selection, to: bounds)
+            }
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// 裁剪框的可选范围：恢复图片模式是当前底图，普通区域截图是当前那块选区。
+    private var cropBaseFrame: CGRect? {
+        restoredImageFrame ?? selection
+    }
+
     private func applyCrop() {
         if let initial = cropInitialState {
             undoStack.append(initial)
             redoStack.removeAll()
             cropInitialState = nil
         }
+        cropDragBounds = nil
         performCropExecution()
         toolbarModel?.tool = nil
         updateRestoredImageLayer()
@@ -1955,7 +2075,7 @@ final class OverlayCanvasView: NSView {
         guard let selection else { return }
         if let restored = restoredBaseImage, let baseFrame = restoredImageFrame {
             let cropRect = selection.intersection(baseFrame)
-            guard cropRect.width >= 10, cropRect.height >= 10 else {
+            guard cropRect.width >= Self.minimumCropSide, cropRect.height >= Self.minimumCropSide else {
                 self.selection = baseFrame
                 return
             }
@@ -1992,6 +2112,7 @@ final class OverlayCanvasView: NSView {
         }
         toolbarModel?.tool = nil
         cropInitialState = nil
+        cropDragBounds = nil
         updateRestoredImageLayer()
         updateSelectionLayers()
         updateAnnotationLayer()
@@ -2071,7 +2192,7 @@ final class OverlayCanvasView: NSView {
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        guard let base = cropImage, let selection, !list.isEmpty else {
+        guard let base = baseImageInView, let frame = baseFrameInView, !list.isEmpty else {
             annotationLayer.contents = nil
             annotationLayer.isHidden = true
             CATransaction.commit()
@@ -2086,7 +2207,8 @@ final class OverlayCanvasView: NSView {
             strokes: eraserStrokes,
             drawsBase: false
         )
-        annotationLayer.frame = selection
+        // 贴**底图**的 frame（不是选区）：裁剪 / 缩放时选区会变，底图不变。
+        annotationLayer.frame = frame
         annotationLayer.contents = image
         annotationLayer.isHidden = false
         CATransaction.commit()
@@ -2481,6 +2603,7 @@ final class OverlayCanvasView: NSView {
                     )
                 } else if model.tool != .crop {
                     self.cropInitialState = nil
+                    self.cropDragBounds = nil
                 }
                 self.optionsToolbarHost?.isHidden = !model.isSubToolbarVisible
                 self.updateLiveTextOverlay()
@@ -2496,14 +2619,15 @@ final class OverlayCanvasView: NSView {
     private func updateLiveTextOverlay() {
         let wantsLiveText = (toolbarModel?.isLiveTextActive ?? false) && cropImage != nil && selection != nil
         if wantsLiveText {
-            if liveTextHost == nil, let image = cropImage {
+            if liveTextHost == nil, let image = baseImageInView {
                 let host = NSHostingView(rootView: LiveTextOverlay(image: image))
                 host.translatesAutoresizingMaskIntoConstraints = true
                 addSubview(host)
                 liveTextHost = host
             }
-            if let host = liveTextHost, let selection {
-                host.frame = selection
+            if let host = liveTextHost, let frame = baseFrameInView {
+                // 覆盖层是**底图**的一片，跟着底图的 frame 走（与标注层同一套基准）。
+                host.frame = frame
             }
         } else {
             liveTextHost?.removeFromSuperview()
@@ -2563,36 +2687,50 @@ final class OverlayCanvasView: NSView {
 
     // MARK: Inline geometry    // MARK: Inline geometry
 
-    /// 视图坐标（原点左下）→ 选区裁剪后的图像像素坐标（原点左上）。
+    /// 屏幕上**底图**占的矩形：恢复图片模式是底图自己的 frame，普通区域截图就是当前选区。
+    ///
+    /// 标注的坐标换算一律以它为准。裁剪框（或缩放）改动的是**选区**——「要保留哪一块」的框，
+    /// 底图并没有跟着变形；拿选区当基准的话，一拖裁剪框标注就会被压扁、点也点不准。
+    private var baseFrameInView: CGRect? {
+        restoredImageFrame ?? selection
+    }
+
+    /// 底图的像素图（标注层 / 实况文本的渲染源），与 `baseFrameInView` 成对使用。
+    private var baseImageInView: CGImage? {
+        restoredBaseImage ?? cropImage
+    }
+
+    /// 视图坐标（原点左下）→ 底图像素坐标（原点左上）。
     private func annotationPoint(from point: CGPoint) -> CGPoint {
-        guard let selection, selection.width > 0, selection.height > 0 else { return .zero }
+        guard let frame = baseFrameInView, frame.width > 0, frame.height > 0 else { return .zero }
         let scaleX: CGFloat
         let scaleY: CGFloat
-        if let crop = cropImage {
-            scaleX = CGFloat(crop.width) / selection.width
-            scaleY = CGFloat(crop.height) / selection.height
+        if let base = baseImageInView {
+            scaleX = CGFloat(base.width) / frame.width
+            scaleY = CGFloat(base.height) / frame.height
         } else {
             scaleX = snapshot.effectiveScale
             scaleY = snapshot.effectiveScale
         }
         return CGPoint(
-            x: (point.x - selection.minX) * scaleX,
-            y: (selection.maxY - point.y) * scaleY
+            x: (point.x - frame.minX) * scaleX,
+            y: (frame.maxY - point.y) * scaleY
         )
     }
 
+    /// 底图像素坐标 → 视图坐标（原点左下）。
     private func viewPoint(fromAnnotation point: CGPoint) -> CGPoint {
-        guard let selection, selection.width > 0, selection.height > 0 else { return .zero }
+        guard let frame = baseFrameInView, frame.width > 0, frame.height > 0 else { return .zero }
         let scaleX: CGFloat
         let scaleY: CGFloat
-        if let crop = cropImage {
-            scaleX = CGFloat(crop.width) / selection.width
-            scaleY = CGFloat(crop.height) / selection.height
+        if let base = baseImageInView {
+            scaleX = CGFloat(base.width) / frame.width
+            scaleY = CGFloat(base.height) / frame.height
         } else {
             scaleX = snapshot.effectiveScale
             scaleY = snapshot.effectiveScale
         }
-        return CGPoint(x: selection.minX + point.x / scaleX, y: selection.maxY - point.y / scaleY)
+        return CGPoint(x: frame.minX + point.x / scaleX, y: frame.maxY - point.y / scaleY)
     }
 
     private func viewPoint(_ point: CGPoint) -> CGPoint {

@@ -298,6 +298,183 @@ struct InlineToolbarTests {
         #expect(abs(ratio - 1000.0 / 800.0) < 0.01, "缩放应等比，不拉伸")
     }
 
+    // MARK: - 裁剪：框选要保留的区域
+
+    @Test("裁剪：从图片中间拖出裁剪框，双击确认后按它裁掉像素")
+    func cropDrawsRectFromMiddleThenApplies() {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        // 底图 1600×1200 px（2x 屏幕 → 800×600 点）居中：frame = (100, 135, 800, 600)。
+        #expect(canvas.debugSelection == CGRect(x: 100, y: 135, width: 800, height: 600))
+        #expect(canvas.debugSelectTool(.crop))
+
+        // 从图片正中间往左下拖一块 200×135。
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 500, y: 435)))
+        canvas.mouseDragged(with: Self.mouse(.leftMouseDragged, at: NSPoint(x: 300, y: 300)))
+        canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 300, y: 300)))
+
+        #expect(
+            canvas.debugSelection == CGRect(x: 300, y: 300, width: 200, height: 135),
+            "从中间拖出来的框就是待裁剪区域"
+        )
+        #expect(
+            canvas.debugRestoredBase.frame == CGRect(x: 100, y: 135, width: 800, height: 600),
+            "还没确认，底图先不动"
+        )
+
+        // 双击确认：按该框裁掉像素（2x → 400×270 px），底图 frame 收到裁剪框上。
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 400, y: 400), clickCount: 2))
+        let base = canvas.debugRestoredBase
+        #expect(base.frame == CGRect(x: 300, y: 300, width: 200, height: 135))
+        #expect(base.image?.width == 400, "裁剪后宽应为选区宽 × 屏幕缩放")
+        #expect(base.image?.height == 270, "裁剪后高应为选区高 × 屏幕缩放")
+    }
+
+    @Test("裁剪：框选范围锁在底图之内，拖到图外也不会超出")
+    func cropRectStaysInsideBaseImage() {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        #expect(canvas.debugSelectTool(.crop))
+
+        // 从图片中间一路拖到屏幕左下角（远在底图之外）。
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 500, y: 435)))
+        canvas.mouseDragged(with: Self.mouse(.leftMouseDragged, at: NSPoint(x: 20, y: 20)))
+        canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 20, y: 20)))
+
+        #expect(
+            canvas.debugSelection == CGRect(x: 100, y: 135, width: 400, height: 300),
+            "超出底图的部分要被夹掉"
+        )
+    }
+
+    @Test("裁剪：单击不毁掉已有的裁剪框")
+    func cropClickKeepsPendingRect() {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        #expect(canvas.debugSelectTool(.crop))
+
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 500, y: 435)))
+        canvas.mouseDragged(with: Self.mouse(.leftMouseDragged, at: NSPoint(x: 300, y: 300)))
+        canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 300, y: 300)))
+        let pending = CGRect(x: 300, y: 300, width: 200, height: 135)
+
+        // 在别处点一下（没有拖动）：框得留着。
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 700, y: 600)))
+        canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 700, y: 600)))
+
+        #expect(canvas.debugSelection == pending, "单击只是点了一下，不该把裁剪框弄没")
+    }
+
+    @Test("裁剪：拖动裁剪框时标注层贴着底图，不被压进裁剪框")
+    func annotationLayerStaysGluedToBaseWhileCropping() {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+
+        // 先画一笔，让标注层有内容。
+        #expect(canvas.debugSelectTool(.pen))
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 300, y: 400)))
+        canvas.mouseDragged(with: Self.mouse(.leftMouseDragged, at: NSPoint(x: 600, y: 500)))
+        canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 600, y: 500)))
+        #expect(canvas.debugAnnotationCount == 1)
+
+        #expect(canvas.debugSelectTool(.crop))
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 500, y: 435)))
+        canvas.mouseDragged(with: Self.mouse(.leftMouseDragged, at: NSPoint(x: 300, y: 300)))
+        canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 300, y: 300)))
+
+        #expect(canvas.debugSelection == CGRect(x: 300, y: 300, width: 200, height: 135))
+        #expect(
+            canvas.debugAnnotationLayerFrame == CGRect(x: 100, y: 135, width: 800, height: 600),
+            "标注层要贴底图；跟着裁剪框缩会把标注压扁错位"
+        )
+    }
+
+    @Test("裁剪：区域截图（普通原地编辑）也能从中间框出一块来裁")
+    func cropWorksForRegionScreenshots() {
+        // 普通区域截图：先框一块 600×500 的区域，松手进原地标注。
+        let canvas = Self.makeCanvas(canvas: CGSize(width: 1000, height: 800))
+        canvas.inlineMode = true
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 200, y: 150)))
+        canvas.mouseDragged(with: Self.mouse(.leftMouseDragged, at: NSPoint(x: 800, y: 650)))
+        canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 800, y: 650)))
+        #expect(canvas.debugSelection == CGRect(x: 200, y: 150, width: 600, height: 500))
+        #expect(canvas.debugCropImageSize == CGSize(width: 1200, height: 1000), "预览底图 = 区域 × 屏幕缩放")
+
+        // 裁剪工具：从区域中间框出 250×150。
+        #expect(canvas.debugSelectTool(.crop))
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 500, y: 400)))
+        canvas.mouseDragged(with: Self.mouse(.leftMouseDragged, at: NSPoint(x: 250, y: 250)))
+        canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 250, y: 250)))
+        #expect(canvas.debugSelection == CGRect(x: 250, y: 250, width: 250, height: 150))
+
+        // 双击确认：区域收到裁剪框上，预览底图同步收小。
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 350, y: 300), clickCount: 2))
+        #expect(canvas.debugSelection == CGRect(x: 250, y: 250, width: 250, height: 150))
+        #expect(canvas.debugCropImageSize == CGSize(width: 500, height: 300))
+    }
+
+    // MARK: - 就地编辑测试脚手架
+
+    /// 造一块普通原地编辑画布：快照底图与画布同比例（`effectiveScale` == `scale`）。
+    private static func makeCanvas(canvas size: CGSize, scale: CGFloat = 2) -> OverlayCanvasView {
+        let snapshot = DisplaySnapshot(
+            displayID: 1,
+            screenFrameInPoints: CGRect(origin: .zero, size: size),
+            nominalScaleFactor: scale,
+            image: makeImage(width: Int(size.width * scale), height: Int(size.height * scale))
+        )
+        let view = OverlayCanvasView(
+            snapshot: snapshot,
+            session: CaptureSession(snapshots: [snapshot], windows: []),
+            displayIndex: 1,
+            displayCount: 1
+        )
+        view.frame = NSRect(origin: .zero, size: size)
+        return view
+    }
+
+    /// 造一块画布 + 一张恢复进来的底图，并直接进入原地编辑（图片居中、工具栏就位）。
+    ///
+    /// 画布 1000×800、底图 1600×1200 px（2x 屏幕 → 800×600 点）时，底图 frame 是 (100, 135, 800, 600)。
+    private static func makeRestoredCanvas(
+        canvas size: CGSize,
+        imagePixels: (width: Int, height: Int) = (1600, 1200),
+        scale: CGFloat = 2
+    ) -> OverlayCanvasView {
+        let view = makeCanvas(canvas: size, scale: scale)
+        view.restoreImageForInlineEditing(
+            makeImage(width: imagePixels.width, height: imagePixels.height)
+        )
+        return view
+    }
+
+    private static func makeImage(width: Int, height: Int) -> CGImage {
+        let ctx = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        return ctx.makeImage()!
+    }
+
+    private static func mouse(
+        _ type: NSEvent.EventType,
+        at point: NSPoint,
+        clickCount: Int = 1
+    ) -> NSEvent {
+        NSEvent.mouseEvent(
+            with: type,
+            location: point,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 0,
+            clickCount: clickCount,
+            pressure: type == .leftMouseDown ? 1 : 0
+        )!
+    }
+
     @Test("原地编辑模式下滚轮与捏合可缩放图片选区")
     func zoomChangesSelectionInAnnotatingPhase() {
         let colorSpace = CGColorSpaceCreateDeviceRGB()
