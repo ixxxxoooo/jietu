@@ -135,6 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onSelectHistoryItem = { [weak self] item in
             self?.openHistoryItem(item)
         }
+        menuBar.onPinHistoryItem = { [weak self] item in self?.pinHistoryItem(item) }
         menuBar.onClearRecents = { [weak self] in self?.clearAllHistory() }
         menuBar.onOpenFolder = { [weak self] in self?.openSaveFolder() }
 

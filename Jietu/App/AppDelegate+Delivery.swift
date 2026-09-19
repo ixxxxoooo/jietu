@@ -270,6 +270,15 @@ extension AppDelegate {
         openInlineEditor(cgImage, allowsCrop: true)
     }
 
+    /// 最近记录里点「钉图」：把这张**已有图片**钉到屏幕上。
+    ///
+    /// 走的是标注编辑器里那颗「钉图」同一条路（`PinWindowController`）；这里没有选区可依，
+    /// 就钉在鼠标所在那块屏的中间。录屏条目走不到这儿——卡片不给它这个动作。
+    func pinHistoryItem(_ item: HistoryItem) {
+        guard let image = item.resolvedCGImage else { return }
+        PinWindowController.pin(image: image, on: screenUnderMouse())
+    }
+
     /// 清空所有历史与最近记录。
     func clearAllHistory() {
         settings.clearRecentCaptures()

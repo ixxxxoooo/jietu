@@ -27,7 +27,7 @@ extension AppDelegate {
         guard destination.standardizedFileURL != url.standardizedFileURL else { return }
 
         let hud = GifExportPanel()
-        hud.present(on: screenForVideoWindow())
+        hud.present(on: screenUnderMouse())
         gifExportPanel = hud
         if FileManager.default.fileExists(atPath: destination.path) {
             try? FileManager.default.removeItem(at: destination)
@@ -52,8 +52,8 @@ extension AppDelegate {
         }
     }
 
-    /// 视频相关窗口落在哪块屏：鼠标当前所在的那块（和录屏浮窗同一套口径）。
-    func screenForVideoWindow() -> NSScreen? {
+    /// 该把窗口 / 钉图摆在哪块屏：鼠标当前所在的那块（和录屏浮窗、GIF 进度浮窗同一套口径）。
+    func screenUnderMouse() -> NSScreen? {
         NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
     }
 

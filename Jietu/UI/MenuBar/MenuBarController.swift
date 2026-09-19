@@ -28,6 +28,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onOpenFolder: (() -> Void)?
 
     var onSelectHistoryItem: ((HistoryItem) -> Void)?
+    /// 最近记录里点「钉图」（只对图片条目露出）：把这张已有图片钉到屏幕上。
+    var onPinHistoryItem: ((HistoryItem) -> Void)?
     var onAuthorizeScreenRecording: (() -> Void)?
     var onAuthorizeAccessibility: (() -> Void)?
     var onOpenOnboarding: (() -> Void)?
@@ -286,17 +288,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 }
             },
             onCopy: { item in
-                // 会话内那份直接拷位图；重启后回来的条目只有文件——**从文件读原图**，
-                // 绝不能拿列表里的缩略图当原图拷（拷出来会是糊的）。
-                if let cg = item.cgImage {
-                    CaptureOutput.copyToPasteboard(cg)
-                } else if let url = item.url, let img = NSImage(contentsOf: url),
-                    let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) {
-                    CaptureOutput.copyToPasteboard(cg)
-                } else if let img = item.image,
-                    let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                // **从原图读**，绝不能拿列表里的缩略图当原图拷（拷出来会是糊的）。
+                if let cg = item.resolvedCGImage {
                     CaptureOutput.copyToPasteboard(cg)
                 }
+            },
+            onPin: { [weak self] item in
+                self?.menu.cancelTracking()
+                self?.onPinHistoryItem?(item)
             },
             onClear: { [weak self] in
                 self?.onClearRecents?()
