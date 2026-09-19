@@ -297,10 +297,8 @@ extension AppDelegate {
                 try? await Task.sleep(for: .milliseconds(800))
                 let elapsed = (CFAbsoluteTimeGetCurrent() - stopAt) * 1000
 
-                let files = (try? FileManager.default.contentsOfDirectory(
-                    at: savedDirectory, includingPropertiesForKeys: nil
-                )) ?? []
-                let mp4 = files.first { $0.pathExtension == "mp4" }
+                // 视频现在住在历史目录里（不再搬去保存目录），从 HistoryStore 里找。
+                let mp4 = HistoryStore.shared.entries.first?.videoURL
                 var duration: Double = -1
                 if let mp4 {
                     duration = (try? await AVURLAsset(url: mp4).load(.duration)).map {
@@ -308,11 +306,11 @@ extension AppDelegate {
                     } ?? -1
                 }
                 report.append(
-                    "点完成 → 落盘：文件=\(mp4?.lastPathComponent ?? "**没有**")"
+                    "点完成 → 入历史：文件=\(mp4?.lastPathComponent ?? "**没有**")"
                         + String(format: "，时长 %.2fs", duration)
                         + "，控制条=\(recordingHUD == nil ? "已收" : "**没收**")"
                 )
-                budgets.append(("落盘出 mp4", mp4 != nil ? 0 : nil, 0))
+                budgets.append(("入历史出 mp4", mp4 != nil ? 0 : nil, 0))
                 budgets.append(("成片有内容（时长 > 0.2s）", duration > 0.2 ? 0 : nil, 0))
                 budgets.append(("收工后控制条收掉", recordingHUD == nil ? 0 : nil, 0))
                 report.append(String(format: "「完成」→ 收工耗时 %.0f ms", elapsed))
@@ -344,22 +342,17 @@ extension AppDelegate {
                 //    （用户实测报的「录完东西不见了」就是因为录屏压根不进历史）。
                 // 记录是异步落的（要等封面），等一小会儿再查——不能靠「正好已经写完了」。
                 try? await Task.sleep(for: .milliseconds(900))
-                let recordedVideoPaths = HistoryStore.shared.entries.compactMap(\.videoPath)
-                // 两边都归一化再比：`/var` 与 `/private/var` 是同一个地方（见 HistoryStore）。
-                let mp4Path = mp4?.path
-                let inHistory = mp4Path.map { path in
-                    let normalized = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
-                    return recordedVideoPaths.contains(normalized)
-                } ?? false
+                // 视频住在历史目录里，直接检查条目有没有。
+                let inHistory = mp4 != nil && HistoryStore.shared.entries.contains { $0.isVideo }
                 report.append(
                     "录屏进了「最近记录」：\(inHistory ? "是" : "**否**")"
                         + "（历史共 \(HistoryStore.shared.entries.count) 条）"
                 )
                 report.append(
-                    "  本次成片=\(mp4Path ?? "无")"
+                    "  本次成片=\(mp4?.path ?? "无")"
                 )
-                for path in recordedVideoPaths {
-                    report.append("  历史里的=\(path)")
+                for entry in HistoryStore.shared.entries where entry.isVideo {
+                    report.append("  历史里的=\(entry.videoPath ?? "—")")
                 }
                 budgets.append(("录屏进最近记录", inHistory ? 0 : nil, 0))
                 if cardUp,

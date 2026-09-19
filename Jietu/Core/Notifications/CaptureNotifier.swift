@@ -66,16 +66,14 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// 录屏收工后的通知：视频做不了图片预览，就把时长写进副标题。
-    func notifyRecordingSaved(fileURL: URL, duration: TimeInterval) {
+    func notifyRecordingCompleted(duration: TimeInterval) {
         guard isAvailable else { return }
-        pendingAction = { NSWorkspace.shared.activateFileViewerSelecting([fileURL]) }
+        pendingAction = nil
 
         let total = max(0, Int(duration.rounded(.down)))
         let content = UNMutableNotificationContent()
-        content.title = "录屏已保存"
-        content.body = String(
-            format: "%@（%02d:%02d）", fileURL.lastPathComponent, total / 60, total % 60
-        )
+        content.title = "录屏完成"
+        content.body = String(format: "时长 %02d:%02d", total / 60, total % 60)
         let request = UNNotificationRequest(
             identifier: UUID().uuidString,
             content: content,

@@ -195,46 +195,61 @@ extension AppDelegate {
         stopRecordingUI()
     }
 
-    /// 录屏收工：把临时 mp4 搬进保存目录（命名模板 + 同名序号），
-    /// 再给一张**浮窗视频卡**（看得见、拿得走）+ 一条通知。
+    /// 录屏收工：临时 mp4 搬进**历史目录**（主副本），再给一张浮窗视频卡 + 一条通知。
+    ///
+    /// 和截图同一思路：历史目录里的是主副本（「只要录了就有记录」），
+    /// 用户的保存目录是「另存」的副本——用户不点保存也不会丢。
     func finishRecording(temporaryURL: URL) {
         let elapsed = recordingElapsed
         let displayID = recordingDisplayID ?? NSScreen.main?.jietu_displayID
         stopRecordingUI()
-        do {
-            let url = try CaptureOutput.moveFile(
-                temporaryURL,
-                toDirectory: settings.saveDirectory,
-                nameTemplate: settings.effectiveFilenameTemplate,
-                fileExtension: "mp4"
+
+        // 先用占位封面把录屏**同步**记进历史（临时文件一并搬进历史目录）。
+        // 「东西在」这件事一刻都不能等——浮窗会到点自动关闭，历史是之后唯一的入口。
+        guard let placeholder = VideoThumbnail.placeholder(),
+            let entry = HistoryStore.shared.recordVideo(
+                temporaryURL: temporaryURL, cover: placeholder, duration: elapsed
+            ),
+            let videoURL = entry.videoURL
+        else {
+            presentRecordingFailure(RecordingEngine.Failure.noFrames)
+            return
+        }
+
+        let id = entry.id
+        logger.notice("recording saved to history: \(videoURL.lastPathComponent)")
+        if settings.showSaveNotification {
+            notifier.notifyRecordingCompleted(duration: elapsed)
+        }
+
+        // 异步取真封面，取到了换掉占位图。
+        Task { @MainActor in
+            guard let card = await VideoThumbnail.make(for: videoURL) else { return }
+            HistoryStore.shared.updateCover(card.image, duration: card.duration, for: id)
+        }
+
+        // 开了「自动保存到磁盘」：额外复制一份到保存目录（和截图同理）。
+        if settings.saveToDisk {
+            do {
+                let savedURL = try CaptureOutput.copyFile(
+                    videoURL,
+                    toDirectory: settings.saveDirectory,
+                    nameTemplate: settings.effectiveFilenameTemplate,
+                    fileExtension: "mp4"
+                )
+                HistoryStore.shared.attachSavedVideo(savedURL, sourceVideoURL: videoURL)
+                settings.recordCapture(savedURL)
+                logger.notice("recording auto-saved: \(savedURL.lastPathComponent)")
+            } catch {
+                logger.error("auto-save recording failed: \(error.localizedDescription)")
+            }
+        }
+
+        // 呈现浮窗视频卡。
+        Task { @MainActor [weak self] in
+            await self?.presentRecordingCard(
+                url: videoURL, elapsed: elapsed, displayID: displayID
             )
-            logger.notice("recording saved: \(url.lastPathComponent)")
-            if settings.showSaveNotification {
-                notifier.notifyRecordingSaved(fileURL: url, duration: elapsed)
-            }
-            // **立刻**进「最近记录」：浮窗卡片会到点自动关闭，历史是那之后唯一的入口。
-            // 先用占位封面同步记上——「东西在」这件事一刻都不能等；真封面是异步取的，
-            // 取到了再换掉（用户实测报的「录完东西不见了」就是历史里压根没有录屏）。
-            if let placeholder = VideoThumbnail.placeholder(),
-                let entry = HistoryStore.shared.recordVideo(
-                    at: url, cover: placeholder, duration: elapsed
-                )
-            {
-                let id = entry.id
-                Task { @MainActor in
-                    guard let card = await VideoThumbnail.make(for: url) else { return }
-                    HistoryStore.shared.updateCover(
-                        card.image, duration: card.duration, for: id
-                    )
-                }
-            }
-            Task { @MainActor [weak self] in
-                await self?.presentRecordingCard(
-                    url: url, elapsed: elapsed, displayID: displayID
-                )
-            }
-        } catch {
-            presentRecordingFailure(error)
         }
     }
 

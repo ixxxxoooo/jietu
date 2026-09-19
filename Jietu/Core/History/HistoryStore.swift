@@ -51,8 +51,9 @@ final class HistoryStore {
 
     /// 最多留多少条。
     static let maxEntries = 40
-    /// 历史目录最多占多少字节（超了丢最旧的）。截图是 PNG，一屏 5K 也就几 MB，400MB 够留不少。
-    static let maxBytes: Int64 = 400 * 1024 * 1024
+    /// 历史目录最多占多少字节（超了丢最旧的）。
+    /// 截图是 PNG 一张几 MB，录屏 mp4 几十到几百 MB；2 GB 大约够放 40 张截图 + 若干录屏。
+    static let maxBytes: Int64 = 2 * 1024 * 1024 * 1024
 
     private let directory: URL
     private let indexURL: URL
@@ -97,33 +98,47 @@ final class HistoryStore {
         save()
     }
 
-    /// 记一段录屏：历史目录里只放**封面缩略图**，视频本体留在用户保存目录。
+    /// 记一段录屏：把临时 mp4 搬进历史目录（和截图一样「先安顿好」），封面另存一份。
     ///
-    /// 为什么不像截图那样复制一份：一段几分钟的录屏几十上百 MB，复制进历史等于占用翻倍，
-    /// 而「最近记录」要的只是「能找到它」。所以只记路径 —— 用户把视频挪走/删掉，
-    /// 这条就点不开了（和截图条目失去 `savedPath` 是同一个规矩）。
+    /// 核心思路：**录屏的主副本住在历史目录里**，用户的保存目录只是「另存」的副本。
+    /// 临时文件在 /tmp 里，不搬的话重启就没了——截图也是同样的做法。
     @discardableResult
     func recordVideo(
-        at videoURL: URL, cover: CGImage, duration: TimeInterval, date: Date = Date()
+        temporaryURL: URL, cover: CGImage, duration: TimeInterval, date: Date = Date()
     ) -> HistoryEntry? {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let id = UUID().uuidString
-        let coverURL = directory.appendingPathComponent(
-            "\(Self.fileStamp(date))-\(id.prefix(8))-cover.png"
-        )
+        let stamp = Self.fileStamp(date)
+
+        // 搬视频到历史目录（主副本）
+        let videoDestination = directory.appendingPathComponent("\(stamp)-\(id.prefix(8)).mp4")
+        guard (try? FileManager.default.moveItem(at: temporaryURL, to: videoDestination)) != nil
+        else { return nil }
+
+        // 存封面缩略图
+        let coverURL = directory.appendingPathComponent("\(stamp)-\(id.prefix(8))-cover.png")
         guard let data = CaptureOutput.pngData(cover),
             (try? data.write(to: coverURL, options: .atomic)) != nil
         else { return nil }
 
-        let path = Self.normalizedPath(videoURL)
         let entry = HistoryEntry(
-            id: id, date: date, historyPath: Self.normalizedPath(coverURL), savedPath: path,
-            videoPath: path, videoDuration: duration
+            id: id, date: date, historyPath: Self.normalizedPath(coverURL),
+            savedPath: nil,
+            videoPath: Self.normalizedPath(videoDestination),
+            videoDuration: duration
         )
         entries.insert(entry, at: 0)
         prune()
         save()
         return entry
+    }
+
+    /// 用户把这段录屏「另存为」到磁盘后回填（打开 / 在访达中显示改用它）。
+    func attachSavedVideo(_ savedURL: URL, sourceVideoURL: URL) {
+        let normalizedVideo = Self.normalizedPath(sourceVideoURL)
+        guard let index = entries.firstIndex(where: { $0.videoPath == normalizedVideo }) else { return }
+        entries[index].savedPath = Self.normalizedPath(savedURL)
+        save()
     }
 
     /// 录屏封面后补：先用占位图把条目**同步**记上（「东西在」这件事一刻都不能等），
@@ -190,15 +205,28 @@ final class HistoryStore {
             dropped += entries[Self.maxEntries...]
             entries = Array(entries.prefix(Self.maxEntries))
         }
-        var total = entries.reduce(Int64(0)) { $0 + size(of: $1.historyURL) }
+        var total = entries.reduce(Int64(0)) { $0 + totalSize(of: $1) }
         while total > Self.maxBytes, let last = entries.last {
             dropped.append(last)
             entries.removeLast()
-            total -= size(of: last.historyURL)
+            total -= totalSize(of: last)
         }
         for entry in dropped {
             try? FileManager.default.removeItem(at: entry.historyURL)
+            // 录屏条目：视频主副本也在历史目录里，一起删。
+            if let videoPath = entry.videoPath {
+                try? FileManager.default.removeItem(atPath: videoPath)
+            }
         }
+    }
+
+    /// 条目在历史目录里占的总大小（封面 + 视频）。
+    private func totalSize(of entry: HistoryEntry) -> Int64 {
+        var total = size(of: entry.historyURL)
+        if let videoPath = entry.videoPath {
+            total += size(of: URL(fileURLWithPath: videoPath))
+        }
+        return total
     }
 
     private func size(of url: URL) -> Int64 {

@@ -169,22 +169,22 @@ struct QuickAccessTests {
             }
         }
 
-        // 位子：上排「复制文件 / 裁剪 / 关闭」、下排「保存 / 导出 GIF / 在访达中显示」，
-        // **中央播放**。
-        // 中央必须是播放：静止时那里挂着「▶ 0:12」胶囊，点卡片正中要能直接预览
-        // （之前中央是保存，点正中会弹保存面板——最顺手的那一点反而是错的）。
+        // 位子：上排「复制文件 / 在访达中显示 / 关闭」（工具类），
+        // 下排「保存 MP4 / 裁剪 / 导出 GIF」（产出类），**中央播放**。
         let copyFile = QuickAccessControlsView.frame(of: .copyFile, in: card)
-        let trim = QuickAccessControlsView.frame(of: .trimVideo, in: card)
+        let reveal = QuickAccessControlsView.frame(of: .reveal, in: card)
         let close = QuickAccessControlsView.frame(of: .close, in: card)
         let save = QuickAccessControlsView.frame(of: .saveVideo, in: card)
+        let trim = QuickAccessControlsView.frame(of: .trimVideo, in: card)
         let gif = QuickAccessControlsView.frame(of: .exportGif, in: card)
-        let reveal = QuickAccessControlsView.frame(of: .reveal, in: card)
+        // 上排：copyFile 左上、reveal 上居中、close 右上
         #expect(copyFile.minX < card.width / 2 && copyFile.minY > card.height / 2)
-        #expect(trim.midX == card.width / 2 && trim.minY > card.height / 2)
+        #expect(reveal.midX == card.width / 2 && reveal.minY > card.height / 2)
         #expect(close.minX > card.width / 2 && close.minY > card.height / 2)
+        // 下排：save 左下、trim 下居中、gif 右下
         #expect(save.minX < card.width / 2 && save.minY < card.height / 2)
-        #expect(gif.midX == card.width / 2 && gif.minY < card.height / 2)
-        #expect(reveal.minX > card.width / 2 && reveal.minY < card.height / 2)
+        #expect(trim.midX == card.width / 2 && trim.minY < card.height / 2)
+        #expect(gif.minX > card.width / 2 && gif.minY < card.height / 2)
         #expect(QuickAccessAction.play.slot == .center)
     }
 

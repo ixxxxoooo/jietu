@@ -120,6 +120,24 @@ enum CaptureOutput {
         return url
     }
 
+    /// 复制一份已有文件到保存目录（录屏「另存为 MP4」走这条：主副本留在历史目录，另存一份给用户）。
+    ///
+    /// 命名规则与 `moveFile` 完全一致。
+    static func copyFile(
+        _ source: URL,
+        toDirectory directory: URL,
+        nameTemplate: String = FilenameTemplate.defaultTemplate,
+        fileExtension: String = "mp4",
+        date: Date = Date()
+    ) throws -> URL {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = try uniqueURL(
+            in: directory, nameTemplate: nameTemplate, fileExtension: fileExtension, date: date
+        )
+        try FileManager.default.copyItem(at: source, to: url)
+        return url
+    }
+
     /// 按命名模板算出一个**目录里还不存在**的文件 URL（同名就追加 -1 / -2 …）。
     static func uniqueURL(
         in directory: URL,

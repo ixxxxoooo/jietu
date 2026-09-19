@@ -97,30 +97,32 @@ struct HistoryStoreTests {
         #expect(HistoryStore(directory: directory).entries.isEmpty)
     }
 
-    @Test("录屏进「最近记录」：只存封面缩略图，本体留在保存目录，点开给的是视频")
-    func recordsVideoWithoutCopyingIt() throws {
+    @Test("录屏进「最近记录」：临时文件搬进历史目录，封面 + 视频都在里面，点开给的是视频")
+    func recordsVideoMovedToHistory() throws {
         let (store, directory) = makeStore()
         defer { try? FileManager.default.removeItem(at: directory) }
 
-        // 造一个「录屏文件」放在别处（模拟用户的保存目录）。
-        let videoDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("jietu-video-test-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: videoDirectory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: videoDirectory) }
-        let videoURL = videoDirectory.appendingPathComponent("录屏.mp4")
-        try Data("fake".utf8).write(to: videoURL)
+        // 造一个「临时录屏文件」（模拟 RecordingWriter 写好的 mp4）。
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jietu-temp-\(UUID().uuidString).mp4")
+        try Data("fake".utf8).write(to: tempURL)
 
         let entry = try #require(
-            store.recordVideo(at: videoURL, cover: image(), duration: 12.5)
+            store.recordVideo(temporaryURL: tempURL, cover: image(), duration: 12.5)
         )
         #expect(entry.isVideo)
         #expect(entry.videoDuration == 12.5)
-        #expect(entry.openURL == videoURL, "点开要落到视频本体上")
         #expect(entry.historyURL.pathExtension == "png", "历史目录里存的是封面 PNG")
-        #expect(entry.historyURL.path != videoURL.path)
-        #expect(FileManager.default.fileExists(atPath: videoURL.path), "视频本体不许被搬走/复制")
+        // 视频主副本搬进了历史目录（不再留在临时目录）
+        let videoURL = try #require(entry.videoURL)
+        #expect(videoURL.path.hasPrefix(directory.path), "视频主副本应在历史目录里")
+        #expect(videoURL.pathExtension == "mp4")
+        #expect(FileManager.default.fileExists(atPath: videoURL.path), "视频文件要真的在")
+        #expect(!FileManager.default.fileExists(atPath: tempURL.path), "临时文件应已搬走")
+        #expect(entry.openURL == videoURL, "点开要落到视频本体上")
+        #expect(entry.savedPath == nil, "还没另存，savedPath 应为空")
 
-        // 换个实例读同一个目录（= 重启）：条目还在，封面也读得回来。
+        // 换个实例读同一个目录（= 重启）：条目还在，封面和视频都读得回来。
         let reopened = HistoryStore(directory: directory)
         let restored = try #require(reopened.entries.first)
         #expect(restored.isVideo)
@@ -129,18 +131,48 @@ struct HistoryStoreTests {
         #expect(FileManager.default.fileExists(atPath: restored.historyPath))
     }
 
+    @Test("录屏「另存为」后回填 savedPath，打开 / 显示改用用户那份")
+    func videoAttachSavedPath() throws {
+        let (store, directory) = makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jietu-temp-\(UUID().uuidString).mp4")
+        try Data("fake".utf8).write(to: tempURL)
+        let entry = try #require(
+            store.recordVideo(temporaryURL: tempURL, cover: image(), duration: 5)
+        )
+        let videoURL = try #require(entry.videoURL)
+
+        // 模拟用户「另存为」
+        let savedURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("user-saved-\(UUID().uuidString).mp4")
+        try FileManager.default.copyItem(at: videoURL, to: savedURL)
+        defer { try? FileManager.default.removeItem(at: savedURL) }
+        store.attachSavedVideo(savedURL, sourceVideoURL: videoURL)
+
+        let updated = try #require(store.entries.first)
+        #expect(updated.savedPath == savedURL.resolvingSymlinksInPath().path)
+
+        // 重启后也持久化了
+        let reopened = HistoryStore(directory: directory)
+        #expect(reopened.entries.first?.savedPath == savedURL.resolvingSymlinksInPath().path)
+    }
+
     @Test("录屏本体被删掉后，重启读索引时这条要丢掉（点不开的条目不该留在菜单里）")
     func dropsVideoEntriesWhoseFileIsGone() throws {
         let (store, directory) = makeStore()
         defer { try? FileManager.default.removeItem(at: directory) }
 
-        let videoURL = FileManager.default.temporaryDirectory
+        let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("jietu-gone-\(UUID().uuidString).mp4")
-        try Data("fake".utf8).write(to: videoURL)
-        store.recordVideo(at: videoURL, cover: image(), duration: 3)
+        try Data("fake".utf8).write(to: tempURL)
+        store.recordVideo(temporaryURL: tempURL, cover: image(), duration: 3)
         #expect(store.entries.count == 1)
 
-        try FileManager.default.removeItem(at: videoURL)
+        // 删掉历史目录里的视频文件
+        let videoPath = try #require(store.entries.first?.videoPath)
+        try FileManager.default.removeItem(atPath: videoPath)
         let reopened = HistoryStore(directory: directory)
         #expect(reopened.entries.isEmpty, "本体没了，这条就该消失")
     }

@@ -209,10 +209,10 @@ extension AppDelegate {
         }
     }
 
-    /// 视频卡的「保存」：把成片**另存一份**到用户挑的地方。
+    /// 视频卡的「保存 MP4」：把成片**另存一份**到用户挑的地方。
     ///
-    /// 与截图的「保存」同一个面板、同一个默认目录；差别是原片已经在保存目录里了，
-    /// 所以这是**复制**（原片留着，卡片上的播放 / 在访达中显示 / 拖拽都还指着它）。
+    /// 主副本在历史目录里（录完就有），这里只是复制——主副本留着，卡片上的
+    /// 播放 / 在访达中显示 / 拖拽都还指着它。
     func saveVideoAs(_ url: URL) {
         let panel = NSSavePanel()
         panel.directoryURL = settings.saveDirectory
@@ -228,7 +228,13 @@ extension AppDelegate {
                 try FileManager.default.removeItem(at: destination)
             }
             try FileManager.default.copyItem(at: url, to: destination)
+            // 回填历史：打开 / 在访达中显示改用用户自己那份。
+            HistoryStore.shared.attachSavedVideo(destination, sourceVideoURL: url)
+            settings.recordCapture(destination)
             logger.notice("recording saved as: \(destination.lastPathComponent)")
+            if settings.showSaveNotification {
+                notifier.notifySaved(fileURL: destination)
+            }
         } catch {
             logger.error("save recording as failed: \(error.localizedDescription)")
         }

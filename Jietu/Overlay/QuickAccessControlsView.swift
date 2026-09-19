@@ -23,14 +23,12 @@ enum QuickAccessAction: String, CaseIterable {
 
     /// 图片卡的动作与摆位：左上复制 / 右上关闭 / 左下标注 / 右下钉图 / 中央保存。
     static let imageCard: [QuickAccessAction] = [.copy, .close, .annotate, .pin, .save]
-    /// 视频卡的动作与摆位：上排「复制文件 / 裁剪 / 关闭」、下排「保存 / 导出 GIF / 在访达中显示」、
-    /// **中央播放**。
-    ///
-    /// 中央给「播放」而不是「保存」：静止时那里挂着「▶ 0:12」胶囊，悬停后同一位置换成
-    /// 「播放」，点下去就是预览——同一个意思、同一个位置，不用挪手。
-    /// （之前中央是「保存」，于是「点卡片正中」变成了弹保存面板，正好撞在用户最顺手的那一点上。）
+    /// 视频卡的动作与摆位：
+    /// - 上排「复制文件 / 在访达中显示 / 关闭」（工具类操作）；
+    /// - 下排「保存 MP4 / 裁剪 / 导出 GIF」（产出类操作，三者紧挨——都是「从成片导出一个文件」）；
+    /// - **中央播放**。
     static let videoCard: [QuickAccessAction] = [
-        .copyFile, .trimVideo, .close, .saveVideo, .exportGif, .reveal, .play,
+        .copyFile, .reveal, .close, .saveVideo, .trimVideo, .exportGif, .play,
     ]
 
     /// 控件在卡片里的位子。写死在这里，`frame(of:in:)` 与自检都按它算注入点。
@@ -41,11 +39,11 @@ enum QuickAccessAction: String, CaseIterable {
     var slot: Slot {
         switch self {
         case .copy, .copyFile: .topLeft
-        case .trimVideo: .topCenter
+        case .reveal: .topCenter               // 视频卡：在访达中显示（上排居中）
         case .close: .topRight
         case .annotate, .saveVideo: .bottomLeft
-        case .exportGif: .bottomCenter
-        case .pin, .reveal: .bottomRight
+        case .trimVideo: .bottomCenter          // 视频卡：裁剪（下排居中，紧挨保存）
+        case .pin, .exportGif: .bottomRight     // 图片卡：钉图 / 视频卡：导出 GIF
         case .save, .play: .center
         }
     }
