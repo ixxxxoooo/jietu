@@ -215,6 +215,89 @@ struct InlineToolbarTests {
         #expect(selection.minY >= 120.0, "底部应预留至少 120pt 容纳主工具栏与二级菜单")
     }
 
+    @Test("窗口截图恢复原地编辑时按真实尺寸 1:1 展示，不再缩到屏幕比例内")
+    func restoredWindowCaptureKeepsNaturalSize() {
+        // 画布 1000×800、图片 1600×1200 px（= 800×600 点）：真实尺寸放得下，
+        // 就该 1:1 展示（按旧的「72% 宽 / 65% 高」硬比例会被缩成 693×520）。
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let ctx = CGContext(
+            data: nil,
+            width: 1600,
+            height: 1200,
+            bitsPerComponent: 8,
+            bytesPerRow: 1600 * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        let image = ctx.makeImage()!
+
+        let snapshot = DisplaySnapshot(
+            displayID: 1,
+            screenFrameInPoints: CGRect(x: 0, y: 0, width: 1000, height: 800),
+            nominalScaleFactor: 2,
+            image: image
+        )
+        let session = CaptureSession(snapshots: [snapshot], windows: [])
+        let canvas = OverlayCanvasView(
+            snapshot: snapshot,
+            session: session,
+            displayIndex: 1,
+            displayCount: 1
+        )
+
+        canvas.restoreImageForInlineEditing(image)
+
+        guard let selection = canvas.debugSelection else {
+            Issue.record("未生成居中选区")
+            return
+        }
+        #expect(selection.width == 800, "窗口截图应按真实点尺寸展示（不缩小），实际 \(selection.width)")
+        #expect(selection.height == 600, "窗口截图应按真实点尺寸展示（不缩小），实际 \(selection.height)")
+        #expect(abs(selection.midX - 500) <= 1, "水平居中")
+    }
+
+    @Test("全屏截图恢复原地编辑时等比缩小以让出工具栏空间")
+    func restoredFullScreenCaptureShrinksToFit() {
+        // 画布 1000×800、图片 2000×1600 px（= 1000×800 点，整屏）：必然放不下，只能缩小。
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let ctx = CGContext(
+            data: nil,
+            width: 2000,
+            height: 1600,
+            bitsPerComponent: 8,
+            bytesPerRow: 2000 * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        let image = ctx.makeImage()!
+
+        let snapshot = DisplaySnapshot(
+            displayID: 1,
+            screenFrameInPoints: CGRect(x: 0, y: 0, width: 1000, height: 800),
+            nominalScaleFactor: 2,
+            image: image
+        )
+        let session = CaptureSession(snapshots: [snapshot], windows: [])
+        let canvas = OverlayCanvasView(
+            snapshot: snapshot,
+            session: session,
+            displayIndex: 1,
+            displayCount: 1
+        )
+
+        canvas.restoreImageForInlineEditing(image)
+
+        guard let selection = canvas.debugSelection else {
+            Issue.record("未生成居中选区")
+            return
+        }
+        #expect(selection.width < 1000, "整屏图必须缩小才放得下")
+        #expect(selection.height <= 800 - 160, "缩小后要同时让出工具栏（下 120）与上边距（40）")
+        #expect(selection.minY >= 120, "底部应预留工具栏空间")
+        let ratio = selection.width / selection.height
+        #expect(abs(ratio - 1000.0 / 800.0) < 0.01, "缩放应等比，不拉伸")
+    }
+
     @Test("原地编辑模式下滚轮与捏合可缩放图片选区")
     func zoomChangesSelectionInAnnotatingPhase() {
         let colorSpace = CGColorSpaceCreateDeviceRGB()

@@ -55,6 +55,14 @@ final class OverlayCanvasView: NSView {
     private static let regionPickPauseDelay: TimeInterval = 0.35
     private var pauseWorkItem: DispatchWorkItem?
 
+    /// 原地编辑恢复图片时，四周至少让出的空间（point）。
+    ///
+    /// 下方这一条正是工具栏的位置：主栏（~46）+ 间距（10）+ 二级参数栏（~46）+ 收边（8）
+    /// 叠起来刚好 ~120，所以 `minY` 不低于它时两条工具栏都能摆在图片下面，不会压住图。
+    private static let inlineEditorBottomInset: CGFloat = 120
+    /// 上 / 左右只留一点呼吸感，够放得下就按原尺寸来。
+    private static let inlineEditorEdgeInset: CGFloat = 40
+
     // MARK: - State
 
     private enum Interaction {
@@ -253,29 +261,39 @@ final class OverlayCanvasView: NSView {
     }
 
     /// 从浮窗（钉图或快速访问卡片）恢复到原地编辑模式，图片在屏幕中央居中展示。
+    ///
+    /// 尺寸规则：**按图片在屏幕上的真实点尺寸 1:1 展示**（不放大）——窗口截图截多大、区域截图
+    /// 框多大，原地编辑就多大，和刚才那张浮窗卡片 / 原窗口看起来一致；只有真实尺寸放不下时
+    /// 才等比缩小，缩到「画布减去工具栏空间与边距」的可用区域内。全屏截图必然放不下，所以
+    /// 只有它（以及整屏大小的窗口 / 选区）会被缩放，普通窗口截图不再被无谓地缩小。
     func restoreImageForInlineEditing(_ image: CGImage) {
         inlineMode = true
         restoredBaseImage = image
 
-        // 计算居中选区：等比缩放不超过屏幕 72% 宽 / 65% 高（四周舒适留白，下方留出充分的工具栏空间）
         let backingScale = window?.backingScaleFactor ?? snapshot.nominalScaleFactor
         let scaleFactor = backingScale > 0 ? backingScale : 2.0
         let naturalWidth = CGFloat(image.width) / scaleFactor
         let naturalHeight = CGFloat(image.height) / scaleFactor
 
-        let maxW = canvasBounds.width * 0.72
-        let maxH = canvasBounds.height * 0.65
-        let scale = min(1.0, min(maxW / naturalWidth, maxH / naturalHeight))
+        let availableWidth = max(
+            Theme.minimumSelectionSize,
+            canvasBounds.width - Self.inlineEditorEdgeInset * 2
+        )
+        let availableHeight = max(
+            Theme.minimumSelectionSize,
+            canvasBounds.height - Self.inlineEditorBottomInset - Self.inlineEditorEdgeInset
+        )
+        let scale = min(1.0, min(availableWidth / naturalWidth, availableHeight / naturalHeight))
         let displayWidth = max(Theme.minimumSelectionSize, (naturalWidth * scale).rounded())
         let displayHeight = max(Theme.minimumSelectionSize, (naturalHeight * scale).rounded())
 
         let originX = ((canvasBounds.width - displayWidth) / 2).rounded()
         var originY = (((canvasBounds.height - displayHeight) / 2) + 35).rounded()
-        if originY < 120 {
-            originY = 120
+        if originY < Self.inlineEditorBottomInset {
+            originY = Self.inlineEditorBottomInset
         }
-        if originY + displayHeight > canvasBounds.maxY - 40 {
-            originY = canvasBounds.maxY - displayHeight - 40
+        if originY + displayHeight > canvasBounds.maxY - Self.inlineEditorEdgeInset {
+            originY = canvasBounds.maxY - displayHeight - Self.inlineEditorEdgeInset
         }
         let sel = CGRect(x: originX, y: originY, width: displayWidth, height: displayHeight)
         self.selection = sel
