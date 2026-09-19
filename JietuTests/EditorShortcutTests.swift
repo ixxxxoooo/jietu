@@ -9,13 +9,6 @@ import Testing
 /// @author ixxxxoooo
 @Suite("标注编辑快捷键")
 struct EditorShortcutTests {
-    private func makeDefaults() -> (UserDefaults, String) {
-        let suite = "jietu.tests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        return (defaults, suite)
-    }
-
     private func keyEvent(
         _ keyCode: Int,
         _ flags: NSEvent.ModifierFlags,
@@ -85,7 +78,7 @@ struct EditorShortcutTests {
 
     @Test("设置存储：首次启动就带着默认绑定，而不是空的")
     func storeStartsWithDefaults() {
-        let (defaults, suite) = makeDefaults()
+        let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let store = SettingsStore(defaults: defaults)
@@ -96,7 +89,7 @@ struct EditorShortcutTests {
 
     @Test("设置存储：改过之后重开还是改过的值，另一条保持默认")
     func storePersistsOverride() {
-        let (defaults, suite) = makeDefaults()
+        let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let custom = Hotkey(
@@ -116,7 +109,7 @@ struct EditorShortcutTests {
 
     @Test("设置存储：解绑是显式状态，不会被默认值填回来")
     func storeKeepsExplicitUnbind() {
-        let (defaults, suite) = makeDefaults()
+        let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let store = SettingsStore(defaults: defaults)
@@ -131,7 +124,7 @@ struct EditorShortcutTests {
 
     @Test("恢复默认把两条一起还原")
     func resetRestoresStandard() {
-        let (defaults, suite) = makeDefaults()
+        let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let store = SettingsStore(defaults: defaults)

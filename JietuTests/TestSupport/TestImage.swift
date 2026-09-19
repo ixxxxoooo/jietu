@@ -54,4 +54,9 @@ enum TestImage {
     static func solidBlack(side: Int = 8) -> CGImage {
         horizontalBands(width: side, height: side, rows: [(0, 0, 0)])
     }
+
+    /// 指定尺寸的纯色图（用 CoreGraphics 生成，颜色可自定义）。
+    static func solidColor(width: Int, height: Int, r: UInt8 = 0, g: UInt8 = 128, b: UInt8 = 128) -> CGImage {
+        make(width: width, height: height) { _, _ in (r, g, b) }
+    }
 }

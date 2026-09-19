@@ -8,16 +8,9 @@ import Testing
 /// @author ixxxxoooo
 @Suite("设置存储")
 struct SettingsStoreTests {
-    private func makeDefaults() -> (UserDefaults, String) {
-        let suite = "jietu.tests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        return (defaults, suite)
-    }
-
     @Test("默认值符合预期")
     func defaults() {
-        let (defaults, suite) = makeDefaults()
+        let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let store = SettingsStore(defaults: defaults)
@@ -32,7 +25,7 @@ struct SettingsStoreTests {
 
     @Test("默认不设置任何热键")
     func defaultHotkeysAreEmpty() {
-        let (defaults, suite) = makeDefaults()
+        let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let store = SettingsStore(defaults: defaults)
@@ -43,7 +36,7 @@ struct SettingsStoreTests {
 
     @Test("多个热键各自独立持久化，清除后不再存在")
     func persistsMultipleHotkeys() {
-        let (defaults, suite) = makeDefaults()
+        let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let store = SettingsStore(defaults: defaults)
@@ -65,7 +58,7 @@ struct SettingsStoreTests {
 
     @Test("旧版本的单热键记录会迁移到区域截图")
     func migratesLegacyHotkey() throws {
-        let (defaults, suite) = makeDefaults()
+        let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let legacy = Hotkey(keyCode: 12, carbonModifiers: UInt32(controlKey))
@@ -77,7 +70,7 @@ struct SettingsStoreTests {
 
     @Test("标注默认样式默认值符合预期，且能持久化")
     func annotationDefaults() {
-        let (defaults, suite) = makeDefaults()
+        let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let store = SettingsStore(defaults: defaults)
@@ -96,7 +89,7 @@ struct SettingsStoreTests {
 
     @Test("存档里的越界样式会被夹回合法范围")
     func sanitizesStoredAnnotationDefaults() throws {
-        let (defaults, suite) = makeDefaults()
+        let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let broken = AnnotationDefaults(
@@ -121,7 +114,7 @@ struct SettingsStoreTests {
 
     @Test("写入后重新读取能恢复")
     func persists() {
-        let (defaults, suite) = makeDefaults()
+        let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let store = SettingsStore(defaults: defaults)
@@ -137,7 +130,7 @@ struct SettingsStoreTests {
 
     @Test("最近截图按新到旧排序，且去重、限长")
     func recentCaptures() throws {
-        let (defaults, suite) = makeDefaults()
+        let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         // `recentCaptureURLs` 会过滤掉不存在的文件，所以要落真实文件。

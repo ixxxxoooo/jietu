@@ -194,7 +194,7 @@ struct QuickAccessTests {
         controller.onSaveVideo = { saved = $0 }
         controller.presentVideo(
             url: url,
-            thumbnail: solidImage(width: 520, height: 292),
+            thumbnail: TestImage.solidColor(width: 520, height: 292),
             thumbnailPointSize: CGSize(width: 260, height: 146),
             duration: 12,
             onDisplay: CGMainDisplayID()
@@ -221,18 +221,6 @@ struct QuickAccessTests {
 
         controller.dismiss()
         #expect(FileManager.default.fileExists(atPath: url.path), "关卡片不能删用户的成片")
-    }
-
-    private func solidImage(width: Int, height: Int) -> CGImage {
-        let ctx = CGContext(
-            data: nil, width: width, height: height,
-            bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        )!
-        ctx.setFillColor(NSColor.systemTeal.cgColor)
-        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        return ctx.makeImage()!
     }
 
     /// 浮窗的图标层藏在 NSHostingView 里，递归找一下。
@@ -331,10 +319,10 @@ struct QuickAccessTests {
         #expect(button.acceptsFirstMouse(for: nil), "非激活浮窗上的第一下点击也要直接生效")
         #expect(!button.isPressedNow)
 
-        button.mouseDown(with: fakeMouseEvent(.leftMouseDown, at: NSPoint(x: 14, y: 14)))
+        button.mouseDown(with: TestNSEvent.mouse(.leftMouseDown, at: NSPoint(x: 14, y: 14)))
         #expect(button.isPressedNow, "按下反馈必须当场就位，不能等抬起")
 
-        button.mouseUp(with: fakeMouseEvent(.leftMouseUp, at: NSPoint(x: 14, y: 14)))
+        button.mouseUp(with: TestNSEvent.mouse(.leftMouseUp, at: NSPoint(x: 14, y: 14)))
         #expect(clicked == 1)
         #expect(!button.isPressedNow)
     }
@@ -346,8 +334,8 @@ struct QuickAccessTests {
         var clicked = 0
         button.onClick = { clicked += 1 }
 
-        button.mouseDown(with: fakeMouseEvent(.leftMouseDown, at: NSPoint(x: 14, y: 14)))
-        button.mouseUp(with: fakeMouseEvent(.leftMouseUp, at: NSPoint(x: 80, y: 80)))
+        button.mouseDown(with: TestNSEvent.mouse(.leftMouseDown, at: NSPoint(x: 14, y: 14)))
+        button.mouseUp(with: TestNSEvent.mouse(.leftMouseUp, at: NSPoint(x: 80, y: 80)))
         #expect(clicked == 0)
     }
 
@@ -442,20 +430,6 @@ struct QuickAccessTests {
         host.addSubview(controls)
         controls.layout()
         return (host, controls)
-    }
-
-    private func fakeMouseEvent(_ type: NSEvent.EventType, at point: NSPoint) -> NSEvent {
-        NSEvent.mouseEvent(
-            with: type,
-            location: point,
-            modifierFlags: [],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            eventNumber: 1,
-            clickCount: 1,
-            pressure: type == .leftMouseDown ? 1 : 0
-        )!
     }
 
     private func fakeEnterExitEvent(_ type: NSEvent.EventType, at point: NSPoint) -> NSEvent {
