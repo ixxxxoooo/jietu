@@ -6,22 +6,24 @@ import Testing
 @Suite("工具悬停提示与气泡规范")
 struct TooltipTests {
 
-    @Test("全部标注工具的中文名称符合规范")
+    @Test("每个标注工具的名称都取自自己的 L10n 键")
     func annotationToolsChineseTitles() {
-        #expect(AnnotationTool.select.title == "选择")
-        #expect(AnnotationTool.rectangle.title == "矩形")
-        #expect(AnnotationTool.ellipse.title == "椭圆")
-        #expect(AnnotationTool.arrow.title == "箭头")
-        #expect(AnnotationTool.line.title == "直线")
-        #expect(AnnotationTool.pen.title == "画笔")
-        #expect(AnnotationTool.highlight.title == "高亮笔")
-        #expect(AnnotationTool.spotlight.title == "聚光灯")
-        #expect(AnnotationTool.text.title == "文字")
-        #expect(AnnotationTool.pixelate.title == "马赛克")
-        #expect(AnnotationTool.blur.title == "模糊")
-        #expect(AnnotationTool.counter.title == "序号")
-        #expect(AnnotationTool.eraser.title == "橡皮")
-        #expect(AnnotationTool.crop.title == "裁剪")
+        // 对照 L10n 而不是写死中文：写死的话换到英文环境会整片红（CI 就是英文）。
+        // 这样仍能抓住「工具接错了文案键」这类问题。
+        #expect(AnnotationTool.select.title == L10n.toolSelect)
+        #expect(AnnotationTool.rectangle.title == L10n.toolRectangle)
+        #expect(AnnotationTool.ellipse.title == L10n.toolEllipse)
+        #expect(AnnotationTool.arrow.title == L10n.toolArrow)
+        #expect(AnnotationTool.line.title == L10n.toolLine)
+        #expect(AnnotationTool.pen.title == L10n.toolPen)
+        #expect(AnnotationTool.highlight.title == L10n.toolHighlight)
+        #expect(AnnotationTool.spotlight.title == L10n.toolSpotlight)
+        #expect(AnnotationTool.text.title == L10n.toolText)
+        #expect(AnnotationTool.pixelate.title == L10n.toolPixelate)
+        #expect(AnnotationTool.blur.title == L10n.toolBlur)
+        #expect(AnnotationTool.counter.title == L10n.toolCounter)
+        #expect(AnnotationTool.eraser.title == L10n.toolEraser)
+        #expect(AnnotationTool.crop.title == L10n.toolCrop)
     }
 
     @Test("TooltipView 视图渲染及非侵入性")

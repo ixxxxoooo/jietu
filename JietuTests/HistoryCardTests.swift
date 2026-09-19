@@ -32,22 +32,33 @@ struct HistoryCardTests {
         return Calendar.current.date(from: components)!
     }
 
+    /// 时间部分由固定 `HH:mm:ss` 格式化器给出，跟语言无关。
+    private let time = "02:17:06"
+
     @Test("今天 / 昨天用相对说法，带着时分秒")
     func todayAndYesterday() {
-        #expect(HistoryItem.timestampText(for: date(2026, 9, 18), now: now()) == "今天 02:17:06")
-        #expect(HistoryItem.timestampText(for: date(2026, 9, 17), now: now()) == "昨天 02:17:06")
+        // 期望值取自 L10n：写死中文的话，英文环境（CI）整片红。
+        #expect(HistoryItem.timestampText(for: date(2026, 9, 18), now: now()) == "\(L10n.historyToday) \(time)")
+        #expect(HistoryItem.timestampText(for: date(2026, 9, 17), now: now()) == "\(L10n.historyYesterday) \(time)")
     }
 
     @Test("今年内的写月日——只有时间的话分不清是哪天的")
     func sameYearShowsMonthAndDay() {
-        #expect(HistoryItem.timestampText(for: date(2026, 9, 1), now: now()) == "9月1日 02:17:06")
-        #expect(HistoryItem.timestampText(for: date(2026, 1, 31), now: now()) == "1月31日 02:17:06")
+        #expect(
+            HistoryItem.timestampText(for: date(2026, 9, 1), now: now())
+                == "\(L10n.historyMonthDay(9, 1)) \(time)"
+        )
+        #expect(
+            HistoryItem.timestampText(for: date(2026, 1, 31), now: now())
+                == "\(L10n.historyMonthDay(1, 31)) \(time)"
+        )
     }
 
     @Test("跨年的带上年份")
     func otherYearShowsYear() {
         #expect(
-            HistoryItem.timestampText(for: date(2025, 12, 31), now: now()) == "2025年12月31日 02:17:06"
+            HistoryItem.timestampText(for: date(2025, 12, 31), now: now())
+                == "\(L10n.historyYearMonthDay(2025, 12, 31)) \(time)"
         )
     }
 }
@@ -76,7 +87,7 @@ struct HistoryQuickActionTests {
     func imageCardOffersPin() {
         let actions = imageItem().quickActions(canCopy: true, canPin: true, canReveal: true)
         #expect(actions == [.copy, .pin, .reveal, .edit], "实际 \(actions)")
-        #expect(actions.first(where: { $0 == .pin })?.title == "钉图")
+        #expect(actions.first(where: { $0 == .pin })?.title == L10n.historyPin)
     }
 
     @Test("录屏卡片不给「复制位图」「钉图」——那是 mp4，位图动作没意义")

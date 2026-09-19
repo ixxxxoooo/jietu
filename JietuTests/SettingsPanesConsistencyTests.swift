@@ -12,15 +12,16 @@ struct SettingsPanesConsistencyTests {
 
     @Test("HotkeyAction.title 与实际菜单项标题对齐")
     func actionTitlesMatchMenuItems() {
+        // 对照 L10n 而不是写死中文——菜单标题也是 L10n 出来的，写死只在中文环境成立。
         let expected: [HotkeyAction: String] = [
-            .areaCapture: "区域截图",
-            .windowCapture: "窗口截图",
-            .fullScreenCapture: "全屏截图",
-            .timedCapture: "定时截图",
-            .scrollingCapture: "滚动长图",
-            .screenRecording: "区域录制",
-            .windowRecording: "窗口录制",
-            .fullScreenRecording: "全屏录制",
+            .areaCapture: L10n.actionAreaCapture,
+            .windowCapture: L10n.actionWindowCapture,
+            .fullScreenCapture: L10n.actionFullScreenCapture,
+            .timedCapture: L10n.actionTimedCapture,
+            .scrollingCapture: L10n.actionScrollingCapture,
+            .screenRecording: L10n.actionRegionRecording,
+            .windowRecording: L10n.actionWindowRecording,
+            .fullScreenRecording: L10n.actionFullScreenRecording,
         ]
         for action in HotkeyAction.allCases {
             #expect(action.title == expected[action], "\(action) 的 title 应为 \(expected[action] ?? "?")")

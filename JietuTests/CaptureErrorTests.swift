@@ -57,9 +57,10 @@ struct CaptureErrorTests {
         #expect(CaptureError.noWindowUnderCursor.suggestsRelaunch == false)
     }
 
-    @Test("权限拒绝描述包含关键词")
+    @Test("权限拒绝描述用的是「权限」那条文案")
     func permissionDeniedDescription() {
+        // 锚到 L10n：原先断言文案里含「权限」两个字，换到英文环境必然失败。
         let desc = CaptureError.permissionDenied.errorDescription!
-        #expect(desc.contains("权限"), "应提到权限")
+        #expect(desc == L10n.errorPermissionDenied, "应落到权限拒绝那条文案")
     }
 }

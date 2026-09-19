@@ -7,8 +7,18 @@ import Testing
 /// @author ixxxxoooo
 @Suite("文件名模板")
 struct FilenameTemplateTests {
-    /// 2026-09-16 10:59:31 +0800
-    private let date = Date(timeIntervalSince1970: 1_789_527_571)
+    /// 按**本地时区**的 2026-09-16 10:59:31 构造。
+    /// 别写死时间戳：格式化器用的是当前时区，写死的话在 UTC 的 CI 上会变成 02:59:31。
+    private let date: Date = {
+        var components = DateComponents()
+        components.year = 2026
+        components.month = 9
+        components.day = 16
+        components.hour = 10
+        components.minute = 59
+        components.second = 31
+        return Calendar.current.date(from: components)!
+    }()
 
     @Test("默认模板与历史命名格式一致")
     func defaultTemplateMatchesLegacyName() {
