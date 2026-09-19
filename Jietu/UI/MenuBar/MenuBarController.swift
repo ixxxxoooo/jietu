@@ -26,7 +26,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onOpenRecent: ((URL) -> Void)?
     var onClearRecents: (() -> Void)?
     var onOpenFolder: (() -> Void)?
-    var onOpenHistory: (() -> Void)?
+
     var onSelectHistoryItem: ((HistoryItem) -> Void)?
     var onAuthorizeScreenRecording: (() -> Void)?
     var onAuthorizeAccessibility: (() -> Void)?
@@ -405,9 +405,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         onOpenFolder?()
     }
 
-    @objc private func handleOpenHistory() {
-        onOpenHistory?()
-    }
+
 
     @objc private func handleAuthorizeScreenRecording() {
         onAuthorizeScreenRecording?()

@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private var onboarding: OnboardingWindowController?
     private var settingsWindow: SettingsWindowController?
-    private var historyPanel: HistoryPanelController?
+
     /// 正在进行的滚动长图会话与控制条。
     private var scrollingSession: ScrollingCaptureSession?
     private var scrollingPanel: ScrollingCapturePanelController?
@@ -962,7 +962,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menuBar.onClearRecents = { [weak self] in self?.clearAllHistory() }
         menuBar.onOpenFolder = { [weak self] in self?.openSaveFolder() }
-        menuBar.onOpenHistory = { [weak self] in self?.showHistory() }
+
         menuBar.onAuthorizeScreenRecording = { PermissionDragController.shared.present(pane: .screenRecording) }
         menuBar.onAuthorizeAccessibility = { PermissionDragController.shared.present(pane: .accessibility) }
         menuBar.onOpenOnboarding = { [weak self] in self?.showOnboarding() }
@@ -2158,18 +2158,7 @@ struct CaptureRegionTarget {
         HistoryThumbnailCache.shared.clear()
     }
 
-    /// 托盘历史面板（保留兼容）。
-    private func showHistory() {
-        if historyPanel == nil {
-            let controller = HistoryPanelController()
-            controller.itemsProvider = { [weak self] in self?.historyItems() ?? [] }
-            controller.onSelect = { [weak self] item in
-                self?.openHistoryItem(item)
-            }
-            historyPanel = controller
-        }
-        historyPanel?.toggle()
-    }
+
 
     /// 会话内截图（最新在前）+ 磁盘上保存过的截图，按时间倒序且按路径去重。
     private func historyItems() -> [HistoryItem] {
