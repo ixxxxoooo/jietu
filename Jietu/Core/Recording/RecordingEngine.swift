@@ -69,6 +69,11 @@ final class RecordingEngine {
 
     private(set) var isRunning = false
     private(set) var isPaused = false
+    /// 这次录制麦克风**真的**启用了没（没设备 / 引擎起不来就是 false）。
+    ///
+    /// 调用方拿它做用户可见的反馈：开关开着却没启用（多半是没授权）必须说出来，
+    /// 否则用户录完才发现没声音。
+    private(set) var isMicrophoneActive = false
     private var startedAt: Date?
 
     // MARK: - 生命周期
@@ -177,6 +182,7 @@ final class RecordingEngine {
         self.stream = stream
         isRunning = true
         isPaused = false
+        isMicrophoneActive = microphone != nil
         startedAt = Date()
         startTicker()
         logger.notice(
@@ -273,6 +279,7 @@ final class RecordingEngine {
         output = nil
         writer = nil
         microphone = nil
+        isMicrophoneActive = false
         startedAt = nil
         isPaused = false
         pausedAt = nil

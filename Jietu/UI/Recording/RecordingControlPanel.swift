@@ -20,6 +20,16 @@ final class RecordingControlPanel {
         case recording
     }
 
+    /// 这次录制与麦克风的关系（控制条上那枚图标的三种状态）。
+    enum MicrophoneState {
+        /// 设置里没开（只录系统声音）。
+        case off
+        /// 会录 / 正在录。
+        case active
+        /// 开关开着却没启用（未授权 / 没有输入设备）——最需要注意的一态。
+        case unavailable
+    }
+
     var onStart: (() -> Void)?
     var onTogglePause: (() -> Void)?
     var onStop: (() -> Void)?
@@ -83,6 +93,11 @@ final class RecordingControlPanel {
         content?.setPhase(phase)
     }
 
+    /// 麦克风状态：待开始态按设置显示，真开录后按引擎的实际结果更新。
+    func setMicrophone(_ state: MicrophoneState) {
+        content?.setMicrophone(state)
+    }
+
     /// 自检用：某个按钮在屏幕上的矩形（注入点击要按它算点）。
     enum TestingButton { case start, pause, stop, cancel }
 
@@ -133,6 +148,9 @@ private final class RecordingControlContentView: NSView {
     private let glass = NSVisualEffectView()
     private let dot = NSView()
     private let label = NSTextField(labelWithString: "准备录制")
+    /// 麦克风状态图标：录制前就能看出这次会不会录旁白。
+    private let micIcon = NSImageView()
+    private var microphone: RecordingControlPanel.MicrophoneState = .off
     /// 「开始」：待开始态的主操作。
     private let startButton = GlassControlButton(
         symbol: "record.circle", diameter: 26, tooltip: "开始录制 (⌘⇧S)"
@@ -173,6 +191,10 @@ private final class RecordingControlContentView: NSView {
         label.alignment = .left
         addSubview(label)
 
+        micIcon.imageScaling = .scaleProportionallyDown
+        addSubview(micIcon)
+        applyMicrophone()
+
         startButton.onClick = { [weak self] in self?.onStart?() }
         pauseButton.onClick = { [weak self] in self?.onTogglePause?() }
         stopButton.onClick = { [weak self] in self?.onStop?() }
@@ -197,6 +219,7 @@ private final class RecordingControlContentView: NSView {
             x: dot.frame.maxX + 8, y: mid - label.frame.height / 2,
             width: 64, height: label.frame.height
         )
+        micIcon.frame = NSRect(x: label.frame.maxX + 10, y: mid - 8, width: 16, height: 16)
         let visible = visibleButtons
         for button in [startButton, pauseButton, stopButton, cancelButton] {
             button.isHidden = !visible.contains(button)
@@ -246,5 +269,35 @@ private final class RecordingControlContentView: NSView {
         pauseButton.toolTip = paused ? "继续 (⌘⇧P)" : "暂停 (⌘⇧P)"
         dot.layer?.backgroundColor = NSColor(Theme.Colors.destructive)
             .withAlphaComponent(paused ? 0.35 : 1).cgColor
+    }
+
+    /// 麦克风状态（三态）：图标 + 悬停说明，录制前就能看出这次会不会录到旁白。
+    func setMicrophone(_ state: RecordingControlPanel.MicrophoneState) {
+        guard microphone != state else { return }
+        microphone = state
+        applyMicrophone()
+    }
+
+    private func applyMicrophone() {
+        let symbol: String
+        switch microphone {
+        case .off: symbol = "mic.slash"
+        case .active: symbol = "mic.fill"
+        case .unavailable: symbol = "mic.slash"
+        }
+        let configuration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+        micIcon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(configuration)
+        switch microphone {
+        case .off:
+            micIcon.contentTintColor = NSColor(Theme.Colors.textSecondary)
+            micIcon.toolTip = "本次不录麦克风（设置 › 录屏 › 录制麦克风 可打开）"
+        case .active:
+            micIcon.contentTintColor = NSColor(Theme.Colors.success)
+            micIcon.toolTip = "正在录麦克风（与系统声音混成一条音轨）"
+        case .unavailable:
+            micIcon.contentTintColor = NSColor(Theme.Colors.warning)
+            micIcon.toolTip = "麦克风没启用：未授权或没有输入设备（本次只有系统声音）"
+        }
     }
 }

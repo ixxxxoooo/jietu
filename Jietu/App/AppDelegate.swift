@@ -101,6 +101,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runRecordingAppTest()
             return
         }
+        if CommandLine.arguments.contains(CaptureSelfTest.appLevelTrimFlag) {
+            runTrimAppTest()
+            return
+        }
         #endif
 
         if !ScreenCapturePermission.isGranted {
@@ -346,6 +350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for flag in [
             CaptureSelfTest.appLevelInlineScrollFlag, CaptureSelfTest.appLevelRecordingFlag,
             CaptureSelfTest.appLevelRecentMenuFlag, CaptureSelfTest.videoToolsFlag,
+            CaptureSelfTest.appLevelTrimFlag,
         ] where CommandLine.arguments.contains(flag) {
             return false
         }

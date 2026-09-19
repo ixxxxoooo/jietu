@@ -37,7 +37,8 @@ extension AppDelegate {
     /// 失败弹窗说明原因（没视频轨 / 磁盘满 / 没权限）。
     func exportVideoAsGif(_ url: URL) {
         let panel = NSSavePanel()
-        panel.directoryURL = url.deletingLastPathComponent()
+        // 默认落在用户设的保存目录（不是源 mp4 所在目录）：那才是「我的东西放哪」的答案。
+        panel.directoryURL = settings.saveDirectory
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.gif]
         panel.nameFieldStringValue = "\(url.deletingPathExtension().lastPathComponent).gif"

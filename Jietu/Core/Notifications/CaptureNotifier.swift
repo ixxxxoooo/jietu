@@ -11,8 +11,8 @@ import UserNotifications
 ///
 /// @author ixxxxoooo
 final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
-    /// 点击通知后要定位的文件。
-    private var pendingURL: URL?
+    /// 点击通知后要做的事：定位刚存下的文件，或打开某个系统设置面板。
+    private var pendingAction: (() -> Void)?
 
     private var isAvailable: Bool {
         Bundle.main.bundleIdentifier != nil
@@ -41,7 +41,7 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
     func notifySaved(fileURL: URL) {
         guard isAvailable else { return }
 
-        pendingURL = fileURL
+        pendingAction = { NSWorkspace.shared.activateFileViewerSelecting([fileURL]) }
         let content = UNMutableNotificationContent()
         content.title = "截图已保存"
         content.body = fileURL.lastPathComponent
@@ -68,7 +68,7 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
     /// 录屏收工后的通知：视频做不了图片预览，就把时长写进副标题。
     func notifyRecordingSaved(fileURL: URL, duration: TimeInterval) {
         guard isAvailable else { return }
-        pendingURL = fileURL
+        pendingAction = { NSWorkspace.shared.activateFileViewerSelecting([fileURL]) }
 
         let total = max(0, Int(duration.rounded(.down)))
         let content = UNMutableNotificationContent()
@@ -93,7 +93,7 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
     /// 标题由调用方给（「GIF 已导出」/「裁剪完成」），点击通知在访达中定位文件。
     func notifyExported(fileURL: URL, title: String) {
         guard isAvailable else { return }
-        pendingURL = fileURL
+        pendingAction = { NSWorkspace.shared.activateFileViewerSelecting([fileURL]) }
 
         let content = UNMutableNotificationContent()
         content.title = title
@@ -108,6 +108,22 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
                 NSLog("[Jietu] post export notification failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// 麦克风开关开着、这次却没能启用（未授权 / 没有输入设备）时的提示。
+    ///
+    /// 不做静默降级：用户开着麦克风就是想录旁白，录完才发现没声音是最糟的体验。
+    /// 点击通知直接跳到系统设置的麦克风隐私面板。
+    func notifyMicrophoneUnavailable() {
+        guard isAvailable else { return }
+        pendingAction = { NSWorkspace.shared.open(MicrophoneCapture.privacySettingsURL) }
+
+        let content = UNMutableNotificationContent()
+        content.title = "这次没能录到麦克风"
+        content.body = "成片里只有系统声音。请在「系统设置 › 隐私与安全性 › 麦克风」里允许 Jietu，或检查输入设备。"
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        )
     }
 
     // MARK: - UNUserNotificationCenterDelegate
@@ -127,7 +143,6 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         defer { completionHandler() }
-        guard let url = pendingURL else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
+        pendingAction?()
     }
 }

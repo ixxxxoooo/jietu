@@ -125,7 +125,9 @@ enum VideoToolsSelfTest {
     // MARK: - 造源视频
 
     /// 逐帧画色块（帧号驱动颜色 + 一个扫过的白方块），H.264 / mp4 / 无音轨。
-    private static func makeTestVideo(
+    ///
+    /// 对其它自检开放（app 级裁剪自检也用它造源文件）。
+    static func makeTestVideo(
         at url: URL, seconds: Double, fps: Int, size: CGSize
     ) async throws -> Int {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)

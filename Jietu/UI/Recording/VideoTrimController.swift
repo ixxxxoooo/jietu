@@ -137,7 +137,7 @@ struct VideoTrimView: View {
 
     var body: some View {
         VStack(spacing: Theme.Spacing.lg) {
-            VideoPlayer(player: player)
+            TrimPlayerView(player: player)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.menuPanel))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -197,6 +197,31 @@ struct VideoTrimView: View {
         let minutes = Int(total) / 60
         let rest = total - Double(minutes * 60)
         return String(format: "%d:%04.1f", minutes, rest)
+    }
+}
+
+/// 带系统控制条的播放器视图。
+///
+/// **刻意不用 SwiftUI 自带的 `VideoPlayer`**：它继承自 AVKit 的 `AVPlayerView`，而
+/// SwiftUI 只会把 `_AVKit_SwiftUI` 链进来、不链 `AVKit` 本体，运行时解析父类直接终止进程
+/// （实测：`failed to demangle superclass of VideoPlayerView from mangled name
+/// 'So12AVPlayerViewC'`，且没有任何崩溃报告）。直接包 AppKit 的 `AVPlayerView` 既绕开
+/// 那条继承链，也真的用到了 AVKit 的符号。
+///
+/// @author ixxxxoooo
+private struct TrimPlayerView: NSViewRepresentable {
+    let player: AVPlayer
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        // 常驻控制条：裁剪时要盯着播放头取点，不该等悬停才出来。
+        view.controlsStyle = .inline
+        view.player = player
+        return view
+    }
+
+    func updateNSView(_ view: AVPlayerView, context: Context) {
+        if view.player !== player { view.player = player }
     }
 }
 

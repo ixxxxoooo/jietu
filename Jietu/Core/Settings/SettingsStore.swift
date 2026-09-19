@@ -240,11 +240,20 @@ final class SettingsStore {
         }
 
         if let path = defaults.string(forKey: Key.saveDirectoryPath) {
-            self.saveDirectory = URL(fileURLWithPath: path, isDirectory: true)
+            let stored = URL(fileURLWithPath: path, isDirectory: true)
+            // 自检会把保存目录指到系统临时目录；而它退出走的是 `exit()`——**不会执行 defer**，
+            // 那句「还回去」形同虚设，这个值就留在设置里：之后所有截图/录屏都往一个注定被
+            // 系统清理的目录里存，用户表现为「文件不见了」。启动时自愈，并**手动写回磁盘**
+            // （init 里赋值不触发 didSet，只改内存的话下次启动又会读到脏值）。
+            if Self.isInsideTemporaryDirectory(stored) {
+                let fallback = Self.defaultSaveDirectory()
+                self.saveDirectory = fallback
+                defaults.set(fallback.path, forKey: Key.saveDirectoryPath)
+            } else {
+                self.saveDirectory = stored
+            }
         } else {
-            let pictures = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first
-            self.saveDirectory = (pictures ?? FileManager.default.homeDirectoryForCurrentUser)
-                .appendingPathComponent("Jietu", isDirectory: true)
+            self.saveDirectory = Self.defaultSaveDirectory()
         }
 
         if
@@ -275,6 +284,19 @@ final class SettingsStore {
             // 首次启动（或数据坏了）落到出厂默认：默认就配好 ⌘Z / ⇧⌘Z，而不是留空。
             self.editorShortcuts = .standard
         }
+    }
+
+    /// 出厂默认保存目录：`~/Pictures/Jietu`。
+    private static func defaultSaveDirectory() -> URL {
+        let pictures = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first
+        return (pictures ?? FileManager.default.homeDirectoryForCurrentUser)
+            .appendingPathComponent("Jietu", isDirectory: true)
+    }
+
+    /// 这个路径是不是落在系统临时目录里（自检残留的判据）。
+    private static func isInsideTemporaryDirectory(_ url: URL) -> Bool {
+        let temporary = FileManager.default.temporaryDirectory.standardizedFileURL.path
+        return url.standardizedFileURL.path.hasPrefix(temporary)
     }
 
     private func persistEditorShortcuts() {

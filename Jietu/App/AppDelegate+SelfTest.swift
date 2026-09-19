@@ -154,11 +154,15 @@ extension AppDelegate {
             // **改过的设置一律还回去**：`saveDirectory` 是落 UserDefaults 的，
             // 自检把目录指到临时目录又不还原的话，用户的截图会一直往一个（跑完就被删掉的）
             // 临时目录里存——「最近截图」永远是空的，正是这么来的。
+            //
+            // 注意**不能用 defer**：自检收尾走的是 `CaptureSelfTest.finish` → `exit()`，
+            // 而 `exit()` 不执行 defer（实测跑完一次自检，用户的保存目录就永久留在临时目录里）。
+            // 注册到 `cleanupBeforeExit`，由 `finish` 在退出前统一执行。
             let previousSaveDirectory = settings.saveDirectory
             let previousShowSaveNotification = settings.showSaveNotification
-            defer {
-                settings.saveDirectory = previousSaveDirectory
-                settings.showSaveNotification = previousShowSaveNotification
+            CaptureSelfTest.cleanupBeforeExit.append { [weak self] in
+                self?.settings.saveDirectory = previousSaveDirectory
+                self?.settings.showSaveNotification = previousShowSaveNotification
                 try? FileManager.default.removeItem(at: savedDirectory)
             }
             do {
@@ -832,6 +836,56 @@ extension AppDelegate {
                 report.append("error: \(error.localizedDescription)")
                 report.append("RESULT: FAIL")
                 CaptureSelfTest.finish(report, code: 1)
+            }
+        }
+    }
+
+    /// 裁剪窗口：真接线打开它，一步一步打印到 stdout。
+    ///
+    /// 为什么不用最后汇总报告：这条自检就是来查**崩溃**的——真崩了 `finish` 根本不会执行，
+    /// 只有「每步立刻 print + flush」才能看到最后走到哪儿（那一行就是现场）。
+    func runTrimAppTest() {
+        setvbuf(stdout, nil, _IONBF, 0)
+        func step(_ text: String) {
+            print("[trim] \(text)")
+            fflush(stdout)
+        }
+        step("开始（进程 \(ProcessInfo.processInfo.processIdentifier)）")
+        Task { @MainActor in
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("jietu-trim-apptest-\(UUID().uuidString)", isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(
+                    at: directory, withIntermediateDirectories: true
+                )
+                let source = directory.appendingPathComponent("source.mp4")
+                step("造 2 秒测试视频…")
+                _ = try await VideoToolsSelfTest.makeTestVideo(
+                    at: source, seconds: 2, fps: 30, size: CGSize(width: 320, height: 240)
+                )
+                step("源视频就绪：\(source.path)")
+
+                step("调 openVideoTrim…")
+                openVideoTrim(source)
+                step("openVideoTrim 返回，controller=\(videoTrimController == nil ? "无" : "有")")
+
+                try? await Task.sleep(for: .seconds(2))
+                let windows = NSApp.windows.filter { $0.title == "裁剪视频" }
+                step(
+                    "2 秒后：进程存活 ✓，裁剪窗口 \(windows.count) 个，"
+                        + "可见=\(windows.contains { $0.isVisible } ? "是" : "否")"
+                )
+
+                step("关掉窗口")
+                videoTrimController?.close()
+                try? await Task.sleep(for: .milliseconds(600))
+                step("窗口关闭后 controller=\(videoTrimController == nil ? "已清" : "**没清**")")
+                try? FileManager.default.removeItem(at: directory)
+                step("RESULT: PASS（全程没崩）")
+                CaptureSelfTest.finish(["RESULT: PASS（全程没崩，窗口能开能关）"], code: 0)
+            } catch {
+                step("error: \(error.localizedDescription)")
+                CaptureSelfTest.finish(["RESULT: FAIL"], code: 1)
             }
         }
     }

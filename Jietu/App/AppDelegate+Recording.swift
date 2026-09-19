@@ -86,6 +86,9 @@ extension AppDelegate {
         border.present(around: target.selectionRect)
         let hud = RecordingControlPanel()
         hud.present(near: target.selectionRect, in: screen, phase: .ready)
+        // 待开始态就亮明麦克风：设置里开着显示「会录」，关着显示「不录」——
+        // 别让用户录完才发现没声音。
+        hud.setMicrophone(settings.recordMicrophone ? .active : .off)
         recordingBorder = border
         recordingHUD = hud
         pendingRecording = (displayID: snapshot.displayID, region: target.region)
@@ -135,6 +138,18 @@ extension AppDelegate {
                     options: options,
                     excludingWindowNumbers: excluded
                 )
+                // 开关开着却没启用麦克风（未授权 / 没设备）：说出来，别让用户录完才发现没声音。
+                if settings.recordMicrophone {
+                    if engine.isMicrophoneActive {
+                        recordingHUD?.setMicrophone(.active)
+                    } else {
+                        recordingHUD?.setMicrophone(.unavailable)
+                        logger.notice("microphone was requested but not active; system audio only")
+                        notifier.notifyMicrophoneUnavailable()
+                    }
+                } else {
+                    recordingHUD?.setMicrophone(.off)
+                }
             } catch {
                 failRecording(error)
             }

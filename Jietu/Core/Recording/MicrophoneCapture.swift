@@ -18,6 +18,11 @@ nonisolated final class MicrophoneCapture {
     private let engine = AVAudioEngine()
     private(set) var isRunning = false
 
+    /// 系统设置里的麦克风隐私面板（通知点击时跳过去）。
+    static var privacySettingsURL: URL {
+        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
+    }
+
     /// 麦克风权限：现读，`notDetermined` 时弹系统授权。
     static func requestPermission() async -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {

@@ -44,6 +44,9 @@ enum CaptureSelfTest {
     /// 所以它**允许**与正式实例同时在场（单例守卫为它放行）。
     static let videoToolsFlag = "--selftest-video-tools"
 
+    /// 真接线打开裁剪窗口：复现「点裁剪就退出应用」这类只在完整接线里出现的问题。
+    static let appLevelTrimFlag = "--selftest-app-trim"
+
     /// 「最近截图」子菜单长什么样：空历史 / 有截图各弹一次拍一张。
     static let appLevelRecentMenuFlag = "--selftest-app-recent-menu"
 
@@ -3261,12 +3264,22 @@ enum CaptureSelfTest {
 
     /// 自检报告输出（`--selftest-` 与 `--selftest-app-` 两批共用）。
     static func finish(_ lines: [String], code: Int32) {
+        // `exit()` **不会**执行 defer，所以自检里「改过的设置一律还回去」那类 defer 全是摆设
+        // （实测：跑完 `--selftest-app-record` 后用户的保存目录一直留在临时目录里）。
+        // 要还原的动作注册到 `cleanupBeforeExit`，这里统一跑一遍再退。
+        for action in cleanupBeforeExit { action() }
+        cleanupBeforeExit.removeAll()
         print("=== Jietu selftest ===")
         for line in lines { print(line) }
         print("======================")
         fflush(stdout)
         exit(code)
     }
+
+    /// 自检退出前要做的清理（还原改过的设置、删临时文件）。
+    ///
+    /// 跨 Actor 访问：`exit()` 前同步执行，与自检的 MainActor 上下文无关。
+    nonisolated(unsafe) static var cleanupBeforeExit: [() -> Void] = []
 }
 
 #endif
