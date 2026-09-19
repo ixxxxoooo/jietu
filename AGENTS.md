@@ -23,6 +23,44 @@ git add -A && git commit -m "<type>: <描述>"
 - 签名保持默认的自签名证书 `Jietu`，不要加 `CODE_SIGNING_ALLOWED=NO`，否则重签名会丢「屏幕录制」授权。
 - 提交信息沿用仓库风格：`feat:` / `fix:` / `change:` / `docs:` 等前缀。
 
+## 代码组织规范（写 / 改代码前必读）
+
+以下规则是既有重构（89bb7a6…a04e05a）沉淀的既成标准，新代码必须遵守，不每次自行判断。
+
+### 单文件规模
+
+- 主体代码软上限 **~500 行**，接近 400 行就该拆；按职责拆够即停，不为凑行数机械切。
+- 小于 ~50 行的小类型**不单独立文件**，聚在相关文件里；文件里出现多个平等类型才"一类型一文件"。
+- **自查（必做）**：提交前对新增 / 明显变长的文件跑 `wc -l`，超过 500 行先按下面的规则拆，再提交。
+
+### 文件拆分规则（按序适用）
+
+1. **大类 → 主文件 + `+功能域` extension**：主文件只留生命周期 / 装配，每个 extension 自成一个功能域。
+   例：`OverlayCanvasView.swift` + `OverlayCanvasView+Selection.swift` / `+Actions` / `+Zoom` …；
+   `AppDelegate.swift` + `AppDelegate+Capture.swift` / `+Recording` / `+Scrolling` …
+2. **多类型文件 → 一类型一文件**；纯数据类型外置成独立文件（如 `SettingsTypes.swift`）。
+3. **重复代码 → 抽公共组件 / 工厂**，禁止靠拷贝解决。
+4. **死代码直接删**（连同注释掉的代码），不留"以后可能用"。
+
+### 分层与依赖
+
+```
+App/（生命周期、装配） → Overlay/（截图遮罩层） 与 UI/（常驻界面） → Core/（无 UI 业务核心，按领域分目录）
+```
+
+- 依赖只允许沿箭头方向，**Core 不 import 界面层**、UI 不直接戳 Core 内部实现。
+- **UI 样式唯一来源是 `UI/DesignSystem/`**（`Theme`、`.floatingSurface()`、玻璃组件）：
+  新界面禁止散写颜色 / 圆角 / 投影，一律走设计系统令牌。
+
+### 测试
+
+- **一源码文件一测试文件**，同名对应（`InlineAnnotationToolbar` → `InlineToolbarModelTests` 等）；单测文件 ≤~700 行，超了按聚焦拆。
+- 共享脚手架（`makeDefaults` / `solidImage` / `fakeMouseEvent` 这类工厂）**只放 `JietuTests/TestSupport/`**，禁止在测试文件里重复定义；拆分大测试文件时配套更新 `COVERAGE.md` 对照表。
+
+### 已知例外
+
+`Jietu/Core/Diagnostics/CaptureSelfTest.swift`（~3200 行）是存量遗留的自测脚本。**新代码不得模仿它的体量**；哪次改到它，就顺手按规则 1 拆掉。
+
 ## 构建渠道（Debug = dev）
 
 Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug configuration 里：
