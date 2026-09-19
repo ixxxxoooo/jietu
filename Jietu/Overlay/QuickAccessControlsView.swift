@@ -27,7 +27,8 @@ enum QuickAccessAction: String, CaseIterable {
     /// - 上排「复制文件 / 在访达中显示 / 关闭」（工具类操作，圆盘）；
     /// - 下排「MP4(胶囊) / GIF(胶囊)」（格式导出操作，胶囊标明格式）；
     /// - **中央播放**。
-    /// 裁剪功能不做：macOS 预览 App 自带。
+    /// 裁剪未做：系统那套裁剪 UI 只在 Finder 的快速查看里给，我们自己弹的 `QLPreviewPanel`
+    /// 拿不到（见 `VideoQuickLookPresenter`）；要做就用 `AVPlayerView.beginTrimming`。
     static let videoCard: [QuickAccessAction] = [
         .copyFile, .reveal, .close, .saveVideo, .exportGif, .play,
     ]
@@ -59,7 +60,7 @@ enum QuickAccessAction: String, CaseIterable {
         case .play: "play.fill"
         case .reveal: "folder"
         case .trimVideo: "scissors"
-        case .exportGif: "gif"
+        case .exportGif: "arrow.triangle.2.circlepath"  // 没有叫 gif 的 SF Symbol，用「转格式」这枚
         }
     }
 

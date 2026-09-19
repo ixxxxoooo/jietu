@@ -152,7 +152,7 @@ struct QuickAccessTests {
         #expect(frames.count == 6, "上排三个 + 下排两个 + 中央播放")
         #expect(QuickAccessAction.videoCard.contains(.saveVideo), "操作栏要能保存 MP4")
         #expect(QuickAccessAction.videoCard.contains(.exportGif), "操作栏要能导出 GIF")
-        #expect(!QuickAccessAction.videoCard.contains(.trimVideo), "裁剪已移除（macOS 预览自带）")
+        #expect(!QuickAccessAction.videoCard.contains(.trimVideo), "裁剪不在卡上（要做用 AVPlayerView 那套）")
         // 中央「播放」是圆盘
         let play = QuickAccessControlsView.frame(of: .play, in: card)
         #expect(play.width == QuickAccessControlsView.diameter)
@@ -381,6 +381,18 @@ struct QuickAccessTests {
         let disc = GlassControlButton(symbol: "xmark", tooltip: "关闭")
         #expect(disc.renderedLabel.isEmpty)
         #expect(disc.preferredSize == NSSize(width: 28, height: 28))
+    }
+
+    @Test("每个动作的 SF Symbol 都真实存在（名字写错会退化成「只有文字没图标」）")
+    func everyActionSymbolResolves() {
+        // 曾经踩过：GIF 胶囊写了 "gif"，`NSImage(systemSymbolName:)` 直接返回 nil，
+        // 卡片上就剩一个光秃秃的「GIF」胶囊——编译器不会报，只有真机上肉眼才看得出来。
+        for action in QuickAccessAction.allCases {
+            #expect(
+                NSImage(systemSymbolName: action.symbol, accessibilityDescription: nil) != nil,
+                "\(action.title) 的符号「\(action.symbol)」不是有效的 SF Symbol"
+            )
+        }
     }
 
     @Test("浮窗图标与钉图图标是同一套：尺寸、玻璃配方一致")
