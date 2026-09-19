@@ -121,17 +121,23 @@ enum AnnotationRenderer {
             switch annotation.kind {
             case .rectangle(let rect):
                 let cRect = contextRect(rect, imageHeight: imageHeight)
+                // 方角 / 圆角：圆角按短边比例倒角（见 `RectCornerStyle.radius(for:style:)`）。
+                let path = Self.rectanglePath(cRect, style: annotation.rectCornerStyle)
                 switch annotation.shapeFillMode {
                 case .none:
-                    context.stroke(cRect)
+                    context.addPath(path)
+                    context.strokePath()
                 case .opaque:
-                    context.fill(cRect)
+                    context.addPath(path)
+                    context.fillPath()
                 case .translucent:
                     context.saveGState()
                     context.setFillColor(annotation.color.cgColor.copy(alpha: 0.28) ?? color)
-                    context.fill(cRect)
+                    context.addPath(path)
+                    context.fillPath()
                     context.restoreGState()
-                    context.stroke(cRect)
+                    context.addPath(path)
+                    context.strokePath()
                 }
 
             case .ellipse(let rect):
@@ -1044,6 +1050,18 @@ enum AnnotationRenderer {
             y: CGFloat(imageHeight) - rect.maxY,
             width: rect.width,
             height: rect.height
+        )
+    }
+
+    /// 矩形描边 / 填充用的路径：方角就是矩形本体，圆角按短边比例倒角。
+    static func rectanglePath(_ rect: CGRect, style: RectCornerStyle) -> CGPath {
+        let radius = RectCornerStyle.radius(for: rect, style: style)
+        guard radius > 0 else { return CGPath(rect: rect, transform: nil) }
+        return CGPath(
+            roundedRect: rect,
+            cornerWidth: radius,
+            cornerHeight: radius,
+            transform: nil
         )
     }
 

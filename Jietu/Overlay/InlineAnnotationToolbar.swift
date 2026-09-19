@@ -19,6 +19,8 @@ final class InlineToolbarModel {
     var blurRadius: CGFloat = 12
     var arrowStyle: ArrowStyle = .tapered
     var shapeFillMode: ShapeFillMode = .none
+    /// 矩形的角样式（方角 / 圆角）。
+    var rectCornerStyle: RectCornerStyle = .square
     var textHasStroke: Bool = false
     var textHasCallout: Bool = false
     var canUndo = false
@@ -29,6 +31,8 @@ final class InlineToolbarModel {
     var isLiveTextActive = false
     /// 是否为从浮窗恢复的静态图片（不显示滚动截图和录屏）。
     var isRestoredImage = false
+    /// 主工具栏竖排显示（贴到选区左侧 / 右侧时用，由画布按空间自动切换）。
+    var isVerticalLayout = false
     /// 给不给「裁剪」工具：只有从浮窗卡片 / 钉图 / 历史记录进来编辑的已有图片才给，
     /// 刚截下来的画面不给（那块区域就是用户刚框出来的）。
     var allowsCrop = false
@@ -87,92 +91,12 @@ struct InlineMainToolbar: View {
     }
 
     var body: some View {
-        HStack(spacing: Theme.Size.toolbarItemSpacing) {
-            ForEach(model.visibleTools) { item in
-                toolButton(item)
-            }
-
-            separator
-
-            BarIconButton(
-                title: "撤销",
-                systemImage: "arrow.uturn.backward",
-                isSelected: false,
-                help: Self.shortcutHelp("撤销", model.editorShortcuts.undo),
-                action: { model.onUndo?() }
-            )
-            .disabled(!model.canUndo)
-            .opacity(model.canUndo ? 1 : 0.4)
-
-            BarIconButton(
-                title: "重做",
-                systemImage: "arrow.uturn.forward",
-                help: Self.shortcutHelp("重做", model.editorShortcuts.redo),
-                action: { model.onRedo?() }
-            )
-            .disabled(!model.canRedo)
-            .opacity(model.canRedo ? 1 : 0.4)
-
-            Spacer(minLength: Theme.Spacing.xl)
-
-            BarIconButton(
-                title: "识别文字",
-                systemImage: "text.viewfinder",
-                tint: model.isLiveTextActive
-                    ? Theme.Colors.brand : Theme.Colors.textSecondary,
-                isSelected: model.isLiveTextActive
-            ) {
-                if model.isLiveTextActive {
-                    model.isLiveTextActive = false
-                } else {
-                    model.isLiveTextActive = true
-                    model.tool = .select
-                    model.showScroll = false
-                }
-            }
-
-            if !model.isRestoredImage {
-                BarIconButton(
-                    title: "滚动截图",
-                    systemImage: "scroll",
-                    isSelected: model.showScroll
-                ) {
-                    model.showScroll.toggle()
-                    if model.showScroll {
-                        model.tool = nil
-                    }
-                }
-
-                // 录屏：拿当前这块选区去录（点了收掉遮罩、上红框与「准备录制」控制条）。
-                BarIconButton(title: "录屏", systemImage: "record.circle") {
-                    model.onRecord?()
-                }
-            }
-
-            BarIconButton(
-                title: "保存",
-                systemImage: "square.and.arrow.down",
-                help: "保存 (⌘S)",
-                key: "s"
-            ) {
-                model.onSave?()
-            }
-            BarIconButton(title: "钉图", systemImage: "pin") {
-                model.onPin?()
-            }
-            BarIconButton(
-                title: "取消",
-                systemImage: "xmark",
-                tint: Theme.Colors.destructive
-            ) {
-                model.onCancel?()
-            }
-            BarIconButton(
-                title: "确认",
-                systemImage: "checkmark",
-                tint: Theme.Colors.success
-            ) {
-                model.onConfirm?()
+        // 横排是常态（贴在选区下面）；横着摆不下时外层会切成竖排，把工具栏停到选区左右侧。
+        Group {
+            if model.isVerticalLayout {
+                VStack(spacing: Theme.Size.toolbarItemSpacing) { content }
+            } else {
+                HStack(spacing: Theme.Size.toolbarItemSpacing) { content }
             }
         }
         .padding(.horizontal, Theme.Spacing.xl)
@@ -181,11 +105,114 @@ struct InlineMainToolbar: View {
         .floatingSurface()
     }
 
+    @ViewBuilder private var content: some View {
+        tools
+        Spacer(minLength: Theme.Spacing.xl)
+        actions
+    }
+
+    @ViewBuilder private var tools: some View {
+        ForEach(model.visibleTools) { item in
+            toolButton(item)
+        }
+
+        separator
+
+        BarIconButton(
+            title: "撤销",
+            systemImage: "arrow.uturn.backward",
+            isSelected: false,
+            help: Self.shortcutHelp("撤销", model.editorShortcuts.undo),
+            action: { model.onUndo?() }
+        )
+        .disabled(!model.canUndo)
+        .opacity(model.canUndo ? 1 : 0.4)
+
+        BarIconButton(
+            title: "重做",
+            systemImage: "arrow.uturn.forward",
+            help: Self.shortcutHelp("重做", model.editorShortcuts.redo),
+            action: { model.onRedo?() }
+        )
+        .disabled(!model.canRedo)
+        .opacity(model.canRedo ? 1 : 0.4)
+    }
+
+    @ViewBuilder private var actions: some View {
+        BarIconButton(
+            title: "识别文字",
+            systemImage: "text.viewfinder",
+            tint: model.isLiveTextActive
+                ? Theme.Colors.brand : Theme.Colors.textSecondary,
+            isSelected: model.isLiveTextActive
+        ) {
+            if model.isLiveTextActive {
+                model.isLiveTextActive = false
+            } else {
+                model.isLiveTextActive = true
+                model.tool = .select
+                model.showScroll = false
+            }
+        }
+
+        if !model.isRestoredImage {
+            BarIconButton(
+                title: "滚动截图",
+                systemImage: "scroll",
+                isSelected: model.showScroll
+            ) {
+                model.showScroll.toggle()
+                if model.showScroll {
+                    model.tool = nil
+                }
+            }
+
+            // 录屏：拿当前这块选区去录（点了收掉遮罩、上红框与「准备录制」控制条）。
+            BarIconButton(title: "录屏", systemImage: "record.circle") {
+                model.onRecord?()
+            }
+        }
+
+        BarIconButton(
+            title: "保存",
+            systemImage: "square.and.arrow.down",
+            help: "保存 (⌘S)",
+            key: "s"
+        ) {
+            model.onSave?()
+        }
+        BarIconButton(title: "钉图", systemImage: "pin") {
+            model.onPin?()
+        }
+        BarIconButton(
+            title: "取消",
+            systemImage: "xmark",
+            tint: Theme.Colors.destructive
+        ) {
+            model.onCancel?()
+        }
+        BarIconButton(
+            title: "确认",
+            systemImage: "checkmark",
+            tint: Theme.Colors.success
+        ) {
+            model.onConfirm?()
+        }
+    }
+
+    /// 分组分隔线：横排时是竖线，竖排时是横线。
     private var separator: some View {
         Rectangle()
             .fill(Theme.Colors.separator)
-            .frame(width: Theme.Size.hairline, height: Theme.Size.toolbarSeparatorHeight)
-            .padding(.horizontal, Theme.Spacing.xs)
+            .frame(
+                width: model.isVerticalLayout ? Theme.Size.toolbarSeparatorHeight : Theme.Size.hairline,
+                height: model.isVerticalLayout ? Theme.Size.hairline : Theme.Size.toolbarSeparatorHeight
+            )
+            .padding(
+                model.isVerticalLayout
+                    ? EdgeInsets(top: Theme.Spacing.xs, leading: 0, bottom: Theme.Spacing.xs, trailing: 0)
+                    : EdgeInsets(top: 0, leading: Theme.Spacing.xs, bottom: 0, trailing: Theme.Spacing.xs)
+            )
     }
 
     private func toolButton(_ item: AnnotationTool) -> some View {
@@ -268,6 +295,11 @@ struct InlineOptionsToolbar: View {
                 selectedMode: $model.shapeFillMode,
                 isCircle: model.tool == .ellipse
             )
+            vSeparator
+            // 圆角只对矩形有意义：圆本身没有「角」。
+            if model.tool == .rectangle {
+                RectCornerStylePicker(selectedStyle: $model.rectCornerStyle)
+            }
         }
     }
 

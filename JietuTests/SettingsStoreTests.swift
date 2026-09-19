@@ -87,6 +87,7 @@ struct SettingsStoreTests {
         updated.tool = .blur
         updated.color = .blue
         updated.lineWidth = 11
+        updated.rectCornerStyle = .rounded
         store.annotationDefaults = updated
 
         let reloaded = SettingsStore(defaults: defaults)

@@ -569,6 +569,70 @@ struct InlineToolbarTests {
         #expect(canvas.debugRestoredBase.image?.width == 1600, "取消裁剪后底图要还原")
     }
 
+    // MARK: - 工具栏摆放 / 文字样式
+
+    @Test("主工具栏能竖排：竖排更窄更高（横排摆不下时靠它停到左右侧）")
+    func mainToolbarSupportsVerticalLayout() {
+        let model = InlineToolbarModel()
+        let host = NSHostingView(rootView: InlineMainToolbar(model: model))
+        host.layoutSubtreeIfNeeded()
+        let horizontal = host.fittingSize
+
+        model.isVerticalLayout = true
+        host.layoutSubtreeIfNeeded()
+        let vertical = host.fittingSize
+
+        #expect(horizontal.width > horizontal.height, "横排本该是宽的")
+        #expect(vertical.width < horizontal.width, "竖排更窄")
+        #expect(vertical.height > horizontal.height, "竖排更高")
+    }
+
+    @Test("工具栏摆放：下面放得下就横排贴在选区下面")
+    func toolbarDocksBelowWhenThereIsRoom() {
+        // 图 600×400 px → 300×200 点居中（选区下方还有 ~330pt）。
+        let canvas = Self.makeRestoredCanvas(
+            canvas: CGSize(width: 1000, height: 800),
+            imagePixels: (width: 600, height: 400)
+        )
+        let layout = canvas.debugToolbarLayout
+        #expect(!layout.isVertical, "下面放得下就不该竖排")
+        #expect(layout.main.maxY <= 335, "贴在选区（minY=335）下面")
+        #expect(abs(layout.main.midX - canvas.debugSelection!.midX) <= 1, "与选区水平对齐")
+    }
+
+    @Test("工具栏摆放：下面放不下就竖排停到右侧；两侧都没位置才退回上方")
+    func toolbarDocksToTheSideWhenNoRoomBelow() {
+        // 贴屏幕底部的窄选区：下面没位置，左右各有位置 → 停右侧、竖排。
+        let side = Self.makeInlineRegionCanvas(region: CGRect(x: 200, y: 20, width: 600, height: 200))
+        let layout = side.debugToolbarLayout
+        #expect(layout.isVertical, "下面放不下就该竖排")
+        #expect(layout.main.maxX > 900, "停到右侧（贴画布右边缘）")
+
+        // 横跨整屏的选区：左右也塞不下 → 退回选区上方。
+        let wide = Self.makeInlineRegionCanvas(region: CGRect(x: 20, y: 20, width: 960, height: 200))
+        let wideLayout = wide.debugToolbarLayout
+        #expect(!wideLayout.isVertical, "两侧都没位置就别硬竖排")
+        #expect(wideLayout.main.minY > 220, "退回选区上方")
+    }
+
+    @Test("文字：选中之后切「描边 / 标注」，当场刷到这条文字上")
+    func textStyleAppliesToSelectedTextImmediately() async throws {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        let id = try #require(canvas.debugInsertText("标注", atViewPoint: CGPoint(x: 300, y: 400)))
+        #expect(canvas.debugSelectedID == id)
+        #expect(canvas.debugAnnotation(id)?.textHasStroke == false)
+
+        #expect(canvas.debugSelectTool(.text))
+        canvas.debugSetTextStyle(hasStroke: true, hasCallout: true)
+
+        // 样式变更走的是观察回调（下一个主队列周期），等它跑完。
+        await Self.drainMainQueue()
+
+        let updated = try #require(canvas.debugAnnotation(id))
+        #expect(updated.textHasStroke, "选中的文字要当场带上描边，而不是等下一次输入")
+        #expect(updated.textHasCallout, "标注气泡同理")
+    }
+
     // MARK: - 就地编辑测试脚手架
 
     /// 造一块普通原地编辑画布：快照底图与画布同比例（`effectiveScale` == `scale`）。
@@ -618,6 +682,24 @@ struct InlineToolbarTests {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         )!
         return ctx.makeImage()!
+    }
+
+    /// 造一块**区域截图**的原地编辑画布：拖一块选区进标注（第一次截图那条路）。
+    private static func makeInlineRegionCanvas(region: CGRect) -> OverlayCanvasView {
+        let canvas = makeCanvas(canvas: CGSize(width: 1000, height: 800))
+        canvas.inlineMode = true
+        canvas.mouseDown(with: mouse(.leftMouseDown, at: NSPoint(x: region.minX, y: region.minY)))
+        canvas.mouseDragged(with: mouse(.leftMouseDragged, at: NSPoint(x: region.maxX, y: region.maxY)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, at: NSPoint(x: region.maxX, y: region.maxY)))
+        return canvas
+    }
+
+    /// 等主队列上排着的观察回调跑完（样式变更走的是 `DispatchQueue.main.async`）。
+    private static func drainMainQueue() async {
+        for _ in 0..<5 {
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(5))
+        }
     }
 
     /// 造一个按键事件（`keyCode` 用 AppKit 的原始码，53 = Esc、36 = Return）。

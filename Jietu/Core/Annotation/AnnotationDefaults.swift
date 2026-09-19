@@ -21,6 +21,8 @@ struct AnnotationDefaults: Equatable, Codable {
     var eraserSize: CGFloat
     var arrowStyle: ArrowStyle
     var shapeFillMode: ShapeFillMode
+    /// 矩形的角样式（方角 / 圆角）。
+    var rectCornerStyle: RectCornerStyle
     var textHasStroke: Bool
     var textHasCallout: Bool
 
@@ -29,7 +31,7 @@ struct AnnotationDefaults: Equatable, Codable {
     enum CodingKeys: String, CodingKey {
         case tool, color, lineWidth, highlightColor, highlightLineWidth
         case fontSize, mosaicBlock, blurRadius, eraserSize
-        case arrowStyle, shapeFillMode, textHasStroke, textHasCallout
+        case arrowStyle, shapeFillMode, rectCornerStyle, textHasStroke, textHasCallout
     }
 
     init(
@@ -44,6 +46,7 @@ struct AnnotationDefaults: Equatable, Codable {
         eraserSize: CGFloat = 28,
         arrowStyle: ArrowStyle = .tapered,
         shapeFillMode: ShapeFillMode = .none,
+        rectCornerStyle: RectCornerStyle = .square,
         textHasStroke: Bool = false,
         textHasCallout: Bool = false
     ) {
@@ -58,6 +61,7 @@ struct AnnotationDefaults: Equatable, Codable {
         self.eraserSize = eraserSize
         self.arrowStyle = arrowStyle
         self.shapeFillMode = shapeFillMode
+        self.rectCornerStyle = rectCornerStyle
         self.textHasStroke = textHasStroke
         self.textHasCallout = textHasCallout
     }
@@ -75,6 +79,8 @@ struct AnnotationDefaults: Equatable, Codable {
         eraserSize = try container.decodeIfPresent(CGFloat.self, forKey: .eraserSize) ?? 28
         arrowStyle = try container.decodeIfPresent(ArrowStyle.self, forKey: .arrowStyle) ?? .tapered
         shapeFillMode = try container.decodeIfPresent(ShapeFillMode.self, forKey: .shapeFillMode) ?? .none
+        rectCornerStyle =
+            try container.decodeIfPresent(RectCornerStyle.self, forKey: .rectCornerStyle) ?? .square
         textHasStroke = try container.decodeIfPresent(Bool.self, forKey: .textHasStroke) ?? false
         textHasCallout = try container.decodeIfPresent(Bool.self, forKey: .textHasCallout) ?? false
     }

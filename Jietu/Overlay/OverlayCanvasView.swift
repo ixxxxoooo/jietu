@@ -355,8 +355,53 @@ final class OverlayCanvasView: NSView {
     /// 自检用：工具栏当前实际显示的工具（第一次截图不给裁剪）。
     var debugVisibleTools: [AnnotationTool] { toolbarModel?.visibleTools ?? [] }
 
+    /// 自检用：工具栏当前摆在哪、是不是竖排。
+    var debugToolbarLayout: (main: CGRect, options: CGRect?, isVertical: Bool) {
+        (
+            mainToolbarHost?.frame ?? .zero,
+            optionsToolbarHost.map(\.frame),
+            toolbarModel?.isVerticalLayout ?? false
+        )
+    }
+
     /// 自检用：等价于点主工具栏的 ✓（确认并交付这张图）。
     func debugConfirm() { confirmInline() }
+
+    /// 自检用：选中了哪条标注。
+    var debugSelectedID: UUID? { selectedID }
+
+    /// 自检用：某条标注当前的样子。
+    func debugAnnotation(_ id: UUID) -> Annotation? {
+        annotations.first { $0.id == id }
+    }
+
+    /// 自检用：在某个视图位置插一条文字并选中它（等价于「用文字工具写了一条、单击选中」）。
+    @discardableResult
+    func debugInsertText(_ string: String, atViewPoint point: CGPoint) -> UUID? {
+        guard selection != nil, let model = toolbarModel else { return nil }
+        let annotation = Annotation(
+            kind: .text(
+                origin: annotationPoint(from: point),
+                string: string,
+                fontSize: max(12, model.fontSize * snapshot.effectiveScale)
+            ),
+            color: model.color,
+            lineWidth: model.lineWidth,
+            textHasStroke: model.textHasStroke,
+            textHasCallout: model.textHasCallout
+        )
+        annotations.append(annotation)
+        selectedID = annotation.id
+        updateAnnotationLayer()
+        updateInlineSelectionLayers()
+        return annotation.id
+    }
+
+    /// 自检用：等价于点文字二级菜单里的「描边 / 标注」开关。
+    func debugSetTextStyle(hasStroke: Bool, hasCallout: Bool) {
+        toolbarModel?.textHasStroke = hasStroke
+        toolbarModel?.textHasCallout = hasCallout
+    }
 
     /// 自检用：等价于点「保存 / 钉图」时交出去的那张图。
     func debugAnnotatedImage() -> CGImage? { currentAnnotatedImage() }
@@ -2543,6 +2588,7 @@ final class OverlayCanvasView: NSView {
         model.blurRadius = seed.blurRadius
         model.arrowStyle = seed.arrowStyle
         model.shapeFillMode = seed.shapeFillMode
+        model.rectCornerStyle = seed.rectCornerStyle
         model.textHasStroke = seed.textHasStroke
         model.textHasCallout = seed.textHasCallout
         model.editorShortcuts = editorShortcuts
@@ -2607,6 +2653,7 @@ final class OverlayCanvasView: NSView {
             _ = model.blurRadius
             _ = model.arrowStyle
             _ = model.shapeFillMode
+            _ = model.rectCornerStyle
             _ = model.textHasStroke
             _ = model.textHasCallout
         } onChange: { [weak self] in
@@ -2625,6 +2672,7 @@ final class OverlayCanvasView: NSView {
                         eraserSize: model.eraserSize,
                         arrowStyle: model.arrowStyle,
                         shapeFillMode: model.shapeFillMode,
+                        rectCornerStyle: model.rectCornerStyle,
                         textHasStroke: model.textHasStroke,
                         textHasCallout: model.textHasCallout
                     )
@@ -2686,7 +2734,8 @@ final class OverlayCanvasView: NSView {
             _ = model.tool
             _ = model.showScroll
             _ = model.isLiveTextActive
-            if self.textField != nil {
+            // 正在输入（文本框）或选中了一条文字：都要盯着文字样式，改了当场刷上去。
+            if self.textField != nil || self.selectedTextID != nil {
                 _ = model.fontSize
                 _ = model.color
                 _ = model.textHasStroke
@@ -2699,6 +2748,7 @@ final class OverlayCanvasView: NSView {
                     self.applyInlineTextStyle(field, model: model)
                     self.fitInlineTextField()
                 }
+                self.applyTextStyleToSelection(model)
                 if model.tool == .crop && self.cropInitialState == nil {
                     self.cropInitialState = Snapshot(
                         annotations: self.annotations,
@@ -2722,6 +2772,35 @@ final class OverlayCanvasView: NSView {
                 }
             }
         }
+    }
+
+    /// 选中的那条文字（没选或选中的不是文字 → nil）。
+    private var selectedTextID: UUID? {
+        guard let selectedID,
+            let annotation = annotations.first(where: { $0.id == selectedID }),
+            case .text = annotation.kind
+        else { return nil }
+        return selectedID
+    }
+
+    /// 把工具栏上刚改的文字样式**当场**刷到选中的那条文字上。
+    ///
+    /// 用户的期望：选中一段文字后点「描边 / 标注」要立刻看见效果，而不是等下一次输入文字才生效。
+    /// 正在输入文字时走的是文本框那条路（`applyInlineTextStyle`），这里只管「没在输入、但选中了一条文字」。
+    private func applyTextStyleToSelection(_ model: InlineToolbarModel) {
+        guard textField == nil, let selectedID,
+            let index = annotations.firstIndex(where: { $0.id == selectedID }),
+            case .text = annotations[index].kind
+        else { return }
+        let updated = annotations[index]
+            .withTextStroke(model.textHasStroke)
+            .withTextCallout(model.textHasCallout)
+        guard updated != annotations[index] else { return }
+        // 描边 / 标注是离散开关（不像滑块会连着刷），一次切换算一步撤销。
+        pushUndo()
+        annotations[index] = updated
+        updateAnnotationLayer()
+        updateInlineSelectionLayers()
     }
 
     /// 实况文本：选中「选择」工具时铺一层可拖选复制文字的覆盖层。
@@ -2749,47 +2828,147 @@ final class OverlayCanvasView: NSView {
         layoutToolbars()
     }
 
+    /// 摆工具栏：**默认贴在选区下面**；下面放不下，就看看左右两侧有没有位置，
+    /// 有就竖排停到那一侧；两边都放不下才退回选区上方（兜底，别把工具栏弄丢）。
     private func layoutToolbars() {
         guard let selection, let main = mainToolbarHost else { return }
-        main.layoutSubtreeIfNeeded()
-        let mainSize = main.fittingSize
-        var origin = CGPoint(
-            x: selection.midX - mainSize.width / 2,
-            y: selection.minY - mainSize.height - 10
-        )
-        if origin.y < bounds.minY + 8 {
-            origin.y = selection.maxY + 10
-        }
-        origin.x = min(
-            max(origin.x, bounds.minX + 8),
-            max(bounds.minX + 8, bounds.maxX - mainSize.width - 8)
-        )
-        origin.y = min(origin.y, bounds.maxY - mainSize.height - 8)
-        main.frame = CGRect(origin: origin, size: mainSize)
+        let inset: CGFloat = 8
+        let gap: CGFloat = 10
 
+        let horizontalSize = measureMainToolbar(vertical: false)
+        if selection.minY - gap - horizontalSize.height >= bounds.minY + inset {
+            placeHorizontal(main, size: horizontalSize, below: selection, inset: inset, gap: gap)
+            layoutOptions(beside: main.frame, vertical: false, inset: inset, gap: gap)
+            return
+        }
+
+        let verticalSize = measureMainToolbar(vertical: true)
+        if let side = verticalDockSide(for: selection, mainSize: verticalSize, inset: inset, gap: gap) {
+            placeVertical(main, size: verticalSize, on: side, selection: selection, inset: inset, gap: gap)
+            layoutOptions(beside: main.frame, vertical: true, inset: inset, gap: gap)
+            return
+        }
+
+        // 兜底：左右也没有位置 → 横排贴到选区上方。
+        let size = measureMainToolbar(vertical: false)
+        placeHorizontal(main, size: size, below: selection, inset: inset, gap: gap, above: true)
+        layoutOptions(beside: main.frame, vertical: false, inset: inset, gap: gap)
+    }
+
+    /// 量一次主工具栏在某个方向上的尺寸（`isVerticalLayout` 变了要让它先重新排一遍）。
+    private func measureMainToolbar(vertical: Bool) -> CGSize {
+        guard let main = mainToolbarHost, let model = toolbarModel else { return .zero }
+        if model.isVerticalLayout != vertical {
+            model.isVerticalLayout = vertical
+            main.layoutSubtreeIfNeeded()
+        }
+        return main.fittingSize
+    }
+
+    /// 横排：水平居中于选区，放在选区下面（`above = true` 时放上面）。
+    private func placeHorizontal(
+        _ main: NSView,
+        size: CGSize,
+        below selection: CGRect,
+        inset: CGFloat,
+        gap: CGFloat,
+        above: Bool = false
+    ) {
+        var origin = CGPoint(
+            x: selection.midX - size.width / 2,
+            y: above ? selection.maxY + gap : selection.minY - size.height - gap
+        )
+        origin.x = min(
+            max(origin.x, bounds.minX + inset),
+            max(bounds.minX + inset, bounds.maxX - size.width - inset)
+        )
+        origin.y = min(max(origin.y, bounds.minY + inset), bounds.maxY - size.height - inset)
+        main.frame = CGRect(origin: origin, size: size)
+    }
+
+    /// 竖排能停在哪一侧？优先右侧，其次左侧；都放不下返回 nil。
+    private func verticalDockSide(
+        for selection: CGRect,
+        mainSize: CGSize,
+        inset: CGFloat,
+        gap: CGFloat
+    ) -> VerticalDockSide? {
+        guard mainSize.width > 0, mainSize.height > 0 else { return nil }
+        // 竖排要够高（工具栏很长），也要在选区旁边放得下。
+        guard mainSize.height <= bounds.height - inset * 2 else { return nil }
+        let optionsSize = visibleOptionsSize()
+        let columnWidth = mainSize.width + (optionsSize.width > 0 ? gap + optionsSize.width : 0)
+        let roomLeft = selection.minX - bounds.minX
+        let roomRight = bounds.maxX - selection.maxX
+        if roomRight >= columnWidth + gap + inset { return .right }
+        if roomLeft >= columnWidth + gap + inset { return .left }
+        return nil
+    }
+
+    /// 竖排：贴边停靠，整体在竖直方向居中于选区（并夹进画布）。
+    private func placeVertical(
+        _ main: NSView,
+        size: CGSize,
+        on side: VerticalDockSide,
+        selection: CGRect,
+        inset: CGFloat,
+        gap: CGFloat
+    ) {
+        let x = side == .right ? bounds.maxX - inset - size.width : bounds.minX + inset
+        var y = selection.midY - size.height / 2
+        y = min(max(y, bounds.minY + inset), max(bounds.minY + inset, bounds.maxY - size.height - inset))
+        main.frame = CGRect(origin: CGPoint(x: x, y: y), size: size)
+    }
+
+    private enum VerticalDockSide {
+        case left
+        case right
+    }
+
+    /// 二级菜单当前的尺寸（不显示时为零）。
+    private func visibleOptionsSize() -> CGSize {
+        guard let options = optionsToolbarHost, let model = toolbarModel, model.isSubToolbarVisible
+        else { return .zero }
+        options.layoutSubtreeIfNeeded()
+        return options.fittingSize
+    }
+
+    /// 摆二级菜单：贴着主工具栏。
+    ///
+    /// - 主栏在下 / 上（横排）：居中挂在主栏正下方，放不下就翻到主栏上面。
+    /// - 主栏在左 / 右（竖排）：挨着主栏、朝选区那一侧，顶部与主栏对齐。
+    private func layoutOptions(beside mainFrame: CGRect, vertical: Bool, inset: CGFloat, gap: CGFloat) {
         guard let options = optionsToolbarHost, let model = toolbarModel, model.isSubToolbarVisible else {
             optionsToolbarHost?.isHidden = true
             return
         }
         options.isHidden = false
-        options.layoutSubtreeIfNeeded()
-        let size = options.fittingSize
+        let size = visibleOptionsSize()
         guard size.width > 0, size.height > 0 else { return }
-        // 居中显示到主工具栏正下方（水平 midX 对齐）
-        let x = min(
-            max(main.frame.midX - size.width / 2, bounds.minX + 8),
-            max(bounds.minX + 8, bounds.maxX - size.width - 8)
-        )
-        var y = main.frame.minY - 8 - size.height
-        if y < bounds.minY + 8 {
-            y = main.frame.maxY + 8
+
+        if vertical {
+            // 主栏贴右边 → 二级菜单挂在它左边；贴左边 → 挂在它右边。
+            let mainIsOnRight = mainFrame.midX > bounds.midX
+            var x = mainIsOnRight ? mainFrame.minX - gap - size.width : mainFrame.maxX + gap
+            x = min(max(x, bounds.minX + inset), max(bounds.minX + inset, bounds.maxX - size.width - inset))
+            let y = min(
+                max(mainFrame.maxY - size.height, bounds.minY + inset),
+                max(bounds.minY + inset, bounds.maxY - size.height - inset)
+            )
+            options.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
+            return
         }
-        options.frame = CGRect(
-            x: x,
-            y: y,
-            width: size.width,
-            height: size.height
+
+        let x = min(
+            max(mainFrame.midX - size.width / 2, bounds.minX + inset),
+            max(bounds.minX + inset, bounds.maxX - size.width - inset)
         )
+        var y = mainFrame.minY - inset - size.height
+        if y < bounds.minY + inset {
+            y = mainFrame.maxY + inset
+        }
+        y = min(max(y, bounds.minY + inset), max(bounds.minY + inset, bounds.maxY - size.height - inset))
+        options.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
     }
 
     // MARK: Eraser (see compose)
@@ -2860,7 +3039,8 @@ final class OverlayCanvasView: NSView {
                 kind: .rectangle(rect),
                 color: model.color,
                 lineWidth: model.lineWidth,
-                shapeFillMode: model.shapeFillMode
+                shapeFillMode: model.shapeFillMode,
+                rectCornerStyle: model.rectCornerStyle
             )
         case .ellipse:
             return Annotation(

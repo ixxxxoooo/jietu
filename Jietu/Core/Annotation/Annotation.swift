@@ -138,6 +138,44 @@ enum ArrowStyle: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+/// 矩形的角样式（方角 / 圆角）。
+///
+/// @author ixxxxoooo
+enum RectCornerStyle: String, CaseIterable, Identifiable, Codable {
+    case square
+    case rounded
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .square: return "方角"
+        case .rounded: return "圆角"
+        }
+    }
+
+    /// 圆角半径按短边的比例算：矩形拖大拖小，观感一致（小矩形也不会倒成胶囊）。
+    static let roundedRadiusRatio: CGFloat = 0.18
+
+    /// 给定矩形实际用的圆角半径（方角为 0）。
+    static func radius(for rect: CGRect, style: RectCornerStyle) -> CGFloat {
+        guard style == .rounded else { return 0 }
+        let side = min(rect.width, rect.height)
+        guard side.isFinite, side > 0 else { return 0 }
+        return max(1, side * roundedRadiusRatio)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        switch raw {
+        case "square", "sharp": self = .square
+        case "rounded": self = .rounded
+        default: self = .square
+        }
+    }
+}
+
 /// 形状填充模式（线框、填充、半透明）。
 ///
 /// @author ixxxxoooo
@@ -173,6 +211,7 @@ struct AnnotationStyle: Equatable {
     var blurRadius: CGFloat?
     var arrowStyle: ArrowStyle?
     var shapeFillMode: ShapeFillMode?
+    var rectCornerStyle: RectCornerStyle?
     var textHasStroke: Bool?
     var textHasCallout: Bool?
 
@@ -184,6 +223,7 @@ struct AnnotationStyle: Equatable {
         blurRadius: CGFloat? = nil,
         arrowStyle: ArrowStyle? = nil,
         shapeFillMode: ShapeFillMode? = nil,
+        rectCornerStyle: RectCornerStyle? = nil,
         textHasStroke: Bool? = nil,
         textHasCallout: Bool? = nil
     ) {
@@ -194,6 +234,7 @@ struct AnnotationStyle: Equatable {
         self.blurRadius = blurRadius
         self.arrowStyle = arrowStyle
         self.shapeFillMode = shapeFillMode
+        self.rectCornerStyle = rectCornerStyle
         self.textHasStroke = textHasStroke
         self.textHasCallout = textHasCallout
     }
@@ -221,6 +262,7 @@ struct AnnotationStyle: Equatable {
             blurRadius: blurRadius,
             arrowStyle: annotation.arrowStyle,
             shapeFillMode: annotation.shapeFillMode,
+            rectCornerStyle: annotation.rectCornerStyle,
             textHasStroke: annotation.textHasStroke,
             textHasCallout: annotation.textHasCallout
         )
@@ -243,6 +285,9 @@ struct AnnotationStyle: Equatable {
             if let arrowStyle { copy = copy.withArrowStyle(arrowStyle) }
         case .rectangle, .ellipse:
             if let shapeFillMode { copy = copy.withShapeFillMode(shapeFillMode) }
+            if let rectCornerStyle, case .rectangle = annotation.kind {
+                copy = copy.withRectCornerStyle(rectCornerStyle)
+            }
         default:
             break
         }
@@ -293,6 +338,8 @@ struct Annotation: Identifiable, Equatable {
     var rotation: CGFloat
     var arrowStyle: ArrowStyle
     var shapeFillMode: ShapeFillMode
+    /// 矩形的角样式（只对 `.rectangle` 有意义）。
+    var rectCornerStyle: RectCornerStyle
     var textHasStroke: Bool
     var textHasCallout: Bool
 
@@ -304,6 +351,7 @@ struct Annotation: Identifiable, Equatable {
         rotation: CGFloat = 0,
         arrowStyle: ArrowStyle = .tapered,
         shapeFillMode: ShapeFillMode = .none,
+        rectCornerStyle: RectCornerStyle = .square,
         textHasStroke: Bool = false,
         textHasCallout: Bool = false
     ) {
@@ -314,6 +362,7 @@ struct Annotation: Identifiable, Equatable {
         self.rotation = rotation
         self.arrowStyle = arrowStyle
         self.shapeFillMode = shapeFillMode
+        self.rectCornerStyle = rectCornerStyle
         self.textHasStroke = textHasStroke
         self.textHasCallout = textHasCallout
     }
@@ -717,6 +766,12 @@ extension Annotation {
     func withShapeFillMode(_ mode: ShapeFillMode) -> Annotation {
         var copy = self
         copy.shapeFillMode = mode
+        return copy
+    }
+
+    func withRectCornerStyle(_ style: RectCornerStyle) -> Annotation {
+        var copy = self
+        copy.rectCornerStyle = style
         return copy
     }
 

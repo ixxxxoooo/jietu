@@ -126,6 +126,57 @@ struct AnnotationRendererTests {
         #expect(center.red <= 40 && center.green <= 40 && center.blue <= 40)
     }
 
+    @Test("矩形圆角：角上不再是实心，方角则相反")
+    func rectangleCornerStyle() throws {
+        let base = TestImage.solidBlack(side: 40)
+        let rect = CGRect(x: 4, y: 4, width: 32, height: 32)
+        let square = Annotation(kind: .rectangle(rect), color: .white, lineWidth: 3)
+        let rounded = Annotation(
+            kind: .rectangle(rect),
+            color: .white,
+            lineWidth: 3,
+            rectCornerStyle: .rounded
+        )
+
+        let squareImage = try #require(AnnotationRenderer.render(base: base, annotations: [square]))
+        let roundedImage = try #require(AnnotationRenderer.render(base: base, annotations: [rounded]))
+
+        // 取矩形左上角那个像素：方角的角正落在描边上（亮），圆角已经倒掉（暗）。
+        // 半径 5.76 + 线宽 3 → 角点离圆角弧还有 2.4px，够干净。
+        let cornerOfSquare = try sample(squareImage, 4, 4)
+        let cornerOfRounded = try sample(roundedImage, 4, 4)
+        #expect(cornerOfSquare.red >= 180, "方角的角应该是描边")
+        #expect(cornerOfRounded.red <= 90, "圆角把角倒掉了（角上还会有一点点抗锯齿）")
+
+        // 四条边中点仍应被描边压住：圆角只倒角，不是把整个矩形缩一圈。
+        let edgeOfRounded = try sample(roundedImage, 20, 4)
+        #expect(edgeOfRounded.red >= 200)
+
+        // 半径按短边比例算，方角恒为 0。
+        #expect(RectCornerStyle.radius(for: rect, style: .square) == 0)
+        #expect(
+            abs(RectCornerStyle.radius(for: rect, style: .rounded) - 32 * 0.18) < 0.001
+        )
+    }
+
+    @Test("矩形圆角：填充模式下的四个角也是圆角")
+    func roundedRectangleKeepsFillMode() throws {
+        let base = TestImage.solidBlack(side: 40)
+        let annotation = Annotation(
+            kind: .rectangle(CGRect(x: 4, y: 4, width: 32, height: 32)),
+            color: .red,
+            lineWidth: 3,
+            shapeFillMode: .opaque,
+            rectCornerStyle: .rounded
+        )
+        let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [annotation]))
+
+        let center = try sample(rendered, 20, 20)
+        #expect(center.red >= 200, "里面照旧填充")
+        let corner = try sample(rendered, 4, 4)
+        #expect(corner.red <= 90, "角上被倒掉")
+    }
+
     @Test("序号圆点填充颜色")
     func counterFillsCircle() throws {
         let base = TestImage.solidBlack(side: 40)
