@@ -45,6 +45,9 @@ enum Theme {
         /// alpha 1，调用方用 `.opacity` 自己压暗即可落到目标值。
         static let textPrimary = ramp(dark: 1.0, light: 1.0)
         static let textSecondary = ramp(dark: 0.60, light: 0.60)
+        /// 工具栏 / 二级菜单里的图标：比 `textSecondary` 更实一些，
+        /// 压在磨砂面板上才看得清（选中态还是 `textPrimary` + 高亮底，层次不受影响）。
+        static let toolbarIcon = ramp(dark: 0.85, light: 0.85)
         static let textTertiary = ramp(dark: 0.40, light: 0.42)
         /// 图标解码前的空块。
         static let iconPlaceholder = ramp(dark: 0.06, light: 0.06)

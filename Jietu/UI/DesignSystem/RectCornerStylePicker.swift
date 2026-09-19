@@ -43,7 +43,7 @@ struct RectCornerStylePicker: View {
                 } label: {
                     RectCornerStyleIcon(
                         style: style,
-                        color: isSelected ? Theme.Colors.selectionGreen : Theme.Colors.textSecondary
+                        color: isSelected ? Theme.Colors.selectionGreen : Theme.Colors.toolbarIcon
                     )
                     .frame(width: 28, height: 24)
                     .background(

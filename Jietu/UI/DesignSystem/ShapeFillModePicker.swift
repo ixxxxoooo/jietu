@@ -77,7 +77,7 @@ struct ShapeFillModePicker: View {
                 } label: {
                     ShapeFillModeIcon(
                         mode: mode,
-                        color: isSelected ? Theme.Colors.selectionGreen : Theme.Colors.textSecondary,
+                        color: isSelected ? Theme.Colors.selectionGreen : Theme.Colors.toolbarIcon,
                         isCircle: isCircle
                     )
                     .frame(width: 28, height: 24)

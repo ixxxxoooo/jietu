@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import SwiftUI
 import Testing
@@ -5,6 +6,29 @@ import Testing
 
 @Suite("HUD控件与调色板")
 struct HUDSliderTests {
+
+    /// 按外观解析出颜色墨色的 alpha（主题色是随外观动态解析的）。
+    private func inkAlpha(_ color: Color, dark: Bool) -> CGFloat {
+        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
+        var alpha: CGFloat = 0
+        appearance.performAsCurrentDrawingAppearance {
+            alpha = (NSColor(color).usingColorSpace(.sRGB) ?? .clear).alphaComponent
+        }
+        return alpha
+    }
+
+    @Test("工具栏图标比正文次要色更实，又不抢选中态")
+    func toolbarIconInkIsDeeperThanSecondaryText() {
+        for dark in [true, false] {
+            let icon = inkAlpha(Theme.Colors.toolbarIcon, dark: dark)
+            let secondary = inkAlpha(Theme.Colors.textSecondary, dark: dark)
+            let primary = inkAlpha(Theme.Colors.textPrimary, dark: dark)
+
+            #expect(icon > secondary, "工具栏图标要比 textSecondary 深")
+            #expect(icon >= 0.8, "要「够深」，不能还是灰扑扑的")
+            #expect(icon < primary, "选中态要更亮一档，层次不能被抹平")
+        }
+    }
 
     @Test("调色板包含 8 种基础颜色")
     func paletteCountAndColors() {

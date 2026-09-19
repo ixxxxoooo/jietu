@@ -154,7 +154,7 @@ struct InlineMainToolbar: View {
             title: "识别文字",
             systemImage: "text.viewfinder",
             tint: model.isLiveTextActive
-                ? Theme.Colors.brand : Theme.Colors.textSecondary,
+                ? Theme.Colors.brand : Theme.Colors.toolbarIcon,
             isSelected: model.isLiveTextActive
         ) {
             if model.isLiveTextActive {
@@ -243,7 +243,7 @@ struct InlineMainToolbar: View {
             Image(systemName: item.symbolName)
                 .font(.system(size: Theme.Size.toolbarIconSize, weight: .regular))
                 .foregroundStyle(
-                    model.tool == item ? Theme.Colors.textPrimary : Theme.Colors.textSecondary
+                    model.tool == item ? Theme.Colors.textPrimary : Theme.Colors.toolbarIcon
                 )
                 .frame(
                     width: Theme.Size.toolbarButtonWidth, height: Theme.Size.toolbarButtonHeight)
@@ -408,7 +408,7 @@ struct InlineOptionsToolbar: View {
         optionGroup {
             Image(systemName: "scroll")
                 .font(Theme.Typography.bar)
-                .foregroundStyle(Theme.Colors.textSecondary)
+                .foregroundStyle(Theme.Colors.toolbarIcon)
             Text("谁来滚")
                 .font(Theme.Typography.bar)
                 .foregroundStyle(Theme.Colors.textSecondary)

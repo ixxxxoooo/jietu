@@ -92,7 +92,7 @@ struct BarIconButton: View {
         ) {
             Image(systemName: systemImage)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(tint ?? Theme.Colors.textSecondary)
+                .foregroundStyle(tint ?? Theme.Colors.toolbarIcon)
                 .frame(
                     width: Theme.Size.toolbarButtonWidth,
                     height: Theme.Size.toolbarButtonHeight
