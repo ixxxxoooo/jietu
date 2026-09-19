@@ -49,9 +49,26 @@ enum OCRService {
                     let lines = (request.results ?? []).compactMap {
                         $0.topCandidates(1).first?.string
                     }
+                    if !lines.isEmpty {
+                        continuation.resume(returning: lines.joined(separator: "\n"))
+                        return
+                    }
+                } catch {
+                    NSLog("[Jietu] Accurate OCR failed: \(error.localizedDescription), falling back to fast mode")
+                }
+
+                // 兜底：当 accurate 模式因 ANE / 模型临时加载失败时，退回 fast 模式重试
+                let fallbackRequest = VNRecognizeTextRequest()
+                fallbackRequest.recognitionLevel = .fast
+                fallbackRequest.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
+                do {
+                    try handler.perform([fallbackRequest])
+                    let lines = (fallbackRequest.results ?? []).compactMap {
+                        $0.topCandidates(1).first?.string
+                    }
                     continuation.resume(returning: lines.joined(separator: "\n"))
                 } catch {
-                    NSLog("[Jietu] OCR failed: \(error.localizedDescription)")
+                    NSLog("[Jietu] Fallback OCR failed: \(error.localizedDescription)")
                     continuation.resume(returning: "")
                 }
             }

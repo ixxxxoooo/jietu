@@ -282,7 +282,7 @@ final class SettingsStore {
                 .flatMap(QuickAccessPosition.init(rawValue:))) ?? .bottomLeft
         self.editorMode =
             (defaults.string(forKey: Key.editorMode).flatMap(EditorMode.init(rawValue:))) ?? .inline
-        self.windowShadowEnabled = defaults.object(forKey: Key.windowShadowEnabled) as? Bool ?? true
+        self.windowShadowEnabled = defaults.object(forKey: Key.windowShadowEnabled) as? Bool ?? false
         self.windowShadowSize = defaults.object(forKey: Key.windowShadowSize) as? Double ?? 32.0
         if let data = defaults.data(forKey: Key.annotationDefaults),
             let stored = try? JSONDecoder().decode(AnnotationDefaults.self, from: data)

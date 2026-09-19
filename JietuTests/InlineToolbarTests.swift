@@ -41,6 +41,10 @@ struct InlineToolbarTests {
         #expect(model.isSubToolbarVisible)
         #expect(optionsSize().width > 0, "选中文字后二级菜单应展开显示字号、颜色与描边标注选项")
 
+        model.tool = .crop
+        #expect(model.isSubToolbarVisible)
+        #expect(optionsSize().width > 0, "选中裁剪后二级菜单应展开显示完成与取消选项")
+
         model.tool = nil
         #expect(!model.isSubToolbarVisible)
         #expect(optionsSize().width == 0, "取消选择工具后二级菜单收起")
@@ -91,14 +95,15 @@ struct InlineToolbarTests {
         #expect(model.tool == nil)
     }
 
-    @Test("主工具栏工具列表严格与 AnnotationTool.allCases 排除 crop 对齐")
+    @Test("主工具栏工具列表严格与 AnnotationTool.allCases 全量对齐（包含 crop）")
     func inlineToolsAlignWithAnnotationToolCases() {
-        let expected = AnnotationTool.allCases.filter { $0 != .crop }
+        let expected = AnnotationTool.allCases
         let host = NSHostingView(rootView: InlineMainToolbar(model: InlineToolbarModel()))
         host.layoutSubtreeIfNeeded()
-        #expect(expected.count == 13)
+        #expect(expected.count == 14)
         #expect(expected.first == .select)
-        #expect(expected.last == .eraser)
+        #expect(expected.contains(.crop))
+        #expect(expected.last == .crop)
     }
 
     @Test("恢复静态图片时主工具栏紧凑隐藏滚动与录屏按钮")
@@ -156,5 +161,57 @@ struct InlineToolbarTests {
         let expectedCenterX = 500.0
         #expect(abs(selection.midX - expectedCenterX) <= 1.0, "选区应在水平方向严格居中")
         #expect(selection.width > 0 && selection.height > 0)
+    }
+
+    @Test("裁剪回调：模型能够分发完成与取消裁剪回调")
+    func cropCallbacksTriggerProperly() {
+        let model = InlineToolbarModel()
+        var applied = 0
+        var canceled = 0
+        model.onApplyCrop = { applied += 1 }
+        model.onCancelCrop = { canceled += 1 }
+
+        model.onApplyCrop?()
+        model.onCancelCrop?()
+        #expect(applied == 1)
+        #expect(canceled == 1)
+    }
+
+    @Test("restoreImageForInlineEditing 为工具栏留出底部空间")
+    func restoreImageLeavesBottomSpaceForToolbar() {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let ctx = CGContext(
+            data: nil,
+            width: 2000,
+            height: 2000,
+            bitsPerComponent: 8,
+            bytesPerRow: 2000 * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        let image = ctx.makeImage()!
+
+        let snapshot = DisplaySnapshot(
+            displayID: 1,
+            screenFrameInPoints: CGRect(x: 0, y: 0, width: 1000, height: 800),
+            nominalScaleFactor: 2,
+            image: image
+        )
+        let session = CaptureSession(snapshots: [snapshot], windows: [])
+        let canvas = OverlayCanvasView(
+            snapshot: snapshot,
+            session: session,
+            displayIndex: 1,
+            displayCount: 1
+        )
+
+        canvas.restoreImageForInlineEditing(image)
+
+        guard let selection = canvas.debugSelection else {
+            Issue.record("未生成居中选区")
+            return
+        }
+
+        #expect(selection.minY >= 120.0, "底部应预留至少 120pt 容纳主工具栏与二级菜单")
     }
 }

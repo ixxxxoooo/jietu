@@ -136,6 +136,8 @@ final class OverlayCanvasView: NSView {
         /// 选区也进快照：标注态里能拖边缘改区域，撤销时必须连选区一起回滚，
         /// 否则标注会按旧原点画在新选区上、整体错位。
         let selection: CGRect?
+        let restoredBaseImage: CGImage?
+        let restoredImageFrame: CGRect?
     }
 
     private var undoStack: [Snapshot] = []
@@ -175,6 +177,9 @@ final class OverlayCanvasView: NSView {
     private let annotationLayer = CALayer()
     /// 从浮窗（钉图或快速访问）恢复时的原图。
     var restoredBaseImage: CGImage?
+    private var restoredImageFrame: CGRect?
+    private var cropInitialState: Snapshot?
+    private let restoredContainerLayer = CALayer()
     private let restoredImageLayer = CALayer()
 
     // MARK: - Layers
@@ -252,27 +257,29 @@ final class OverlayCanvasView: NSView {
         inlineMode = true
         restoredBaseImage = image
 
-        // 计算居中选区：等比缩放不超过屏幕 85% 宽 / 75% 高（下方留出工具栏空间）
+        // 计算居中选区：等比缩放不超过屏幕 72% 宽 / 65% 高（四周舒适留白，下方留出充分的工具栏空间）
         let backingScale = window?.backingScaleFactor ?? snapshot.nominalScaleFactor
         let scaleFactor = backingScale > 0 ? backingScale : 2.0
         let naturalWidth = CGFloat(image.width) / scaleFactor
         let naturalHeight = CGFloat(image.height) / scaleFactor
 
-        let maxW = canvasBounds.width * 0.85
-        let maxH = canvasBounds.height * 0.75
+        let maxW = canvasBounds.width * 0.72
+        let maxH = canvasBounds.height * 0.65
         let scale = min(1.0, min(maxW / naturalWidth, maxH / naturalHeight))
         let displayWidth = max(Theme.minimumSelectionSize, (naturalWidth * scale).rounded())
         let displayHeight = max(Theme.minimumSelectionSize, (naturalHeight * scale).rounded())
 
         let originX = ((canvasBounds.width - displayWidth) / 2).rounded()
-        var originY = (((canvasBounds.height - displayHeight) / 2) + 20).rounded()
+        var originY = (((canvasBounds.height - displayHeight) / 2) + 35).rounded()
+        if originY < 120 {
+            originY = 120
+        }
         if originY + displayHeight > canvasBounds.maxY - 40 {
             originY = canvasBounds.maxY - displayHeight - 40
         }
-        if originY < 80 {
-            originY = 80
-        }
-        self.selection = CGRect(x: originX, y: originY, width: displayWidth, height: displayHeight)
+        let sel = CGRect(x: originX, y: originY, width: displayWidth, height: displayHeight)
+        self.selection = sel
+        self.restoredImageFrame = sel
 
         enterAnnotating()
         updateAllLayers()
@@ -400,11 +407,20 @@ final class OverlayCanvasView: NSView {
         imageLayer.frame = bounds
         root.addSublayer(imageLayer)
 
+        restoredContainerLayer.masksToBounds = true
+        restoredContainerLayer.isHidden = true
+        restoredContainerLayer.actions = [
+            "frame": NSNull(),
+            "bounds": NSNull(),
+            "position": NSNull(),
+            "hidden": NSNull(),
+        ]
+        root.addSublayer(restoredContainerLayer)
+
         restoredImageLayer.contentsGravity = .resize
         restoredImageLayer.contentsScale = scale
         restoredImageLayer.magnificationFilter = .trilinear
         restoredImageLayer.minificationFilter = .trilinear
-        restoredImageLayer.isHidden = true
         restoredImageLayer.actions = [
             "contents": NSNull(),
             "frame": NSNull(),
@@ -413,7 +429,7 @@ final class OverlayCanvasView: NSView {
             "hidden": NSNull(),
             "opacity": NSNull(),
         ]
-        root.addSublayer(restoredImageLayer)
+        restoredContainerLayer.addSublayer(restoredImageLayer)
 
         // 原地标注层：叠在冻结图之上、压暗层之下（选区被挖空，所以标注可见）。
         // 它是**原图分辨率**的（见 `updateAnnotationLayer`），正常情况下 1:1 落在屏幕上；
@@ -754,13 +770,23 @@ final class OverlayCanvasView: NSView {
 
     private func updateRestoredImageLayer() {
         guard let restoredBaseImage, let selection else {
+            restoredContainerLayer.isHidden = true
             restoredImageLayer.contents = nil
-            restoredImageLayer.isHidden = true
             return
         }
-        restoredImageLayer.frame = selection
+        let baseFrame = restoredImageFrame ?? selection
+        restoredContainerLayer.frame = selection
+        restoredContainerLayer.isHidden = false
+
+        let relativeX = baseFrame.minX - selection.minX
+        let relativeY = baseFrame.minY - selection.minY
+        restoredImageLayer.frame = CGRect(
+            x: relativeX,
+            y: relativeY,
+            width: baseFrame.width,
+            height: baseFrame.height
+        )
         restoredImageLayer.contents = restoredBaseImage
-        restoredImageLayer.isHidden = false
     }
 
     private func updateDimPath() {
@@ -827,14 +853,6 @@ final class OverlayCanvasView: NSView {
             return
         }
 
-        if restoredBaseImage != nil {
-            selectionBorderOuterLayer.isHidden = false
-            selectionBorderInnerLayer.isHidden = true
-            selectionBorderOuterLayer.path = CGPath(rect: selection, transform: nil)
-            handlesLayer.path = nil
-            sizeLabelLayer.isHidden = true
-            return
-        }
 
         selectionBorderOuterLayer.isHidden = false
         selectionBorderInnerLayer.isHidden = true
@@ -865,10 +883,20 @@ final class OverlayCanvasView: NSView {
 
     private func updateSizeLabel(_ selection: CGRect) {
         guard !isScrollCaptureChrome else { return }
-        let pixelSize = CGSize(
-            width: (selection.width * snapshot.effectiveScale).rounded(),
-            height: (selection.height * snapshot.effectiveScale).rounded()
-        )
+        let pixelSize: CGSize
+        if let restored = restoredBaseImage, let baseFrame = restoredImageFrame, baseFrame.width > 0, baseFrame.height > 0 {
+            let scaleX = CGFloat(restored.width) / baseFrame.width
+            let scaleY = CGFloat(restored.height) / baseFrame.height
+            pixelSize = CGSize(
+                width: (selection.width * scaleX).rounded(),
+                height: (selection.height * scaleY).rounded()
+            )
+        } else {
+            pixelSize = CGSize(
+                width: (selection.width * snapshot.effectiveScale).rounded(),
+                height: (selection.height * snapshot.effectiveScale).rounded()
+            )
+        }
         let text = "\(Int(pixelSize.width)) × \(Int(pixelSize.height))"
         sizeLabelLayer.set(text: text)
         let size = sizeLabelLayer.calculateSize()
@@ -1302,18 +1330,22 @@ final class OverlayCanvasView: NSView {
             requestFocusIfNeeded()
             cursorPoint = point
             // 选区边缘优先接管：绿框还在，抓着边缘就是继续调区域，框内照旧用来标注。
-            // 恢复模式下选区固定在居中底图，不响应边缘调整。
-            if restoredBaseImage == nil,
-                let selection,
+            if let selection,
                 let handle = SelectionGeometry.handle(
                     at: point,
                     in: selection,
                     tolerance: Theme.selectionHandleHitTolerance
                 )
             {
-                // 整段拖拽算一步撤销。
-                pushUndo()
+                // 整段拖拽算一步撤销（裁剪工具内由完成裁剪统一入栈）。
+                if toolbarModel?.tool != .crop {
+                    pushUndo()
+                }
                 interaction = .resizing(handle: handle, original: selection)
+                return
+            }
+            if toolbarModel?.tool == .crop, event.clickCount >= 2 {
+                applyCrop()
                 return
             }
             inlineMouseDown(point, clickCount: event.clickCount)
@@ -1375,11 +1407,12 @@ final class OverlayCanvasView: NSView {
             // 正在拖选区边缘 → 继续改区域；否则交给原地标注。
             if case .resizing(let handle, let original) = interaction {
                 cursorPoint = point
+                let clampBounds = (restoredBaseImage != nil ? restoredImageFrame : nil) ?? canvasBounds
                 let updated = SelectionGeometry.resized(
                     original,
                     handle: handle,
                     to: point,
-                    clampTo: canvasBounds,
+                    clampTo: clampBounds,
                     lockAspect: event.modifierFlags.contains(.shift)
                 )
                 // 用「上一次的选区」算增量：每次拖拽事件都只平移一次。
@@ -1459,6 +1492,9 @@ final class OverlayCanvasView: NSView {
             // 拖选区边缘或整体移动收手：回到「已定」状态，不把它当成一次标注。
             if case .resizing = interaction {
                 interaction = .settled
+                if restoredBaseImage != nil && toolbarModel?.tool != .crop {
+                    applyDirectResizeCrop()
+                }
                 return
             }
             if case .moving = interaction {
@@ -1611,9 +1647,17 @@ final class OverlayCanvasView: NSView {
                 }
             }
             switch event.keyCode {
-            case 53: // Esc：直接退出整个截图
+            case 53: // Esc
+                if toolbarModel?.tool == .crop {
+                    cancelCrop()
+                    return
+                }
                 onCancel?()
             case 36, 76: // Return
+                if toolbarModel?.tool == .crop {
+                    applyCrop()
+                    return
+                }
                 confirmInline()
             case 51, 117: // Delete
                 if let selectedID {
@@ -1693,8 +1737,9 @@ final class OverlayCanvasView: NSView {
         liveTextHost = nil
         cropImage = nil
         restoredBaseImage = nil
+        restoredImageFrame = nil
+        restoredContainerLayer.isHidden = true
         restoredImageLayer.contents = nil
-        restoredImageLayer.isHidden = true
         textField?.removeFromSuperview()
         textField = nil
         annotations.removeAll()
@@ -1720,6 +1765,18 @@ final class OverlayCanvasView: NSView {
     /// 让它们继续钉在画面的同一处（否则会跟着框一起跑）。
     private func applyRegionResize(from previous: CGRect, to updated: CGRect) {
         guard updated != previous else { return }
+
+        // 恢复图片模式下，底图是固定静态像素图，拖动只调整裁剪选区，标注保持相对底图不变
+        if restoredBaseImage != nil {
+            selection = updated
+            updateRestoredImageLayer()
+            updateDimPath()
+            updateSelectionLayers()
+            updateAnnotationLayer()
+            updateInlineSelectionLayers()
+            layoutToolbars()
+            return
+        }
 
         // 选区原点在屏幕坐标里的位移 → 图像坐标里的反向位移：
         // 左 / 上边缘往外扩，同一画面内容在图像里的坐标就变大。
@@ -1750,6 +1807,80 @@ final class OverlayCanvasView: NSView {
         updateSelectionLayers()
         updateAnnotationLayer()
         updateInlineSelectionLayers()
+        layoutToolbars()
+    }
+
+    // MARK: - Crop actions
+
+    private func applyCrop() {
+        if let initial = cropInitialState {
+            undoStack.append(initial)
+            redoStack.removeAll()
+            cropInitialState = nil
+        }
+        performCropExecution()
+        toolbarModel?.tool = nil
+        updateRestoredImageLayer()
+        updateSelectionLayers()
+        updateAnnotationLayer()
+        updateDimPath()
+        layoutToolbars()
+    }
+
+    private func applyDirectResizeCrop() {
+        performCropExecution()
+        updateRestoredImageLayer()
+        updateSelectionLayers()
+        updateAnnotationLayer()
+        updateDimPath()
+        layoutToolbars()
+    }
+
+    private func performCropExecution() {
+        guard let selection else { return }
+        if let restored = restoredBaseImage, let baseFrame = restoredImageFrame {
+            let cropRect = selection.intersection(baseFrame)
+            guard cropRect.width >= 10, cropRect.height >= 10 else {
+                self.selection = baseFrame
+                return
+            }
+            if cropRect != baseFrame {
+                let scaleX = CGFloat(restored.width) / baseFrame.width
+                let scaleY = CGFloat(restored.height) / baseFrame.height
+                let pixelX = (cropRect.minX - baseFrame.minX) * scaleX
+                let pixelY = (baseFrame.maxY - cropRect.maxY) * scaleY
+                let pixelW = cropRect.width * scaleX
+                let pixelH = cropRect.height * scaleY
+                let pixelRect = CGRect(x: pixelX, y: pixelY, width: pixelW, height: pixelH).integral
+                if let result = CropOperation.crop(restored, to: pixelRect) {
+                    let delta = CropOperation.offset(for: result.rect)
+                    annotations = CropOperation.shifted(annotations, by: delta)
+                    eraserStrokes = CropOperation.shifted(eraserStrokes, by: delta)
+                    restoredBaseImage = result.image
+                    cropImage = result.image
+                    self.selection = cropRect
+                    self.restoredImageFrame = cropRect
+                }
+            }
+            return
+        }
+
+        // 普通截图的原地裁剪
+        preparePreviewBase()
+    }
+
+    private func cancelCrop() {
+        if let initial = cropInitialState {
+            apply(initial)
+        } else if let restoredBaseImage, let baseFrame = restoredImageFrame {
+            selection = baseFrame
+        }
+        toolbarModel?.tool = nil
+        cropInitialState = nil
+        updateRestoredImageLayer()
+        updateSelectionLayers()
+        updateAnnotationLayer()
+        updateDimPath()
         layoutToolbars()
     }
 
@@ -1884,7 +2015,13 @@ final class OverlayCanvasView: NSView {
 
     private func pushUndo() {
         undoStack.append(
-            Snapshot(annotations: annotations, strokes: eraserStrokes, selection: selection)
+            Snapshot(
+                annotations: annotations,
+                strokes: eraserStrokes,
+                selection: selection,
+                restoredBaseImage: restoredBaseImage,
+                restoredImageFrame: restoredImageFrame
+            )
         )
         redoStack.removeAll()
     }
@@ -1892,7 +2029,13 @@ final class OverlayCanvasView: NSView {
     private func inlineUndo() {
         guard let previous = undoStack.popLast() else { return }
         redoStack.append(
-            Snapshot(annotations: annotations, strokes: eraserStrokes, selection: selection)
+            Snapshot(
+                annotations: annotations,
+                strokes: eraserStrokes,
+                selection: selection,
+                restoredBaseImage: restoredBaseImage,
+                restoredImageFrame: restoredImageFrame
+            )
         )
         apply(previous)
     }
@@ -1900,7 +2043,13 @@ final class OverlayCanvasView: NSView {
     private func inlineRedo() {
         guard let next = redoStack.popLast() else { return }
         undoStack.append(
-            Snapshot(annotations: annotations, strokes: eraserStrokes, selection: selection)
+            Snapshot(
+                annotations: annotations,
+                strokes: eraserStrokes,
+                selection: selection,
+                restoredBaseImage: restoredBaseImage,
+                restoredImageFrame: restoredImageFrame
+            )
         )
         apply(next)
     }
@@ -1909,12 +2058,17 @@ final class OverlayCanvasView: NSView {
         annotations = snapshot.annotations
         eraserStrokes = snapshot.strokes
 
-        let selectionChanged = snapshot.selection != selection
+        let imageChanged = snapshot.restoredBaseImage !== restoredBaseImage
+        restoredBaseImage = snapshot.restoredBaseImage
+        restoredImageFrame = snapshot.restoredImageFrame
+
+        let selectionChanged = snapshot.selection != selection || imageChanged
         selection = snapshot.selection
         if selectionChanged {
             preparePreviewBase()
             updateDimPath()
             updateSelectionLayers()
+            updateRestoredImageLayer()
             layoutToolbars()
         }
 
@@ -2055,6 +2209,8 @@ final class OverlayCanvasView: NSView {
         model.onCancel = { [weak self] in self?.onCancel?() }
         model.onUndo = { [weak self] in self?.inlineUndo() }
         model.onRedo = { [weak self] in self?.inlineRedo() }
+        model.onApplyCrop = { [weak self] in self?.applyCrop() }
+        model.onCancelCrop = { [weak self] in self?.cancelCrop() }
         model.onSave = { [weak self] in
             guard let self, let image = self.currentAnnotatedImage() else { return }
             self.onSaveImage?(image)
@@ -2199,6 +2355,17 @@ final class OverlayCanvasView: NSView {
                 if let field = self.textField {
                     self.applyInlineTextStyle(field, model: model)
                     self.fitInlineTextField()
+                }
+                if model.tool == .crop && self.cropInitialState == nil {
+                    self.cropInitialState = Snapshot(
+                        annotations: self.annotations,
+                        strokes: self.eraserStrokes,
+                        selection: self.selection,
+                        restoredBaseImage: self.restoredBaseImage,
+                        restoredImageFrame: self.restoredImageFrame
+                    )
+                } else if model.tool != .crop {
+                    self.cropInitialState = nil
                 }
                 self.optionsToolbarHost?.isHidden = !model.isSubToolbarVisible
                 self.updateLiveTextOverlay()

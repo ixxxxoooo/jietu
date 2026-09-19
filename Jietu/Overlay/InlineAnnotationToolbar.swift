@@ -42,17 +42,18 @@ final class InlineToolbarModel {
     var onRecord: (() -> Void)?
     var onConfirm: (() -> Void)?
     var onCancel: (() -> Void)?
+    var onApplyCrop: (() -> Void)?
+    var onCancelCrop: (() -> Void)?
 
     /// 是否应展示二级子工具栏。
     var isSubToolbarVisible: Bool {
         if showScroll { return true }
         guard let tool else { return false }
         switch tool {
-        case .select, .crop:
+        case .select, .spotlight:
             return false
-        // 聚光灯没有任何参数可调（压暗程度是固定的），不占一条二级栏。
-        case .spotlight:
-            return false
+        case .crop:
+            return true
         case .rectangle, .ellipse, .arrow, .line, .pen, .highlight, .text, .pixelate, .blur, .counter, .eraser:
             return true
         }
@@ -67,7 +68,7 @@ final class InlineToolbarModel {
 struct InlineMainToolbar: View {
     @Bindable var model: InlineToolbarModel
 
-    private static let tools: [AnnotationTool] = AnnotationTool.allCases.filter { $0 != .crop }
+    private static let tools: [AnnotationTool] = AnnotationTool.allCases
 
     /// 悬停提示带上当前快捷键；解绑了就只说动作名。
     private static func shortcutHelp(_ title: String, _ hotkey: Hotkey?) -> String {
@@ -231,7 +232,9 @@ struct InlineOptionsToolbar: View {
                         mosaicOptions
                     case .eraser:
                         eraserOptions
-                    case .select, .crop, .spotlight:
+                    case .crop:
+                        cropOptions
+                    case .select, .spotlight:
                         EmptyView()
                     }
                 }
@@ -355,6 +358,44 @@ struct InlineOptionsToolbar: View {
                 help: "自动滚动：由 Jietu 自动滚轮（需辅助功能权限）"
             ) {
                 model.onScrollCapture?(.automatic)
+            }
+        }
+    }
+
+    private var cropOptions: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            Text("拖拽边框调整区域")
+                .font(Theme.Typography.bar)
+                .foregroundStyle(Theme.Colors.textSecondary)
+
+            vSeparator
+
+            BarButton(chrome: .rounded, help: "完成裁剪 (↵ / 双击)") {
+                model.onApplyCrop?()
+            } label: {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Image(systemName: "checkmark")
+                        .font(Theme.Typography.chip)
+                    Text("完成裁剪")
+                        .font(Theme.Typography.bar)
+                }
+                .foregroundStyle(Theme.Colors.success)
+                .padding(.horizontal, Theme.Spacing.md)
+                .frame(height: Theme.Size.barButtonHeight)
+            }
+
+            BarButton(chrome: .rounded, help: "取消裁剪 (Esc)") {
+                model.onCancelCrop?()
+            } label: {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Image(systemName: "xmark")
+                        .font(Theme.Typography.chip)
+                    Text("取消")
+                        .font(Theme.Typography.bar)
+                }
+                .foregroundStyle(Theme.Colors.destructive)
+                .padding(.horizontal, Theme.Spacing.md)
+                .frame(height: Theme.Size.barButtonHeight)
             }
         }
     }

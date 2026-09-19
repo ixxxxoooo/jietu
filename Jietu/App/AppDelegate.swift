@@ -1227,7 +1227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 全屏截图：直接抓鼠标所在显示器，不弹遮罩。
+    /// 全屏截图：抓鼠标所在显示器，依设置决定进入原地编辑或交付浮窗。
     private func handleFullScreenCapture() {
         guard !overlays.isPresenting else { return }
         guard requireScreenCapturePermission() else { return }
@@ -1238,7 +1238,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let snapshot = snapshotUnderMouse(snapshots) ?? snapshots.first else {
                     throw CaptureError.noDisplays
                 }
-                deliver(snapshot.image, onDisplay: snapshot.displayID)
+                switch settings.editorMode {
+                case .inline:
+                    if settings.playShutterSound {
+                        CaptureOutput.playShutterSound()
+                    }
+                    copyToClipboard(snapshot.image)
+                    openInlineEditor(snapshot.image)
+                case .window:
+                    deliver(snapshot.image, onDisplay: snapshot.displayID)
+                }
             } catch {
                 presentCaptureFailure(error)
             }

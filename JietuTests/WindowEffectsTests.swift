@@ -106,14 +106,14 @@ struct WindowEffectsTests {
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let store = SettingsStore(defaults: defaults)
-        #expect(store.windowShadowEnabled == true)
+        #expect(store.windowShadowEnabled == false)
         #expect(store.windowShadowSize == 32.0)
 
-        store.windowShadowEnabled = false
+        store.windowShadowEnabled = true
         store.windowShadowSize = 48.0
 
         let reloaded = SettingsStore(defaults: defaults)
-        #expect(reloaded.windowShadowEnabled == false)
+        #expect(reloaded.windowShadowEnabled == true)
         #expect(reloaded.windowShadowSize == 48.0)
     }
 }
