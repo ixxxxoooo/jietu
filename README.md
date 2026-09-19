@@ -151,15 +151,6 @@ Scripts/          Build & development scripts
 - **Single file ≤ ~500 lines**: Large types split into `+Extension` files
 - **One source file = one test file**: Shared scaffolding in `JietuTests/TestSupport/`
 
-## 🤝 Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
-
-## 🙏 Acknowledgments
-
-- Built with [ScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit), [Vision](https://developer.apple.com/documentation/vision), and [Translation](https://developer.apple.com/documentation/translation)
-- Inspired by [CleanShot X](https://cleanshot.com/) and [CapCut](https://www.capcut.com/)

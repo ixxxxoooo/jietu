@@ -138,10 +138,6 @@ JietuTests/       单元测试
 Scripts/          构建与开发脚本
 ```
 
-## 🤝 贡献
-
-请参阅 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
 ## 📄 许可证
 
 本项目基于 [MIT License](LICENSE) 开源。
