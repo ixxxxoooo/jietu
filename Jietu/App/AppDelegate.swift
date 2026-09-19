@@ -41,8 +41,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var scrollingPreview: ScrollingPreviewPanel?
     /// 本次滚动长图的选区（含三套换算好的坐标）：用户中途改选区时跟着更新。
     private var scrollingTarget: CaptureRegionTarget?
-    /// 会话内的截图历史（新截的即时可见，不必先保存）。
-    private var annotationEditors: [AnnotationEditorWindowController] = []
     /// 动作 → Carbon 热键引用 id。
     private var hotkeyIDs: [HotkeyAction: UInt32] = [:]
     /// 动作 → 当前真正生效的组合键，注册失败时用它回滚。
@@ -2021,36 +2019,9 @@ struct CaptureRegionTarget {
                 )
             } catch {
                 logger.error("failed to open inline editor: \(error.localizedDescription)")
-                openAnnotationEditor(image, anchor: anchor)
+                presentCaptureFailure(error)
             }
         }
-    }
-
-    /// 打开标注编辑器。
-    ///
-    /// - Parameter anchor: 选区在屏幕上的矩形（原地编辑时把窗口放到选区附近）。
-    private func openAnnotationEditor(_ image: CGImage, anchor: CGRect? = nil) {
-        let controller = AnnotationEditorWindowController(
-            image: image,
-            anchor: anchor,
-            annotationDefaults: settings.annotationDefaults,
-            editorShortcuts: settings.editorShortcuts
-        )
-        controller.onCopy = { rendered in
-            CaptureOutput.copyToPasteboard(rendered)
-        }
-        controller.onSave = { [weak self] rendered in
-            self?.saveAs(rendered)
-        }
-        controller.onAnnotationDefaultsChange = { [weak self] updated in
-            self?.settings.annotationDefaults = updated
-        }
-        controller.onClose = { [weak self, weak controller] in
-            guard let self else { return }
-            self.annotationEditors.removeAll { $0 === controller }
-        }
-        annotationEditors.append(controller)
-        controller.present()
     }
 
     private func save(_ image: CGImage) {
@@ -2137,17 +2108,17 @@ struct CaptureRegionTarget {
         }
     }
 
-    /// 打开历史某一项进入标注。
+    /// 打开历史某一项进入标注（居中原地编辑）。
     private func openHistoryItem(_ item: HistoryItem) {
         if let cgImage = item.cgImage {
-            openAnnotationEditor(cgImage)
+            openInlineEditor(cgImage)
             return
         }
         guard let url = item.url,
             let image = NSImage(contentsOf: url),
             let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
         else { return }
-        openAnnotationEditor(cgImage)
+        openInlineEditor(cgImage)
     }
 
     /// 清空所有历史与最近记录。

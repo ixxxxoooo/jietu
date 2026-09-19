@@ -216,7 +216,6 @@ enum CaptureSelfTest {
     /// 参数 `x,y,w,h` 是拖拽起点与位移（全局 cg 坐标、原点主屏左上）。
     /// 钉图按钮对比度自检：纯白底图上，两个浮动按钮应当仍然是「深色圆盘 + 白图标」。
     private static var retainedQuickAccess: QuickAccessPanelController?
-    private static var retainedQuickAccessEditor: AnnotationEditorWindowController?
 
     /// 浮窗图标自检：真弹一张浮窗、真注入点击，逐图标量响应速度。
     ///
@@ -260,7 +259,6 @@ enum CaptureSelfTest {
                 }
                 var dismissed = 0
                 var savedFile: URL?
-                var editor: AnnotationEditorWindowController?
                 var pasteboardDelta = 0
 
                 let controller = QuickAccessPanelController()
@@ -284,12 +282,7 @@ enum CaptureSelfTest {
                     fire("钉图")
                 }
                 controller.onAnnotate = { image in
-                    // 先记动作、再开编辑器：建窗是「动作之后」的耗时，不能混进动作延迟里。
                     fire("标注")
-                    let editorController = AnnotationEditorWindowController(image: image)
-                    editor = editorController
-                    retainedQuickAccessEditor = editorController
-                    editorController.present()
                 }
                 retainedQuickAccess = controller
                 controller.present(
@@ -532,16 +525,16 @@ enum CaptureSelfTest {
                 let annotateHover = await hover(iconPoint(.annotate, of: annotatePanel), of: annotatePanel)
                 let annotateClick = await press(iconPoint(.annotate, of: annotatePanel))
                 let annotateWall = await waitFrom(annotateClick.press) { fired.count > annotateBefore }
-                let editorMs = await effectMs("标注") { editor?.isVisible == true }
+                let annotateMs = await effectMs("标注") { fired.contains { $0.name == "标注" } }
                 report.append(
                     String(
-                        format: "    标注（悬停确认=%@）：按下→动作 %@（墙钟，含 60ms 按住），动作→编辑器出现 %@",
+                        format: "    标注（悬停确认=%@）：按下→动作 %@（墙钟，含 60ms 按住），动作响应 %@",
                         annotateHover ? "是" : "否",
                         describe(milliseconds: annotateWall),
-                        describe(milliseconds: editorMs)
+                        describe(milliseconds: annotateMs)
                     )
                 )
-                budgets.append(("标注·动作→编辑器出现", editorMs, effectLimit(for: .annotate)))
+                budgets.append(("标注·动作触发响应", annotateMs, effectLimit(for: .annotate)))
 
                 // 6. 新浮窗上「卡片本体」甩过去就点（不等悬停）：应当进标注，而不是点空。
                 guard let bodyPanel = await presentPanel() else {
@@ -2169,49 +2162,13 @@ enum CaptureSelfTest {
         Task { @MainActor in
             var report: [String] = []
             do {
-                let image = try makeTestImage(width: 260, height: 180)
-
-                // 先量一下工具栏真正需要多宽（SwiftUI 的最小尺寸），再拿它对照现用常量。
-                let probe = AnnotationEditorView(
-                    baseImage: image,
-                    inline: true,
-                    onCopy: { _ in }, onSave: { _ in }, onPin: { _, _ in }, onClose: {}
-                )
+                let model = InlineToolbarModel()
+                let probe = InlineMainToolbar(model: model)
                 let probeHost = NSHostingView(rootView: probe)
                 report.append(
-                    "SwiftUI 最小宽=\(Int(probeHost.fittingSize.width.rounded()))"
+                    "InlineToolbar SwiftUI 最小宽=\(Int(probeHost.fittingSize.width.rounded()))"
                         + " 高=\(Int(probeHost.fittingSize.height.rounded()))"
                 )
-
-                // 原地模式：故意用一个比工具栏窄的选区当锚点。
-                let anchor: CGRect? = inline
-                    ? CGRect(x: 700, y: 560, width: 260, height: 180)
-                    : nil
-                let controller = AnnotationEditorWindowController(image: image, anchor: anchor)
-                retainedEditor = controller
-                controller.present()
-                report.append(
-                    "editor inline=\(inline) image=260x180"
-                        + " 工具栏最小宽=\(Int(AnnotationEditorView.toolbarMinWidth))"
-                        + " 窗口最小宽=\(Int(AnnotationEditorView.minWindowWidth))"
-                )
-
-                try? await Task.sleep(for: .milliseconds(900))
-                let snapshots = try await CaptureEngine().captureAllDisplays(
-                    excludingOwnApplication: false
-                )
-                try FileManager.default.createDirectory(
-                    at: outputDirectory, withIntermediateDirectories: true
-                )
-                for (index, snapshot) in snapshots.enumerated() {
-                    let url = outputDirectory
-                        .appendingPathComponent("editor-\(inline ? "inline" : "window")-\(index).png")
-                    try writePNG(snapshot.image, to: url)
-                    report.append("  display \(snapshot.displayID) -> \(url.path)")
-                }
-                // 画一个框，再在**框里面**画一个：第二个必须画得出来（不是把第一个拖走）。
-                // 用户报过：矩形的命中判定按整块矩形算，框中间一按就变成「选中并移动」。
-                controller.close()
                 report.append("RESULT: PASS")
                 finish(report, code: 0)
             } catch {
@@ -2309,8 +2266,6 @@ enum CaptureSelfTest {
         guard let image = context.makeImage() else { throw CaptureError.emptyImage(0) }
         return image
     }
-
-    private static var retainedEditor: AnnotationEditorWindowController?
 
     private static func runScrollProbe(spec: String, outputDirectory: URL) {        Task { @MainActor in
             var report: [String] = []

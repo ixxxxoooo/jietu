@@ -55,3 +55,10 @@ struct ColorSwatchesView: View {
         .buttonStyle(.plain)
     }
 }
+
+extension RGBAColor {
+    /// UI 层的 SwiftUI 颜色桥接。
+    var swiftUIColor: Color {
+        Color(red: red, green: green, blue: blue, opacity: alpha)
+    }
+}

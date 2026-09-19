@@ -358,8 +358,8 @@ struct AnnotationSettingsPane: View {
                         Text(mode.title).tag(mode)
                     }
                 } label: {
-                    Text("编辑方式")
-                    Text("原地编辑：截完直接在当前画面上标注。\n独立窗口：截完先显示浮窗，点开后在单独窗口编辑。")
+                    Text("截选后流程")
+                    Text("立即标注：截完直接在当前画面上标注。\n浮窗预览：截完先显示浮窗，点开后居中原地编辑。")
                 }
             } header: {
                 SettingsSectionHeader(title: "标注")
