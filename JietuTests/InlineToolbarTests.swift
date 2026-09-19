@@ -418,12 +418,41 @@ struct InlineToolbarTests {
         canvas.mouseDragged(with: Self.mouse(.leftMouseDragged, at: NSPoint(x: 300, y: 300)))
         canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 300, y: 300)))
 
+        let base = CGRect(x: 100, y: 135, width: 800, height: 600)
         let frames = canvas.debugRestoredLayerFrames
         #expect(
-            frames.container == CGRect(x: 100, y: 135, width: 800, height: 600),
+            frames.container == base,
             "容器要停在底图 frame 上，不能收到裁剪框上（否则框外露出屏幕，看着像重新选区）"
         )
         #expect(frames.image == CGRect(x: 0, y: 0, width: 800, height: 600), "底图整张画着")
+
+        // 压暗层挖的是整张图（不是裁剪框）：图本身一直亮着，只有图外压暗。
+        #expect(canvas.debugDimHole == base, "裁剪时压暗层不该遮住原来的图")
+
+        // 图的边界还在：框缩到中间以后，靠这条外框才知道图到哪儿为止。
+        let border = canvas.debugBaseFrameBorder
+        #expect(!border.isHidden, "裁剪时底图外框要留着")
+        #expect(border.rect == base)
+
+        // 选择框 / 控制点要压在遮罩之上，否则贴边那一条会被遮罩切掉一半。
+        #expect(canvas.debugChromeAboveDim, "裁剪框与控制点必须画在压暗层之上")
+    }
+
+    @Test("裁剪：确认之后压暗层才重新按裁剪框（图这时才真的变了）")
+    func dimFollowsSelectionAfterCropConfirmed() {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        #expect(canvas.debugSelectTool(.crop))
+
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 500, y: 435)))
+        canvas.mouseDragged(with: Self.mouse(.leftMouseDragged, at: NSPoint(x: 300, y: 300)))
+        canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 300, y: 300)))
+        #expect(canvas.debugDimHole == CGRect(x: 100, y: 135, width: 800, height: 600))
+
+        Self.confirmCrop(canvas, atPoint: CGPoint(x: 400, y: 400))
+        // 确认后底图就是裁出来的这张，外框与图重合，无需再单独画一条。
+        #expect(canvas.debugRestoredBase.frame == CGRect(x: 300, y: 300, width: 200, height: 135))
+        #expect(canvas.debugBaseFrameBorder.isHidden, "图与外框重合时不重复画")
+        #expect(canvas.debugSelection == CGRect(x: 300, y: 300, width: 200, height: 135))
     }
 
     @Test("裁剪：连着裁两次是在上一次的结果上继续裁（像素对得上）")

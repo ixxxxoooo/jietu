@@ -173,6 +173,8 @@ final class OverlayCanvasView: NSView {
     private var inlineEditingTextID: UUID?
     private let inlineSelectionBorderLayer = CAShapeLayer()
     private let inlineHandlesLayer = CAShapeLayer()
+    /// 裁剪时底图（正在裁的那张图）的外框。
+    private let baseFrameBorderLayer = CAShapeLayer()
     private var annotations: [Annotation] = []
     private var annotationDraft: Annotation?
     /// 选区裁剪出来的原图。标注层按**它的原始分辨率**渲染，所以线 / 箭头不会因为缩放发虚。
@@ -190,8 +192,8 @@ final class OverlayCanvasView: NSView {
     var restoredBaseImage: CGImage?
     private var restoredImageFrame: CGRect?
     private var cropInitialState: Snapshot?
-    /// 正在拖的那个新裁剪框锁定在哪块范围里（见 `cropMouseDown`）。
-    private var cropDragBounds: CGRect?
+    /// 这一轮裁剪「正在裁的那张图」的屏幕矩形（见 `cropFrame`）。
+    private var cropSessionFrame: CGRect?
     private let restoredContainerLayer = CALayer()
     private let restoredImageLayer = CALayer()
 
@@ -358,6 +360,29 @@ final class OverlayCanvasView: NSView {
         (restoredContainerLayer.frame, restoredImageLayer.frame)
     }
 
+    /// 自检用：压暗层当前挖的洞（裁剪时应当是整张图，不是裁剪框）。
+    var debugDimHole: CGRect? { dimHoleRect }
+
+    /// 自检用：底图外框是不是画着、画在哪。
+    var debugBaseFrameBorder: (isHidden: Bool, rect: CGRect?) {
+        (
+            baseFrameBorderLayer.isHidden,
+            baseFrameBorderLayer.path.map { $0.boundingBoxOfPath }
+        )
+    }
+
+    /// 自检用：编辑用的边框 / 控制点是否压在压暗层**之上**。
+    ///
+    /// 压在下面的话，贴边那一条会被遮罩切掉一半，看着像「被遮罩遮住的选框」。
+    var debugChromeAboveDim: Bool {
+        guard let sublayers = layer?.sublayers,
+            let dimIndex = sublayers.firstIndex(where: { $0 === dimLayer }),
+            let borderIndex = sublayers.firstIndex(where: { $0 === inlineSelectionBorderLayer }),
+            let handlesIndex = sublayers.firstIndex(where: { $0 === inlineHandlesLayer })
+        else { return false }
+        return borderIndex > dimIndex && handlesIndex > dimIndex
+    }
+
     /// 自检用：标注层的 frame。裁剪 / 缩放时它必须贴**底图**，不能跟着裁剪框缩。
     var debugAnnotationLayerFrame: CGRect { annotationLayer.frame }
 
@@ -506,6 +531,21 @@ final class OverlayCanvasView: NSView {
         ]
         root.addSublayer(annotationLayer)
 
+        // 压暗层：挖洞之外的部分压暗。放在标注层之上（框外的标注也要跟着压暗）、
+        // 编辑用的边框与控制点之下（它们压着遮罩才看得清，否则贴边那一条会被切掉一半）。
+        dimLayer.fillColor = NSColor.black
+            .withAlphaComponent(Theme.overlayDimAlpha).cgColor
+        dimLayer.fillRule = .evenOdd
+        dimLayer.frame = bounds
+        root.addSublayer(dimLayer)
+
+        // 裁剪时「正在裁的那张图」的外框：裁剪框缩到图中间以后，靠它才能看清图到哪儿为止。
+        baseFrameBorderLayer.fillColor = nil
+        baseFrameBorderLayer.strokeColor = NSColor.white.withAlphaComponent(0.65).cgColor
+        baseFrameBorderLayer.lineWidth = 1.5
+        baseFrameBorderLayer.isHidden = true
+        root.addSublayer(baseFrameBorderLayer)
+
         // 原地选择态：虚线包围盒 + 控制点。
         inlineSelectionBorderLayer.fillColor = nil
         inlineSelectionBorderLayer.strokeColor = NSColor(Theme.selectionGreen).cgColor
@@ -519,12 +559,6 @@ final class OverlayCanvasView: NSView {
         inlineHandlesLayer.lineWidth = 1.2
         inlineHandlesLayer.isHidden = true
         root.addSublayer(inlineHandlesLayer)
-
-        dimLayer.fillColor = NSColor.black
-            .withAlphaComponent(Theme.overlayDimAlpha).cgColor
-        dimLayer.fillRule = .evenOdd
-        dimLayer.frame = bounds
-        root.addSublayer(dimLayer)
 
         // 吸附预览（自动识别窗口边界）：**只描边、不填色**。
         // 之前压了一层 6% 的绿：窗口一大（满屏窗口）整块屏幕都跟着泛绿。
@@ -844,19 +878,29 @@ final class OverlayCanvasView: NSView {
     private func updateDimPath() {
         let path = CGMutablePath()
         path.addRect(bounds)
-        // even-odd 挖洞：有选区就挖选区，没选区但吸附到窗口就按圆角矩形挖出该窗口，
-        // 让用户先看到清晰明亮的将截窗口内容。
-        if let selection {
-            path.addRect(selection)
-        } else if let windowRect = hoveredWindowLocalRect {
-            path.addPath(CGPath(roundedRect: windowRect, cornerWidth: 10, cornerHeight: 10, transform: nil))
+        if let hole = dimHoleRect {
+            // even-odd 挖洞：洞口用圆角只在「还没定选区、只是吸附到窗口」那一种情况下，
+            // 让用户先看到清晰明亮的将截窗口内容。
+            path.addPath(
+                dimHoleIsRoundedWindow
+                    ? CGPath(roundedRect: hole, cornerWidth: 10, cornerHeight: 10, transform: nil)
+                    : CGPath(rect: hole, transform: nil)
+            )
         }
         dimLayer.path = path
     }
 
+    /// 压暗层挖的洞。**裁剪时是整张图**（不是裁剪框）：框只标记「要保留哪一块」，图本身一直亮着，
+    /// 免得框一缩小、框外就压暗露出底下的冻结屏幕，分不清图到哪儿为止；其余时候是选区 / 吸附到的窗口。
     private var dimHoleRect: CGRect? {
+        if let cropFrame { return cropFrame }
         if let selection { return selection }
         return hoveredWindowLocalRect
+    }
+
+    /// 洞口是不是那种「还没定选区、只是吸附到了窗口」的圆角预览。
+    private var dimHoleIsRoundedWindow: Bool {
+        cropFrame == nil && selection == nil && hoveredWindowLocalRect != nil
     }
 
     /// 鼠标下窗口在本显示器内的矩形（已裁进画布），没有则 nil。
@@ -897,6 +941,7 @@ final class OverlayCanvasView: NSView {
     }
 
     private func updateSelectionLayers() {
+        updateCropFrameBorder()
         guard let selection else {
             selectionBorderOuterLayer.isHidden = true
             selectionBorderInnerLayer.isHidden = true
@@ -931,6 +976,20 @@ final class OverlayCanvasView: NSView {
         handlesLayer.path = path
 
         updateSizeLabel(selection)
+    }
+
+    /// 裁剪时给底图画一条外框：框缩到图中间以后，这条边框就是「图到哪儿为止」的参照。
+    ///
+    /// 只在裁剪中、且裁剪框确实比图小时才画——框和图的边界重合时再画一条纯属重复。
+    private func updateCropFrameBorder() {
+        guard let cropFrame else {
+            baseFrameBorderLayer.isHidden = true
+            baseFrameBorderLayer.path = nil
+            return
+        }
+        let isRedundant = selection.map { $0 == cropFrame } ?? true
+        baseFrameBorderLayer.isHidden = isRedundant
+        baseFrameBorderLayer.path = isRedundant ? nil : CGPath(rect: cropFrame, transform: nil)
     }
 
     private func updateSizeLabel(_ selection: CGRect) {
@@ -1979,6 +2038,10 @@ final class OverlayCanvasView: NSView {
             applyCrop()
             return true
         }
+        if cropSessionFrame == nil {
+            // 这一轮裁剪的「那张图」先定下来：之后不管框怎么缩，图的边界都留在原位。
+            cropSessionFrame = bounds
+        }
         if let selection,
             let handle = SelectionGeometry.handle(
                 at: point,
@@ -1991,7 +2054,6 @@ final class OverlayCanvasView: NSView {
         }
         // 图外（压暗区 / 工具栏）按下不归裁剪管。
         guard bounds.contains(point) else { return false }
-        cropDragBounds = bounds
         interaction = .pressing(anchor: point)
         return true
     }
@@ -2000,7 +2062,7 @@ final class OverlayCanvasView: NSView {
     ///
     /// - Returns: `true` 表示这一拖归裁剪管。
     private func cropMouseDragged(_ point: CGPoint, lockAspect: Bool) -> Bool {
-        guard toolbarModel?.tool == .crop, let bounds = cropDragBounds else { return false }
+        guard toolbarModel?.tool == .crop, let bounds = cropBaseFrame else { return false }
         if case .pressing(let anchor) = interaction {
             // 没超过拖拽阈值就什么都不做：单击不该毁掉已有的裁剪框。
             guard hypot(point.x - anchor.x, point.y - anchor.y) >= Theme.dragActivationDistance else {
@@ -2028,13 +2090,10 @@ final class OverlayCanvasView: NSView {
         case .pressing:
             // 只是点了一下：保持原裁剪框。
             interaction = .settled
-            cropDragBounds = nil
             return true
         case .selecting:
             interaction = .settled
-            let bounds = cropDragBounds
-            cropDragBounds = nil
-            if let bounds, let selection,
+            if let bounds = cropSessionFrame, let selection,
                 selection.width < Self.minimumCropSide || selection.height < Self.minimumCropSide
             {
                 // 一拖就松的小框：当作单击误触，把范围还回去（顺带把标注的位移还原）。
@@ -2051,13 +2110,22 @@ final class OverlayCanvasView: NSView {
         restoredImageFrame ?? selection
     }
 
+    /// 这一轮裁剪里「正在裁的那张图」占的屏幕矩形（第一次按下时定下，直到确认 / 取消）。
+    ///
+    /// 裁剪框只标记「要保留哪一块」：图的边界始终留在原位、图本身也不再被压暗层遮住，
+    /// 否则框一缩小，框外露出底下的冻结屏幕，就分不清图到哪儿为止了。
+    private var cropFrame: CGRect? {
+        guard toolbarModel?.tool == .crop else { return nil }
+        return cropSessionFrame ?? cropBaseFrame
+    }
+
     private func applyCrop() {
         if let initial = cropInitialState {
             undoStack.append(initial)
             redoStack.removeAll()
             cropInitialState = nil
         }
-        cropDragBounds = nil
+        cropSessionFrame = nil
         performCropExecution()
         toolbarModel?.tool = nil
         updateRestoredImageLayer()
@@ -2117,7 +2185,7 @@ final class OverlayCanvasView: NSView {
         }
         toolbarModel?.tool = nil
         cropInitialState = nil
-        cropDragBounds = nil
+        cropSessionFrame = nil
         updateRestoredImageLayer()
         updateSelectionLayers()
         updateAnnotationLayer()
@@ -2608,8 +2676,11 @@ final class OverlayCanvasView: NSView {
                     )
                 } else if model.tool != .crop {
                     self.cropInitialState = nil
-                    self.cropDragBounds = nil
+                    self.cropSessionFrame = nil
                 }
+                // 进出裁剪都要重画：裁剪时压暗层挖的是整张图、还要给底图画外框（见 `updateCropFrameBorder`）。
+                self.updateDimPath()
+                self.updateSelectionLayers()
                 self.optionsToolbarHost?.isHidden = !model.isSubToolbarVisible
                 self.updateLiveTextOverlay()
                 self.layoutToolbars()
