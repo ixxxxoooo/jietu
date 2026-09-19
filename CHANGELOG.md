@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+- Redesigned the DMG installer window: a 660×420 layout on custom artwork, with fixed positions for `Jietu.app`, `Applications` and `Fix Gatekeeper.app`, centered on screen and without toolbar/status bar
+- Install notes are now drawn on the DMG window artwork instead of shipped as a text file
+- `Scripts/build-dmg.sh` packages through a writable intermediate image, saves the window geometry / background / icon positions into the image's `.DS_Store`, and verifies the result before reporting size and checksum
+
+### Removed
+- `00-请先读我.txt` from the DMG — its install notes moved into the window artwork
+
 ## [0.0.2] — 2026-09-19
 
 ### Fixed
