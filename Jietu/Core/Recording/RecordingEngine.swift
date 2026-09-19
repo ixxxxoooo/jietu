@@ -64,12 +64,11 @@ final class RecordingEngine {
     private var stream: SCStream?
     private var output: RecordingStreamOutput?
     private var writer: RecordingWriter?
-    private var microphone: MicrophoneCapture?
     private var ticker: Timer?
 
     private(set) var isRunning = false
     private(set) var isPaused = false
-    /// 这次录制麦克风**真的**启用了没（没设备 / 引擎起不来就是 false）。
+    /// 这次录制麦克风**真的**启用了没（SCK `captureMicrophone` 是否成功开启）。
     ///
     /// 调用方拿它做用户可见的反馈：开关开着却没启用（多半是没授权）必须说出来，
     /// 否则用户录完才发现没声音。
@@ -119,7 +118,11 @@ final class RecordingEngine {
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.scalesToFit = false
         configuration.showsCursor = options.showsCursor
+        let wantAudio = options.capturesSystemAudio || options.capturesMicrophone
         configuration.capturesAudio = options.capturesSystemAudio
+        // ScreenCaptureKit 原生麦克风混音（macOS 15+）：系统级混音比手动拆帧混合质量高得多，
+        // 不会有杂音、卡顿、速度不一致的问题。
+        configuration.captureMicrophone = options.capturesMicrophone
         configuration.sampleRate = 44_100
         configuration.channelCount = 2
 
@@ -130,29 +133,13 @@ final class RecordingEngine {
         let filter = SCContentFilter(display: display, excludingWindows: excluded)
 
         let url = Self.makeTemporaryURL()
-        // 麦克风起不来（没设备 / 没授权就不该到这）就降级成无麦克风继续录。
-        if options.capturesMicrophone {
-            let mic = MicrophoneCapture()
-            do {
-                try mic.start()
-                microphone = mic
-            } catch {
-                logger.error("microphone unavailable, recording without it: \(error.localizedDescription)")
-            }
-        }
         let writer = try RecordingWriter(
             url: url,
             width: dimensions.width,
             height: dimensions.height,
             fps: fps,
-            withSystemAudio: options.capturesSystemAudio,
-            withMicrophone: microphone != nil
+            withAudio: wantAudio
         )
-        if let microphone {
-            microphone.onBuffer = { @Sendable buffer, pts in
-                writer.appendMicrophone(buffer, at: pts)
-            }
-        }
         let output = RecordingStreamOutput()
         output.onScreenFrame = { [writer] pixelBuffer, time in
             writer.append(pixelBuffer: pixelBuffer, at: time)
@@ -161,14 +148,13 @@ final class RecordingEngine {
             writer.append(audio: sampleBuffer)
         }
         output.onStopped = { [weak self] error in
-            // SCK 不保证这个回调在主线程上：跳过去，别 assumeIsolated（不同线程会 trap）。
             Task { @MainActor in self?.handleStreamStopped(error) }
         }
 
         let stream = SCStream(filter: filter, configuration: configuration, delegate: output)
         do {
             try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: queue)
-            if options.capturesSystemAudio {
+            if wantAudio {
                 try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: queue)
             }
             try await stream.startCapture()
@@ -182,11 +168,11 @@ final class RecordingEngine {
         self.stream = stream
         isRunning = true
         isPaused = false
-        isMicrophoneActive = microphone != nil
+        isMicrophoneActive = options.capturesMicrophone
         startedAt = Date()
         startTicker()
         logger.notice(
-            "recording \(dimensions.width)x\(dimensions.height)@\(fps) audio=\(options.capturesSystemAudio) mic=\(self.microphone != nil)"
+            "recording \(dimensions.width)x\(dimensions.height)@\(fps) audio=\(options.capturesSystemAudio) mic=\(options.capturesMicrophone)"
         )
     }
 
@@ -225,8 +211,6 @@ final class RecordingEngine {
         guard isRunning else { return }
         isRunning = false
         stopTicker()
-        microphone?.onBuffer = nil
-        microphone?.stop()
         await stopStream()
         writer?.cancel()
         cleanUp()
@@ -249,9 +233,6 @@ final class RecordingEngine {
     @discardableResult
     private func finishCurrentSession() async -> Bool {
         stopTicker()
-        // 麦克风先停：tap 摘掉之后 writer 才可能安全 finish（没有采样还在飞）。
-        microphone?.onBuffer = nil
-        microphone?.stop()
         await stopStream()
         defer { cleanUp() }
         guard let writer else { return false }
@@ -278,7 +259,6 @@ final class RecordingEngine {
         stream = nil
         output = nil
         writer = nil
-        microphone = nil
         isMicrophoneActive = false
         startedAt = nil
         isPaused = false

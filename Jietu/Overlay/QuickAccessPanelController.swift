@@ -69,8 +69,6 @@ final class QuickAccessPanelController {
     var onCopyVideoFile: ((URL) -> Void)?
     /// 视频卡：保存（把成片另存一份到用户挑的地方）。
     var onSaveVideo: ((URL) -> Void)?
-    /// 视频卡：裁剪（开裁剪窗口，另存一段）。
-    var onTrimVideo: ((URL) -> Void)?
     /// 视频卡：导出 GIF。
     var onExportGif: ((URL) -> Void)?
     var onDismiss: (() -> Void)?
@@ -170,7 +168,6 @@ final class QuickAccessPanelController {
             onReveal: { [weak self] in self?.onRevealVideo?(url) },
             onCopyFile: { [weak self] in self?.onCopyVideoFile?(url) },
             onSave: { [weak self] in self?.onSaveVideo?(url) },
-            onTrim: { [weak self] in self?.onTrimVideo?(url) },
             onExportGif: { [weak self] in self?.onExportGif?(url) },
             onClose: { [weak self] in self?.dismissEntry(id, animated: true) },
             onHoverChange: { [weak self] hovering in self?.setHover(id, hovering) },

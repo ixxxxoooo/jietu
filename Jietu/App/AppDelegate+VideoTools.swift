@@ -1,35 +1,15 @@
 import AppKit
 import UniformTypeIdentifiers
 
-/// AppDelegate — 成片的两个「再加工」入口：裁剪与导出 GIF。
+/// AppDelegate — 成片的「再加工」入口：导出 GIF。
 ///
-/// 两者都从浮窗视频卡进来（`onTrimVideo` / `onExportGif`），产物都是**另存的新文件**，
+/// 从浮窗视频卡进来（`onExportGif`），产物是**另存的新文件**，
 /// 原片一概不动——用户录了半天的东西，不该因为我们多做一步加工就丢了。
+///
+/// 裁剪功能不做：macOS 预览 App（⌘T）自带裁剪，无需重复造轮子。
 ///
 /// @author ixxxxoooo
 extension AppDelegate {
-
-    /// 视频卡「裁剪…」：开一个裁剪窗口（播放器 + 双柄时间轴）。
-    ///
-    /// 同时只允许一个：窗口已经开着就把它提到前面（不然重复点会开出一堆窗口）。
-    func openVideoTrim(_ url: URL) {
-        if let existing = videoTrimController {
-            existing.present(on: screenForVideoWindow())
-            return
-        }
-        let controller = VideoTrimController(url: url)
-        controller.onExported = { [weak self] destination in
-            self?.logger.notice("trimmed recording saved: \(destination.lastPathComponent)")
-            if self?.settings.showSaveNotification ?? true {
-                self?.notifier.notifyExported(fileURL: destination, title: "裁剪完成")
-            }
-        }
-        controller.onClose = { [weak self] in
-            self?.videoTrimController = nil
-        }
-        videoTrimController = controller
-        controller.present(on: screenForVideoWindow())
-    }
 
     /// 视频卡「导出 GIF…」：选好落点后转一份动图，期间用浮窗报进度。
     ///
@@ -73,7 +53,7 @@ extension AppDelegate {
     }
 
     /// 视频相关窗口落在哪块屏：鼠标当前所在的那块（和录屏浮窗同一套口径）。
-    private func screenForVideoWindow() -> NSScreen? {
+    func screenForVideoWindow() -> NSScreen? {
         NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
     }
 

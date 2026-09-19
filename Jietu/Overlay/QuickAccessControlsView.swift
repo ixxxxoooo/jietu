@@ -25,10 +25,11 @@ enum QuickAccessAction: String, CaseIterable {
     static let imageCard: [QuickAccessAction] = [.copy, .close, .annotate, .pin, .save]
     /// 视频卡的动作与摆位：
     /// - 上排「复制文件 / 在访达中显示 / 关闭」（工具类操作，圆盘）；
-    /// - 下排「MP4(胶囊) / 裁剪(圆盘) / GIF(胶囊)」（格式导出操作，MP4 和 GIF 用胶囊标明格式）；
+    /// - 下排「MP4(胶囊) / GIF(胶囊)」（格式导出操作，胶囊标明格式）；
     /// - **中央播放**。
+    /// 裁剪功能不做：macOS 预览 App 自带。
     static let videoCard: [QuickAccessAction] = [
-        .copyFile, .reveal, .close, .saveVideo, .trimVideo, .exportGif, .play,
+        .copyFile, .reveal, .close, .saveVideo, .exportGif, .play,
     ]
 
     /// 控件在卡片里的位子。写死在这里，`frame(of:in:)` 与自检都按它算注入点。
@@ -42,7 +43,7 @@ enum QuickAccessAction: String, CaseIterable {
         case .reveal: .topCenter               // 视频卡：在访达中显示（上排居中）
         case .close: .topRight
         case .annotate, .saveVideo: .bottomLeft
-        case .trimVideo: .bottomCenter          // 视频卡：裁剪（下排居中，紧挨保存）
+        case .trimVideo: .bottomCenter          // 保留枚举值，但不再放进视频卡
         case .pin, .exportGif: .bottomRight     // 图片卡：钉图 / 视频卡：导出 GIF
         case .save, .play: .center
         }

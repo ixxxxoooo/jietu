@@ -42,8 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 本次录屏的选区（AppKit 全局坐标）：控制条 / 红框都贴它摆，自检也用它验「没遮挡」。
     var recordingSelectionRect: CGRect?
 
-    /// 正在开着的那一个裁剪窗口（同时只允许一个）。
-    var videoTrimController: VideoTrimController?
     /// GIF 导出的进度浮窗。
     var gifExportPanel: GifExportPanel?
 
@@ -104,10 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             runRecordingAppTest()
             return
         }
-        if CommandLine.arguments.contains(CaptureSelfTest.appLevelTrimFlag) {
-            runTrimAppTest()
-            return
-        }
+        // 裁剪自检已移除（功能由 macOS 预览 App 自带）。
         #endif
 
         if !ScreenCapturePermission.isGranted {
@@ -271,9 +266,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         quickAccess.onSaveVideo = { [weak self] url in
             self?.saveVideoAs(url)
-        }
-        quickAccess.onTrimVideo = { [weak self] url in
-            self?.openVideoTrim(url)
         }
         quickAccess.onExportGif = { [weak self] url in
             self?.exportVideoAsGif(url)

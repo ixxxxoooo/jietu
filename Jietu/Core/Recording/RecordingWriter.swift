@@ -3,10 +3,8 @@ import Foundation
 
 /// 写 mp4 的那只手：所有方法都在 `RecordingEngine.queue` 上调用（`@unchecked Sendable` 靠这条纪律）。
 ///
-/// **例外**是麦克风：`appendMicrophone` 跑在 AVAudioEngine 的 tap 线程上——
-/// 它只用锁护住的状态（暂停 / 会话起点 / 混音器），不碰别的可变字段。
-/// 音频进一条 AAC 轨：单源直写；系统声 + 麦克风双开时先过 `RealtimeAudioMixer` 混成一路
-/// （mp4 放两条音轨播放器只出第一条，必须在写入前混）。
+/// 音频走**直写**：SCK 已经把系统声与麦克风混好了（`captureMicrophone`），
+/// 这边只管改时间戳就写进去，不做任何 PCM 转换或手动混音。
 ///
 /// @author ixxxxoooo
 nonisolated final class RecordingWriter: @unchecked Sendable {
@@ -15,18 +13,13 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
     private let videoInput: AVAssetWriterInput
     private let adaptor: AVAssetWriterInputPixelBufferAdaptor
     private var audioInput: AVAssetWriterInput?
-    /// 双源混音器（只在与麦克风同时启用时存在）。
-    private var mixer: RealtimeAudioMixer?
-    /// 系统声的源格式与配套转换器（只在采集队列上使用）。
-    private var systemAudioFormat: AVAudioFormat?
-    private var systemAudioConverter: AVAudioConverter?
 
     private var sessionStarted = false
     private var hasWrittenFrame = false
     /// 暂停状态用锁护着：写帧在采集队列上、暂停/恢复在主线程上，两边都要看它。
     private let pauseLock = NSLock()
     private var isPaused = false
-    /// 会话起点在采集队列与麦克风 tap 线程两边都可能设，同样上锁。
+    /// 会话起点上锁。
     private let sessionLock = NSLock()
 
     /// 现在是不是暂停中（跨线程安全）。
@@ -42,10 +35,7 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
     private var pausedTotalSeconds: Double = 0
     private var pausedAtWall: Double?
 
-    init(
-        url: URL, width: Int, height: Int, fps: Int,
-        withSystemAudio: Bool, withMicrophone: Bool
-    ) throws {
+    init(url: URL, width: Int, height: Int, fps: Int, withAudio: Bool) throws {
         self.url = url
         writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
 
@@ -70,7 +60,7 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
         }
         writer.add(videoInput)
 
-        if withSystemAudio || withMicrophone {
+        if withAudio {
             let input = AVAssetWriterInput(
                 mediaType: .audio,
                 outputSettings: VideoEncodingSettings.systemAudioOutputSettings()
@@ -80,9 +70,6 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
                 writer.add(input)
                 audioInput = input
             }
-        }
-        if withSystemAudio, withMicrophone {
-            mixer = RealtimeAudioMixer()
         }
 
         guard writer.startWriting() else {
@@ -98,65 +85,20 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
         guard !isPausedNow else { return }
         let stamp = adjusted(time)
         startSessionIfNeeded(at: stamp)
-        // 写不动就丢这一帧：录屏宁可掉帧，也不能把主线程/队列堵住。
         guard videoInput.isReadyForMoreMediaData else { return }
         if adaptor.append(pixelBuffer, withPresentationTime: stamp) {
             hasWrittenFrame = true
         }
     }
 
-    /// 系统声音（SCK 交付的 CMSampleBuffer，采集队列上调用）。
+    /// 音频（SCK 交付的 CMSampleBuffer，系统声 + 麦克风已混好）。
     func append(audio sampleBuffer: CMSampleBuffer) {
         guard !isPausedNow, sampleBuffer.numSamples > 0, let audioInput else { return }
         let stamp = adjusted(CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
-        guard
-            let pcm = AudioSampleBufferFactory.pcmBuffer(from: sampleBuffer)
-        else { return }
-
-        if let mixer {
-            // 双源：统一格式 → 入混音队列 → 排空到这一拍的结尾。
-            if systemAudioFormat == nil { systemAudioFormat = pcm.format }
-            let target = convertIfNeeded(pcm)
-            guard let target else { return }
-            mixer.enqueue(.system, buffer: target, at: stamp)
-            drainMixer(until: stamp + Self.duration(of: target), into: audioInput)
-        } else {
-            // 单源（只系统声）：老路，改时间戳直接写。
-            guard let restamped = Self.restamped(sampleBuffer, to: stamp) else { return }
-            startSessionIfNeeded(at: stamp)
-            guard audioInput.isReadyForMoreMediaData else { return }
-            audioInput.append(restamped)
-        }
-    }
-
-    /// 麦克风（AVAudioEngine tap 线程上调用；buffer 已经是目标格式）。
-    func appendMicrophone(_ buffer: AVAudioPCMBuffer, at pts: CMTime) {
-        guard !isPausedNow, let audioInput else { return }
-        let stamp = adjusted(pts)
-        if let mixer {
-            mixer.enqueue(.microphone, buffer: buffer, at: stamp)
-            // 麦克风这一拍也推一把：系统声万一停了（静音 / 流断），麦克风照常进轨。
-            drainMixer(until: stamp + Self.duration(of: buffer), into: audioInput)
-        } else {
-            startSessionIfNeeded(at: stamp)
-            guard audioInput.isReadyForMoreMediaData else { return }
-            if let sample = AudioSampleBufferFactory.sampleBuffer(from: buffer, at: stamp) {
-                audioInput.append(sample)
-            }
-        }
-    }
-
-    /// 把混音器排到 `until`，逐块打上 PTS 写进音频轨。
-    private func drainMixer(until end: CMTime, into audioInput: AVAssetWriterInput) {
-        for chunk in mixer!.drain(until: end) {
-            startSessionIfNeeded(at: chunk.pts)
-            guard audioInput.isReadyForMoreMediaData,
-                let sample = AudioSampleBufferFactory.sampleBuffer(
-                    from: chunk.buffer, at: chunk.pts
-                )
-            else { continue }
-            audioInput.append(sample)
-        }
+        guard let restamped = Self.restamped(sampleBuffer, to: stamp) else { return }
+        startSessionIfNeeded(at: stamp)
+        guard audioInput.isReadyForMoreMediaData else { return }
+        audioInput.append(restamped)
     }
 
     /// 第一帧的 PTS 作为会话起点，后面都相对它（否则首帧会带一大段空白）。
@@ -201,7 +143,7 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
 
     var didWriteAnyFrame: Bool { hasWrittenFrame }
 
-    /// 结束写入（调用前必须已经停流 + 排空队列 + 停麦克风）。
+    /// 结束写入（调用前必须已经停流 + 排空队列）。
     func finish() async throws {
         guard hasWrittenFrame else {
             writer.cancelWriting()
@@ -224,24 +166,6 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
     }
 
     // MARK: - 私有
-
-    /// 系统声格式对不上目标格式时转一次（converter 记住复用）。
-    private func convertIfNeeded(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
-        guard buffer.format != RecordingAudioFormat.format, let format = systemAudioFormat
-        else { return buffer }
-        if systemAudioConverter == nil {
-            systemAudioConverter = AVAudioConverter(from: format, to: RecordingAudioFormat.format)
-        }
-        guard let converter = systemAudioConverter else { return nil }
-        return AudioSampleBufferFactory.converted(buffer, from: format, using: converter)
-    }
-
-    private static func duration(of buffer: AVAudioPCMBuffer) -> CMTime {
-        CMTime(
-            value: CMTimeValue(buffer.frameLength),
-            timescale: CMTimeScale(buffer.format.sampleRate)
-        )
-    }
 
     /// 换一个新的 PTS（`CMSampleBufferCreateCopyWithNewTiming` 会复制一份，原件照旧释放）。
     private static func restamped(_ sampleBuffer: CMSampleBuffer, to time: CMTime) -> CMSampleBuffer? {

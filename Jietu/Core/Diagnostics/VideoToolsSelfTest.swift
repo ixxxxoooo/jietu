@@ -5,10 +5,10 @@ import ImageIO
 
 #if DEBUG
 
-/// 成片再加工的自检：造一段合成视频 → 走**真实**的 GIF 导出与裁剪导出 → 读回产物校验。
+/// 成片再加工的自检：造一段合成视频 → 走**真实**的 GIF 导出 → 读回产物校验。
 ///
-/// 单测只能钉纯函数（尺寸 / 步长 / 区间归整），解码 + 编码 + `AVAssetExportSession` 这条
-/// 链路必须在真环境里跑一遍——GIF 编不出来、直通导出报错都只有跑起来才知道。
+/// 单测只能钉纯函数（尺寸 / 步长），解码 + 编码这条链路必须在真环境里跑一遍——
+/// GIF 编不出来只有跑起来才知道。裁剪功能已去掉（macOS 预览 App 自带）。
 ///
 ///   Jietu --selftest-video-tools <输出目录>
 ///
@@ -75,41 +75,6 @@ enum VideoToolsSelfTest {
                       "尺寸按 160 宽等比（160×120）",
                       "尺寸不对：\(String(describing: gifSize))")
                 check(progressSeen.last == 1.0, "进度回调走到 100%", "进度没走完：\(progressSeen.last ?? -1)")
-
-                // ③ 裁剪：0.5s–1.5s 这一段，时长应当 ≈ 1 秒（直通导出对齐关键帧，留 0.3s 余量）。
-                report.append("")
-                report.append("== 成片裁剪 ==")
-                let trimmed = outputDirectory.appendingPathComponent("video-tools-trimmed.mp4")
-                try? FileManager.default.removeItem(at: trimmed)
-                try await VideoTrimmer.export(
-                    from: source, to: trimmed, start: 0.5, end: 1.5
-                )
-                let trimmedDuration = CMTimeGetSeconds(
-                    try await AVURLAsset(url: trimmed).load(.duration)
-                )
-                let trimmedTracks = try await AVURLAsset(url: trimmed)
-                    .loadTracks(withMediaType: .video)
-                report.append(
-                    "\(String(format: "%.2f", trimmedDuration))s / \(fileSize(trimmed)) —— \(trimmed.path)"
-                )
-                check(FileManager.default.fileExists(atPath: trimmed.path), "裁剪产物落盘了", "裁剪产物没生成")
-                check(abs(trimmedDuration - 1.0) <= 0.3,
-                      "时长 ≈ 1.0s（实测 \(String(format: "%.2f", trimmedDuration))s）",
-                      "时长偏差过大：\(String(format: "%.2f", trimmedDuration))s")
-                check(trimmedTracks.count == 1, "裁剪后视频轨还在", "裁剪后没有视频轨")
-
-                // ④ 负例：短于 0.1 秒的区间必须被拒（而不是导出一个 0 秒的怪文件）。
-                let tooShort = outputDirectory.appendingPathComponent("video-tools-short.mp4")
-                do {
-                    try await VideoTrimmer.export(
-                        from: source, to: tooShort, start: 1.0, end: 1.05
-                    )
-                    check(false, "过短区间被拒", "过短区间竟然导出成功了")
-                } catch {
-                    check(!FileManager.default.fileExists(atPath: tooShort.path),
-                          "过短区间被拒且不留半成品（\(error.localizedDescription)）",
-                          "过短区间被拒了，但留下了半成品文件")
-                }
 
                 report.append("")
                 report.append(failures == 0 ? "RESULT: PASS" : "RESULT: FAIL（\(failures) 项）")

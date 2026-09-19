@@ -6,8 +6,9 @@ import SwiftUI
 /// 与图片卡（`QuickAccessView`）同一套表面与交互：卡片尺寸按封面等比算、悬停模糊露出毛玻璃、
 /// 浮出同一套 `GlassControlButton`、拖出去就是那个文件。动作：
 /// - 上排：**复制文件 / 在访达中显示 / 关闭**（圆盘图标）；
-/// - 下排：**MP4(胶囊) / 裁剪(圆盘) / GIF(胶囊)**——格式导出按钮用胶囊标注格式名，一眼可识别；
+/// - 下排：**MP4(胶囊) / GIF(胶囊)**——格式导出按钮用胶囊标注格式名，一眼可识别；
 /// - 中央圆盘：**播放**（点击 = 用 macOS 自带的「预览」打开）。
+/// 裁剪不做：macOS 预览 App 自带裁剪，无需重复造轮子。
 ///
 /// 封面正中挂一枚「▶ 0:12」胶囊：一眼看出这是段视频、多长；悬停时它淡出，
 /// **同一个位置**换成「播放」——同一个意思、同一个位置，点下去就是预览。
@@ -27,8 +28,6 @@ struct QuickAccessVideoView: View {
     var onCopyFile: () -> Void
     /// 中央「保存」：把成片另存一份到用户挑的地方（原片留在保存目录）。
     var onSave: () -> Void
-    /// 「裁剪」：开裁剪窗口，掐头去尾另存一段。
-    var onTrim: () -> Void
     /// 「导出 GIF」：转一份动图。
     var onExportGif: () -> Void
     var onClose: () -> Void
@@ -119,7 +118,6 @@ struct QuickAccessVideoView: View {
                 case .reveal: onReveal()
                 case .copyFile: onCopyFile()
                 case .saveVideo: onSave()
-                case .trimVideo: onTrim()
                 case .exportGif: onExportGif()
                 case .close: onClose()
                 default: break

@@ -142,16 +142,17 @@ struct QuickAccessTests {
         }
     }
 
-    @Test("视频卡（录屏收工）：上排圆盘 + 下排胶囊/圆盘 + 中央播放")
+    @Test("视频卡（录屏收工）：上排圆盘 + 下排两个胶囊 + 中央播放")
     func videoCardHasDiscsCapsulesAndCenterPlay() {
         let card = CGSize(width: 260, height: 146)
         let frames: [(QuickAccessAction, NSRect)] = QuickAccessAction.videoCard.map {
             ($0, QuickAccessControlsView.frame(of: $0, in: card))
         }
-        #expect(frames.count == 7, "两排各三个 + 中央")
-        #expect(QuickAccessAction.videoCard.contains(.saveVideo), "操作栏要能保存（另存为…）")
-        #expect(QuickAccessAction.videoCard.contains(.trimVideo), "操作栏要能裁剪成片")
+        // 上排三个圆盘 + 下排两个胶囊 + 中央播放 = 6 个
+        #expect(frames.count == 6, "上排三个 + 下排两个 + 中央播放")
+        #expect(QuickAccessAction.videoCard.contains(.saveVideo), "操作栏要能保存 MP4")
         #expect(QuickAccessAction.videoCard.contains(.exportGif), "操作栏要能导出 GIF")
+        #expect(!QuickAccessAction.videoCard.contains(.trimVideo), "裁剪已移除（macOS 预览自带）")
         // 中央「播放」是圆盘
         let play = QuickAccessControlsView.frame(of: .play, in: card)
         #expect(play.width == QuickAccessControlsView.diameter)
@@ -173,29 +174,27 @@ struct QuickAccessTests {
         }
 
         // 位子：上排「复制文件 / 在访达中显示 / 关闭」（工具类圆盘），
-        // 下排「MP4(胶囊) / 裁剪(圆盘) / GIF(胶囊)」（产出类），**中央播放**。
+        // 下排「MP4(胶囊) / GIF(胶囊)」（格式导出），**中央播放**。
         let copyFile = QuickAccessControlsView.frame(of: .copyFile, in: card)
         let reveal = QuickAccessControlsView.frame(of: .reveal, in: card)
         let close = QuickAccessControlsView.frame(of: .close, in: card)
         let save = QuickAccessControlsView.frame(of: .saveVideo, in: card)
-        let trim = QuickAccessControlsView.frame(of: .trimVideo, in: card)
         let gif = QuickAccessControlsView.frame(of: .exportGif, in: card)
         // 上排：copyFile 左上、reveal 上居中、close 右上
         #expect(copyFile.minX < card.width / 2 && copyFile.minY > card.height / 2)
         #expect(reveal.midX == card.width / 2 && reveal.minY > card.height / 2)
         #expect(close.minX > card.width / 2 && close.minY > card.height / 2)
-        // 下排：save 左下、trim 下居中、gif 右下
+        // 下排：save 左下、gif 右下
         #expect(save.minX < card.width / 2 && save.minY < card.height / 2)
-        #expect(trim.midX == card.width / 2 && trim.minY < card.height / 2)
         #expect(gif.minX > card.width / 2 && gif.minY < card.height / 2)
         #expect(QuickAccessAction.play.slot == .center)
     }
 
-    @Test("视频卡最窄也放得下两排控件（胶囊 + 圆盘不重叠）")
+    @Test("视频卡最窄也放得下控件（两个胶囊不重叠）")
     func videoCardFitsControlsAtMinimumWidth() {
-        // 下排有两个胶囊（MP4/GIF）+ 一个圆盘（裁剪），需要比纯圆盘更宽的下限。
+        // 下排有两个胶囊（MP4/GIF），需要比纯圆盘更宽的下限。
         let minimum = Theme.Size.quickAccessVideoCardMin
-        #expect(minimum.width >= 200, "两个胶囊 + 一个圆盘至少要 200pt")
+        #expect(minimum.width >= 200, "两个胶囊至少要 200pt")
         let card = QuickAccessView.panelSize(
             for: CGSize(width: 90, height: 400), minimum: minimum
         )
@@ -283,7 +282,7 @@ struct QuickAccessTests {
             thumbnailPointSize: point,
             duration: 12,
             cardSize: card,
-            onPlay: {}, onReveal: {}, onCopyFile: {}, onSave: {}, onTrim: {}, onExportGif: {},
+            onPlay: {}, onReveal: {}, onCopyFile: {}, onSave: {}, onExportGif: {},
             onClose: {},
             onHoverChange: { _ in }, dragProvider: { NSItemProvider() }
         )
@@ -298,7 +297,7 @@ struct QuickAccessTests {
             thumbnailPointSize: small,
             duration: 3,
             cardSize: smallCard,
-            onPlay: {}, onReveal: {}, onCopyFile: {}, onSave: {}, onTrim: {}, onExportGif: {},
+            onPlay: {}, onReveal: {}, onCopyFile: {}, onSave: {}, onExportGif: {},
             onClose: {},
             onHoverChange: { _ in }, dragProvider: { NSItemProvider() }
         )

@@ -872,55 +872,7 @@ extension AppDelegate {
         }
     }
 
-    /// 裁剪窗口：真接线打开它，一步一步打印到 stdout。
-    ///
-    /// 为什么不用最后汇总报告：这条自检就是来查**崩溃**的——真崩了 `finish` 根本不会执行，
-    /// 只有「每步立刻 print + flush」才能看到最后走到哪儿（那一行就是现场）。
-    func runTrimAppTest() {
-        setvbuf(stdout, nil, _IONBF, 0)
-        func step(_ text: String) {
-            print("[trim] \(text)")
-            fflush(stdout)
-        }
-        step("开始（进程 \(ProcessInfo.processInfo.processIdentifier)）")
-        Task { @MainActor in
-            let directory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("jietu-trim-apptest-\(UUID().uuidString)", isDirectory: true)
-            do {
-                try FileManager.default.createDirectory(
-                    at: directory, withIntermediateDirectories: true
-                )
-                let source = directory.appendingPathComponent("source.mp4")
-                step("造 2 秒测试视频…")
-                _ = try await VideoToolsSelfTest.makeTestVideo(
-                    at: source, seconds: 2, fps: 30, size: CGSize(width: 320, height: 240)
-                )
-                step("源视频就绪：\(source.path)")
-
-                step("调 openVideoTrim…")
-                openVideoTrim(source)
-                step("openVideoTrim 返回，controller=\(videoTrimController == nil ? "无" : "有")")
-
-                try? await Task.sleep(for: .seconds(2))
-                let windows = NSApp.windows.filter { $0.title == "裁剪视频" }
-                step(
-                    "2 秒后：进程存活 ✓，裁剪窗口 \(windows.count) 个，"
-                        + "可见=\(windows.contains { $0.isVisible } ? "是" : "否")"
-                )
-
-                step("关掉窗口")
-                videoTrimController?.close()
-                try? await Task.sleep(for: .milliseconds(600))
-                step("窗口关闭后 controller=\(videoTrimController == nil ? "已清" : "**没清**")")
-                try? FileManager.default.removeItem(at: directory)
-                step("RESULT: PASS（全程没崩）")
-                CaptureSelfTest.finish(["RESULT: PASS（全程没崩，窗口能开能关）"], code: 0)
-            } catch {
-                step("error: \(error.localizedDescription)")
-                CaptureSelfTest.finish(["RESULT: FAIL"], code: 1)
-            }
-        }
-    }
+    // 裁剪自检已移除：裁剪功能由 macOS 预览 App 自带。
 
 }
 #endif
