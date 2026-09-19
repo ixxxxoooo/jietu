@@ -95,15 +95,30 @@ struct InlineToolbarTests {
         #expect(model.tool == nil)
     }
 
-    @Test("主工具栏工具列表严格与 AnnotationTool.allCases 全量对齐（包含 crop）")
+    @Test("主工具栏工具列表严格与 AnnotationTool.allCases 全量对齐，裁剪只给已有的图片")
     func inlineToolsAlignWithAnnotationToolCases() {
         let expected = AnnotationTool.allCases
-        let host = NSHostingView(rootView: InlineMainToolbar(model: InlineToolbarModel()))
-        host.layoutSubtreeIfNeeded()
         #expect(expected.count == 14)
         #expect(expected.first == .select)
         #expect(expected.contains(.crop))
         #expect(expected.last == .crop)
+
+        // 第一次截图：不给裁剪——那块画面就是用户刚框出来的。
+        let freshModel = InlineToolbarModel()
+        #expect(!freshModel.visibleTools.contains(.crop))
+        #expect(freshModel.visibleTools.count == 13)
+
+        // 从浮窗卡片 / 钉图 / 历史记录进来编辑的已有图片：给裁剪。
+        let storedModel = InlineToolbarModel()
+        storedModel.allowsCrop = true
+        #expect(storedModel.visibleTools == expected)
+
+        // 渲染出来也要跟着变：少了裁剪按钮，第一次截图的工具栏更窄。
+        let freshWidth = NSHostingView(rootView: InlineMainToolbar(model: freshModel))
+            .fittingSize.width
+        let storedWidth = NSHostingView(rootView: InlineMainToolbar(model: storedModel))
+            .fittingSize.width
+        #expect(freshWidth < storedWidth, "少了裁剪按钮，第一次截图的工具栏应更窄")
     }
 
     @Test("恢复静态图片时主工具栏紧凑隐藏滚动与录屏按钮")
@@ -299,6 +314,22 @@ struct InlineToolbarTests {
     }
 
     // MARK: - 裁剪：框选要保留的区域
+
+    @Test("第一次截图的工具栏里没有裁剪，从浮窗 / 钉图进来的已有图片才有")
+    func cropToolOnlyOfferedForStoredImages() {
+        // 第一次截图（拖一块区域进原地编辑）：不给裁剪。
+        let fresh = Self.makeCanvas(canvas: CGSize(width: 1000, height: 800))
+        fresh.inlineMode = true
+        fresh.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 200, y: 150)))
+        fresh.mouseDragged(with: Self.mouse(.leftMouseDragged, at: NSPoint(x: 800, y: 650)))
+        fresh.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 800, y: 650)))
+        #expect(fresh.debugSelection != nil, "先确认进了原地编辑")
+        #expect(!fresh.debugVisibleTools.contains(.crop), "第一次截图不该有裁剪工具")
+
+        // 已有的图片（浮窗卡片 / 钉图 / 历史）：给裁剪。
+        let stored = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        #expect(stored.debugVisibleTools.contains(.crop), "已有的图片才给裁剪")
+    }
 
     @Test("裁剪：从图片中间拖出裁剪框，双击确认后按它裁掉像素")
     func cropDrawsRectFromMiddleThenApplies() {
@@ -522,12 +553,15 @@ struct InlineToolbarTests {
     /// 造一块画布 + 一张恢复进来的底图，并直接进入原地编辑（图片居中、工具栏就位）。
     ///
     /// 画布 1000×800、底图 1600×1200 px（2x 屏幕 → 800×600 点）时，底图 frame 是 (100, 135, 800, 600)。
+    /// `allowsCrop` 默认 true：这条路径对应「从浮窗卡片 / 钉图进来的已有图片」。
     private static func makeRestoredCanvas(
         canvas size: CGSize,
         imagePixels: (width: Int, height: Int) = (1600, 1200),
-        scale: CGFloat = 2
+        scale: CGFloat = 2,
+        allowsCrop: Bool = true
     ) -> OverlayCanvasView {
         let view = makeCanvas(canvas: size, scale: scale)
+        view.allowsCrop = allowsCrop
         view.restoreImageForInlineEditing(
             makeImage(width: imagePixels.width, height: imagePixels.height)
         )

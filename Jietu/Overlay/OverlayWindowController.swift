@@ -152,6 +152,7 @@ final class OverlayWindowController {
         displayIndex: Int,
         displayCount: Int,
         inlineMode: Bool,
+        allowsCrop: Bool = false,
         annotationDefaults: AnnotationDefaults = .standard,
         editorShortcuts: EditorShortcuts = .standard
     ) {
@@ -164,6 +165,7 @@ final class OverlayWindowController {
             displayCount: displayCount
         )
         canvas.inlineMode = inlineMode
+        canvas.allowsCrop = allowsCrop
         canvas.annotationDefaults = annotationDefaults
         canvas.editorShortcuts = editorShortcuts
 

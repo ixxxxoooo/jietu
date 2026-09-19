@@ -1070,7 +1070,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.saveAs(image)
         }
         quickAccess.onAnnotate = { [weak self] image in
-            self?.openInlineEditor(image)
+            self?.openInlineEditor(image, allowsCrop: true)
         }
         quickAccess.onPin = { image in
             PinWindowController.pin(image: image, on: NSScreen.main)
@@ -1137,7 +1137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 直接拿当前选区开跑，不再弹「手动 / 自动」模式条。
         // 钉图上的「编辑」：把钉图收掉，恢复到原地编辑模式（居中预览并展示原地工具栏）。
         PinWindowController.onRequestEdit = { [weak self] image, frame in
-            self?.openInlineEditor(image, anchor: frame)
+            self?.openInlineEditor(image, anchor: frame, allowsCrop: true)
         }
         // 录屏：框好区域（或点一下窗口）就把遮罩收掉、开录。
         overlays.onRecordRegionPicked = { [weak self] snapshot, localRect in
@@ -1243,7 +1243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         CaptureOutput.playShutterSound()
                     }
                     copyToClipboard(snapshot.image)
-                    openInlineEditor(snapshot.image)
+                    openInlineEditor(snapshot.image, allowsCrop: false)
                 case .window:
                     deliver(snapshot.image, onDisplay: snapshot.displayID)
                 }
@@ -1966,7 +1966,7 @@ struct CaptureRegionTarget {
             // 截完立刻进剪贴板：原地编辑期间（甚至取消编辑）也能直接去别处粘贴。
             // 编辑器中点 ✓ 会再写一次，把带标注的成图覆盖上去。
             copyToClipboard(image)
-            openInlineEditor(image, anchor: screenRect)
+            openInlineEditor(image, anchor: screenRect, allowsCrop: false)
         case .window:
             deliver(image, onDisplay: displayID)
         }
@@ -2002,7 +2002,10 @@ struct CaptureRegionTarget {
     }
 
     /// 从浮窗（钉图或快速访问）恢复到原地编辑模式：图片在屏幕中央居中展示，下方出现工具栏。
-    private func openInlineEditor(_ image: CGImage, anchor: CGRect? = nil) {
+    ///
+    /// - Parameter allowsCrop: 给不给「裁剪」工具。**只有「已有的图片」才给**（浮窗卡片 / 钉图 /
+    ///   历史记录）；刚截下来的画面不给——那块区域就是用户刚框出来的，再裁一次像是在重新框选区。
+    private func openInlineEditor(_ image: CGImage, anchor: CGRect? = nil, allowsCrop: Bool) {
         guard !overlays.isPresenting else { return }
         guard requireScreenCapturePermission() else { return }
 
@@ -2023,7 +2026,8 @@ struct CaptureRegionTarget {
                     session: session,
                     inlineMode: true,
                     restoredImage: image,
-                    targetScreen: targetScreen
+                    targetScreen: targetScreen,
+                    allowsCrop: allowsCrop
                 )
             } catch {
                 logger.error("failed to open inline editor: \(error.localizedDescription)")
@@ -2119,14 +2123,14 @@ struct CaptureRegionTarget {
     /// 打开历史某一项进入标注（居中原地编辑）。
     private func openHistoryItem(_ item: HistoryItem) {
         if let cgImage = item.cgImage {
-            openInlineEditor(cgImage)
+            openInlineEditor(cgImage, allowsCrop: true)
             return
         }
         guard let url = item.url,
             let image = NSImage(contentsOf: url),
             let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
         else { return }
-        openInlineEditor(cgImage)
+        openInlineEditor(cgImage, allowsCrop: true)
     }
 
     /// 清空所有历史与最近记录。

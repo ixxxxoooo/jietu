@@ -29,6 +29,9 @@ final class InlineToolbarModel {
     var isLiveTextActive = false
     /// 是否为从浮窗恢复的静态图片（不显示滚动截图和录屏）。
     var isRestoredImage = false
+    /// 给不给「裁剪」工具：只有从浮窗卡片 / 钉图 / 历史记录进来编辑的已有图片才给，
+    /// 刚截下来的画面不给（那块区域就是用户刚框出来的）。
+    var allowsCrop = false
     /// 撤销 / 重做的当前快捷键；只用于把组合键显示在 tooltip 里（真正按键由画布处理）。
     var editorShortcuts: EditorShortcuts = .standard
 
@@ -58,6 +61,15 @@ final class InlineToolbarModel {
             return true
         }
     }
+
+    /// 这一次主工具栏显示哪些工具。
+    ///
+    /// **裁剪只给已有的图片**（浮窗卡片 / 钉图 / 历史记录进来的）：第一次截图时那块画面就是
+    /// 用户刚框出来的，再来个裁剪只会让人以为自己在重新框选区。
+    var visibleTools: [AnnotationTool] {
+        guard !allowsCrop else { return AnnotationTool.allCases }
+        return AnnotationTool.allCases.filter { $0 != .crop }
+    }
 }
 
 /// 原地标注的**主工具栏**：固定尺寸，控件用 `BarButton` 家族。
@@ -68,8 +80,6 @@ final class InlineToolbarModel {
 struct InlineMainToolbar: View {
     @Bindable var model: InlineToolbarModel
 
-    private static let tools: [AnnotationTool] = AnnotationTool.allCases
-
     /// 悬停提示带上当前快捷键；解绑了就只说动作名。
     private static func shortcutHelp(_ title: String, _ hotkey: Hotkey?) -> String {
         guard let hotkey, !hotkey.displayString.isEmpty else { return title }
@@ -78,7 +88,7 @@ struct InlineMainToolbar: View {
 
     var body: some View {
         HStack(spacing: Theme.Size.toolbarItemSpacing) {
-            ForEach(Self.tools) { item in
+            ForEach(model.visibleTools) { item in
                 toolButton(item)
             }
 

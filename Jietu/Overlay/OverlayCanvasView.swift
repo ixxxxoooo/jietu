@@ -115,6 +115,11 @@ final class OverlayCanvasView: NSView {
 
     /// 原地编辑模式：选区定下来后不立刻截图，而是在选框下方弹出工具栏原地标注。
     var inlineMode = false
+    /// 原地编辑时给不给「裁剪」工具。
+    ///
+    /// 只有「已有的图片」才给（从浮窗卡片 / 钉图 / 历史记录进来编辑的）；刚截下来的那块画面不给——
+    /// 它本来就是用户刚框出来的，再裁一次容易让人以为是在重新框选区。
+    var allowsCrop = false
     /// 原地标注完成：参数是已经裁好、并烘焙了标注的最终图，以及选区（local）。
     var onCommitAnnotated: ((CGImage, CGRect) -> Void)?
     /// 进入原地标注时通知 Coordinator（用于同步其它显示器的状态）。
@@ -346,6 +351,9 @@ final class OverlayCanvasView: NSView {
         model.tool = tool
         return true
     }
+
+    /// 自检用：工具栏当前实际显示的工具（第一次截图不给裁剪）。
+    var debugVisibleTools: [AnnotationTool] { toolbarModel?.visibleTools ?? [] }
 
     /// 自检用：当前底图与它在屏幕上的 frame。
     var debugRestoredBase: (image: CGImage?, frame: CGRect?) {
@@ -2515,6 +2523,7 @@ final class OverlayCanvasView: NSView {
         model.textHasCallout = seed.textHasCallout
         model.editorShortcuts = editorShortcuts
         model.isRestoredImage = (restoredBaseImage != nil)
+        model.allowsCrop = allowsCrop
         model.onConfirm = { [weak self] in self?.confirmInline() }
         model.onCancel = { [weak self] in self?.onCancel?() }
         model.onUndo = { [weak self] in self?.inlineUndo() }

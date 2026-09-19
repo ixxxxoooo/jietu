@@ -81,11 +81,15 @@ final class OverlayCoordinator {
         }
     }
 
+    /// - Parameter allowsCrop: 原地编辑时给不给「裁剪」工具。
+    ///   只有「已有的图片」（浮窗卡片 / 钉图 / 历史记录）才给；刚截下来的画面不给——
+    ///   那块区域就是用户刚框出来的，再裁一次只会让人以为在重新框选区。
     func present(
         session: CaptureSession,
         inlineMode: Bool,
         restoredImage: CGImage? = nil,
-        targetScreen: NSScreen? = nil
+        targetScreen: NSScreen? = nil,
+        allowsCrop: Bool = false
     ) {
         guard !isPresenting else { return }
         guard !session.snapshots.isEmpty else { return }
@@ -109,6 +113,7 @@ final class OverlayCoordinator {
                 displayIndex: index + 1,
                 displayCount: session.snapshots.count,
                 inlineMode: effectiveInlineMode,
+                allowsCrop: allowsCrop,
                 annotationDefaults: annotationDefaults,
                 editorShortcuts: editorShortcutsProvider?() ?? .standard
             )
