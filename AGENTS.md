@@ -22,6 +22,8 @@ git add -A && git commit -m "<type>: <描述>"
 - 构建必须成功（`** BUILD SUCCEEDED **`）才能提交。
 - 签名保持默认的自签名证书 `Jietu`，不要加 `CODE_SIGNING_ALLOWED=NO`，否则重签名会丢「屏幕录制」授权。
 - 提交信息沿用仓库风格：`feat:` / `fix:` / `change:` / `docs:` 等前缀。
+- 提交信息（subject 与 body）**一律用英文**，PR 标题与描述同理；仓库历史里的中文提交不追改。
+  代码注释、本文档与 `开发进度.md` 仍按原样用中文。
 
 ## 代码组织规范（写 / 改代码前必读）
 
