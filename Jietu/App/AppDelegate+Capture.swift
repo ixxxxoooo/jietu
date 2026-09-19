@@ -60,7 +60,7 @@ extension AppDelegate {
                     }
                     copyToClipboard(snapshot.image)
                     openInlineEditor(snapshot.image, allowsCrop: false)
-                case .window:
+                case .quickAccess:
                     deliver(snapshot.image, onDisplay: snapshot.displayID)
                 }
             } catch {

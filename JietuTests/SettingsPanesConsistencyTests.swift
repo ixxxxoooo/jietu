@@ -48,12 +48,23 @@ struct SettingsPanesConsistencyTests {
 
     // MARK: - EditorMode
 
-    @Test("EditorMode 有 inline 和 window 两种")
+    @Test("EditorMode 有 inline 和 quickAccess 两种")
     func editorModeValues() {
         #expect(EditorMode(rawValue: "inline") == .inline)
-        #expect(EditorMode(rawValue: "window") == .window)
+        #expect(EditorMode(rawValue: "quickAccess") == .quickAccess)
         // 无效值返回 nil
         #expect(EditorMode(rawValue: "invalid") == nil)
+    }
+
+    @Test("EditorMode 解析持久化值时兼容旧值 window")
+    func editorModeLegacyStoredValue() {
+        // 旧值 `window`（语义：独立窗口编辑器 → 已并入浮窗预览）应解析为 quickAccess
+        #expect(EditorMode(storedValue: "window") == .quickAccess)
+        #expect(EditorMode(storedValue: "quickAccess") == .quickAccess)
+        #expect(EditorMode(storedValue: "inline") == .inline)
+        // 缺失或无效一律回退默认 inline
+        #expect(EditorMode(storedValue: nil) == .inline)
+        #expect(EditorMode(storedValue: "invalid") == .inline)
     }
 
     // MARK: - QuickAccessPosition

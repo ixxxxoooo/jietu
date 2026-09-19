@@ -78,7 +78,7 @@ extension AppDelegate {
             // 编辑器中点 ✓ 会再写一次，把带标注的成图覆盖上去。
             copyToClipboard(image)
             openInlineEditor(image, anchor: screenRect, allowsCrop: false)
-        case .window:
+        case .quickAccess:
             deliver(image, onDisplay: displayID)
         }
     }
