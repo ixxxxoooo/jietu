@@ -58,4 +58,55 @@ struct DisplayGeometryTests {
         #expect(wrong.minY != cg.minY)
         #expect(abs(wrong.minY - (cg.minY + local.height)) < 0.001)
     }
+
+    // MARK: - 补充：referenceHeight 与副屏
+
+    @Test("referenceHeight 大于零")
+    func referenceHeightIsPositive() {
+        #expect(DisplayGeometry.referenceHeight > 0, "必须有主屏高度才能做 Y 轴翻转")
+    }
+
+    @Test("referenceScreen 是原点在 (0,0) 的那块屏")
+    func referenceScreenIsOriginScreen() throws {
+        let ref = try #require(DisplayGeometry.referenceScreen)
+        #expect(ref.frame.origin == .zero, "参考屏的原点应在 (0,0)")
+    }
+
+    @Test("flipY 翻转两次回到原处")
+    func flipYRoundTrip() {
+        let original = CGPoint(x: 42, y: 100)
+        let flipped = DisplayGeometry.flipY(original)
+        let back = DisplayGeometry.flipY(flipped)
+        #expect(abs(back.x - original.x) < 0.001)
+        #expect(abs(back.y - original.y) < 0.001)
+    }
+
+    @Test("flipY(0,0) → (0, referenceHeight)")
+    func flipYOrigin() {
+        let flipped = DisplayGeometry.flipY(.zero)
+        #expect(flipped.x == 0)
+        #expect(abs(flipped.y - DisplayGeometry.referenceHeight) < 0.001)
+    }
+
+    @Test("appKit→local→appKit 往返一致")
+    func appKitLocalRoundTrip() throws {
+        let screen = try #require(NSScreen.screens.first)
+        let appKit = CGPoint(x: screen.frame.minX + 50, y: screen.frame.minY + 100)
+        let local = DisplayGeometry.localPoint(fromAppKit: appKit, screen: screen)
+        let back = DisplayGeometry.appKitPoint(fromLocal: local, screen: screen)
+        #expect(abs(back.x - appKit.x) < 0.001)
+        #expect(abs(back.y - appKit.y) < 0.001)
+    }
+
+    @Test("cgRect → localRect → cgRect 往返一致")
+    func cgRectRoundTrip() throws {
+        let screen = try #require(NSScreen.screens.first)
+        let cg = CGRect(x: 50, y: 50, width: 200, height: 100)
+        let local = DisplayGeometry.localRect(fromCGRect: cg, screen: screen)
+        let back = DisplayGeometry.cgRect(fromLocal: local, screen: screen)
+        #expect(abs(back.minX - cg.minX) < 0.001)
+        #expect(abs(back.minY - cg.minY) < 0.001)
+        #expect(abs(back.width - cg.width) < 0.001)
+        #expect(abs(back.height - cg.height) < 0.001)
+    }
 }

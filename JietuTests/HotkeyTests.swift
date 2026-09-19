@@ -89,4 +89,75 @@ struct HotkeyTests {
         #expect(hotkey.keyCode == UInt32(kVK_ANSI_R))
         #expect(hotkey.menuKeyEquivalent == nil, "老数据没有这一项：菜单里就不显示快捷键")
     }
+
+    // MARK: - 补充：纯修饰键与特殊键
+
+    @Test("只按 Shift 没有其它键时拒绝录入")
+    func shiftOnlyRejected() throws {
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: [.shift],
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                characters: "A",
+                charactersIgnoringModifiers: "a",
+                isARepeat: false,
+                keyCode: UInt16(kVK_ANSI_A)
+            )
+        )
+        // Shift + A 应该能录入（Shift 算一个修饰键）
+        let hotkey = Hotkey.from(event: event)
+        #expect(hotkey != nil, "Shift+A 是合法的热键组合")
+        #expect(hotkey?.carbonModifiers == UInt32(shiftKey))
+    }
+
+    @Test("功能键 F5 配合 ⌘ 可以录入")
+    func fnKeyWithCommand() throws {
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: [.command, .function],
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                characters: String(Character(UnicodeScalar(0xF708)!)),
+                charactersIgnoringModifiers: String(Character(UnicodeScalar(0xF708)!)),
+                isARepeat: false,
+                keyCode: UInt16(kVK_F5)
+            )
+        )
+        let hotkey = try #require(Hotkey.from(event: event))
+        #expect(hotkey.keyCode == UInt32(kVK_F5))
+        #expect(hotkey.keySymbol == "F5")
+    }
+
+    @Test("所有四个修饰键同时按下")
+    func allModifiers() {
+        let hotkey = Hotkey(
+            keyCode: UInt32(kVK_ANSI_A),
+            carbonModifiers: UInt32(cmdKey | shiftKey | optionKey | controlKey)
+        )
+        #expect(hotkey.displayString == "⌃⌥⇧⌘A")
+        #expect(hotkey.cocoaModifiers == [.command, .shift, .option, .control])
+    }
+
+    @Test("keycaps 把修饰键和按键拆开成数组")
+    func keycapsBreaksIntoComponents() {
+        let hotkey = Hotkey(
+            keyCode: UInt32(kVK_ANSI_A),
+            carbonModifiers: UInt32(cmdKey | shiftKey)
+        )
+        #expect(hotkey.keycaps == ["⇧", "⌘", "A"])
+    }
+
+    @Test("carbonModifiers 把纯 fn 键排除（fn 不是合法修饰键）")
+    func fnFlagAloneNotRecognized() {
+        let flags: NSEvent.ModifierFlags = [.function]
+        let carbon = Hotkey.carbonModifiers(from: flags)
+        #expect(carbon == 0, "fn 不在 Carbon 四大修饰键里")
+    }
 }

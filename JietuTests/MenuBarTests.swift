@@ -201,6 +201,48 @@ struct MenuBarTests {
         #expect(recentMenu.items.first?.view is MenuHostingView<RecentHistoryMenuView>)
     }
 
+    // MARK: - 补充：权限状态字符串快照
+
+    @Test("权限状态文案只有 '已授权' 和 '未授权' 两种")
+    @MainActor
+    func permissionStatusStringsAreConsistent() {
+        let menuBar = MenuBarController()
+        menuBar.refresh()
+        let menu = menuBar.menuForTesting
+
+        // 屏幕录制
+        let screenRecordingItem = menu.items.first { $0.title.contains("屏幕录制权限") }
+        #expect(screenRecordingItem != nil, "菜单中应有屏幕录制权限状态项")
+        if let item = screenRecordingItem {
+            let valid = item.title == "屏幕录制权限：已授权" || item.title == "屏幕录制权限：未授权"
+            #expect(valid, "屏幕录制权限状态应为 '已授权' 或 '未授权'，实际为 '\(item.title)'")
+        }
+
+        // 辅助功能
+        let axItem = menu.items.first { $0.title.contains("辅助功能权限") }
+        #expect(axItem != nil, "菜单中应有辅助功能权限状态项")
+        if let item = axItem {
+            let valid = item.title == "辅助功能权限：已授权" || item.title == "辅助功能权限：未授权"
+            #expect(valid, "辅助功能权限状态应为 '已授权' 或 '未授权'，实际为 '\(item.title)'")
+        }
+    }
+
+    @Test("权限状态项不可点击")
+    @MainActor
+    func permissionStatusItemsAreDisabled() {
+        let menuBar = MenuBarController()
+        menuBar.refresh()
+        let menu = menuBar.menuForTesting
+
+        let items = menu.items.filter {
+            $0.title.contains("屏幕录制权限：") || $0.title.contains("辅助功能权限：")
+        }
+        #expect(items.count == 2)
+        for item in items {
+            #expect(!item.isEnabled, "\(item.title) 应为禁用（纯展示状态）")
+        }
+    }
+
     @Test("最近截图子菜单高度根据截图条数动态扩展且受屏幕限制")
     @MainActor
     func recentMenuHeightDynamicallyScales() {
