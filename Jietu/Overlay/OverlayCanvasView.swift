@@ -2874,21 +2874,21 @@ final class OverlayCanvasView: NSView {
         let horizontalSize = measureMainToolbar(vertical: false)
         if selection.minY - gap - horizontalSize.height >= bounds.minY + inset {
             placeHorizontal(main, size: horizontalSize, below: selection, inset: inset, gap: gap)
-            layoutOptions(beside: main.frame, vertical: false, inset: inset, gap: gap)
+            layoutOptions(beside: main.frame, side: nil, inset: inset, gap: gap)
             return
         }
 
         let verticalSize = measureMainToolbar(vertical: true)
         if let side = verticalDockSide(for: selection, mainSize: verticalSize, inset: inset, gap: gap) {
             placeVertical(main, size: verticalSize, on: side, selection: selection, inset: inset, gap: gap)
-            layoutOptions(beside: main.frame, vertical: true, inset: inset, gap: gap)
+            layoutOptions(beside: main.frame, side: side, inset: inset, gap: gap)
             return
         }
 
         // 兜底：左右也没有位置 → 横排贴到选区上方。
         let size = measureMainToolbar(vertical: false)
         placeHorizontal(main, size: size, below: selection, inset: inset, gap: gap, above: true)
-        layoutOptions(beside: main.frame, vertical: false, inset: inset, gap: gap)
+        layoutOptions(beside: main.frame, side: nil, inset: inset, gap: gap)
     }
 
     /// 量一次主工具栏在某个方向上的尺寸（`isVerticalLayout` 变了要让它先重新排一遍）。
@@ -2972,9 +2972,14 @@ final class OverlayCanvasView: NSView {
 
     /// 摆二级菜单：贴着主工具栏。
     ///
-    /// - 主栏在下 / 上（横排）：居中挂在主栏正下方，放不下就翻到主栏上面。
-    /// - 主栏在左 / 右（竖排）：挨着主栏、朝选区那一侧，顶部与主栏对齐。
-    private func layoutOptions(beside mainFrame: CGRect, vertical: Bool, inset: CGFloat, gap: CGFloat) {
+    /// - 横排（`side == nil`）：居中挂在主栏正下方，放不下就翻到主栏上面。
+    /// - 竖排：也跟着竖排，挂在主栏**外侧**（离选区远的那一边），顶部与主栏对齐。
+    private func layoutOptions(
+        beside mainFrame: CGRect,
+        side: VerticalDockSide?,
+        inset: CGFloat,
+        gap: CGFloat
+    ) {
         guard let options = optionsToolbarHost, let model = toolbarModel, model.isSubToolbarVisible else {
             optionsToolbarHost?.isHidden = true
             return
@@ -2983,10 +2988,9 @@ final class OverlayCanvasView: NSView {
         let size = visibleOptionsSize()
         guard size.width > 0, size.height > 0 else { return }
 
-        if vertical {
+        if let side {
             // 主栏贴着选区，二级菜单挂在主栏**外侧**（离选区远的那一边），别挤在选区和主栏中间。
-            let mainIsOnRight = mainFrame.midX > bounds.midX
-            var x = mainIsOnRight ? mainFrame.maxX + gap : mainFrame.minX - gap - size.width
+            var x = side == .right ? mainFrame.maxX + gap : mainFrame.minX - gap - size.width
             x = min(max(x, bounds.minX + inset), max(bounds.minX + inset, bounds.maxX - size.width - inset))
             let y = min(
                 max(mainFrame.maxY - size.height, bounds.minY + inset),

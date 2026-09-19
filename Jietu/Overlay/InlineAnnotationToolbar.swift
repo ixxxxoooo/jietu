@@ -259,32 +259,12 @@ struct InlineOptionsToolbar: View {
 
     var body: some View {
         if model.isSubToolbarVisible {
-            HStack(spacing: Theme.Spacing.md) {
-                if model.showScroll {
-                    scrollOptions
-                } else if let tool = model.tool {
-                    switch tool {
-                    case .rectangle, .ellipse:
-                        shapeOptions
-                    case .arrow:
-                        arrowOptions
-                    case .line, .pen:
-                        lineOptions
-                    case .highlight:
-                        highlightOptions
-                    case .text:
-                        textOptions
-                    case .counter:
-                        counterOptions
-                    case .pixelate, .blur:
-                        mosaicOptions
-                    case .eraser:
-                        eraserOptions
-                    case .crop:
-                        cropOptions
-                    case .select, .spotlight:
-                        EmptyView()
-                    }
+            Group {
+                // 主工具栏竖排（停到选区左右侧）时，二级菜单也跟着竖排，一起贴在旁边。
+                if model.isVerticalLayout {
+                    VStack(spacing: Theme.Spacing.sm) { content }
+                } else {
+                    HStack(spacing: Theme.Spacing.md) { content }
                 }
             }
             .padding(.horizontal, Theme.Spacing.lg)
@@ -294,10 +274,39 @@ struct InlineOptionsToolbar: View {
         }
     }
 
+    @ViewBuilder private var content: some View {
+        if model.showScroll {
+            scrollOptions
+        } else if let tool = model.tool {
+            switch tool {
+            case .rectangle, .ellipse:
+                shapeOptions
+            case .arrow:
+                arrowOptions
+            case .line, .pen:
+                lineOptions
+            case .highlight:
+                highlightOptions
+            case .text:
+                textOptions
+            case .counter:
+                counterOptions
+            case .pixelate, .blur:
+                mosaicOptions
+            case .eraser:
+                eraserOptions
+            case .crop:
+                cropOptions
+            case .select, .spotlight:
+                EmptyView()
+            }
+        }
+    }
+
     // MARK: - Sub Options
 
     private var shapeOptions: some View {
-        HStack(spacing: Theme.Spacing.md) {
+        optionGroup {
             HUDSlider(value: $model.lineWidth, range: 1...24, step: 1)
             vSeparator
             ColorSwatchesView(selectedColor: $model.color)
@@ -315,7 +324,7 @@ struct InlineOptionsToolbar: View {
     }
 
     private var arrowOptions: some View {
-        HStack(spacing: Theme.Spacing.md) {
+        optionGroup {
             HUDSlider(value: $model.lineWidth, range: 1...24, step: 1)
             vSeparator
             ColorSwatchesView(selectedColor: $model.color)
@@ -325,7 +334,7 @@ struct InlineOptionsToolbar: View {
     }
 
     private var lineOptions: some View {
-        HStack(spacing: Theme.Spacing.md) {
+        optionGroup {
             HUDSlider(value: $model.lineWidth, range: 1...24, step: 1)
             vSeparator
             ColorSwatchesView(selectedColor: $model.color)
@@ -334,7 +343,7 @@ struct InlineOptionsToolbar: View {
 
     /// 荧光笔用的是它自己的色槽与笔尖粗细（跟画笔 / 箭头互不影响）。
     private var highlightOptions: some View {
-        HStack(spacing: Theme.Spacing.md) {
+        optionGroup {
             HUDSlider(
                 value: $model.highlightLineWidth,
                 range: Annotation.highlightWidthRange,
@@ -346,7 +355,7 @@ struct InlineOptionsToolbar: View {
     }
 
     private var textOptions: some View {
-        HStack(spacing: Theme.Spacing.md) {
+        optionGroup {
             HUDSlider(value: $model.fontSize, range: 12...72, step: 1)
             vSeparator
             ColorSwatchesView(selectedColor: $model.color)
@@ -363,7 +372,7 @@ struct InlineOptionsToolbar: View {
     }
 
     private var counterOptions: some View {
-        HStack(spacing: Theme.Spacing.md) {
+        optionGroup {
             HUDSlider(value: $model.lineWidth, range: 2...16, step: 1)
             vSeparator
             ColorSwatchesView(selectedColor: $model.color)
@@ -371,7 +380,7 @@ struct InlineOptionsToolbar: View {
     }
 
     private var mosaicOptions: some View {
-        HStack(spacing: Theme.Spacing.md) {
+        optionGroup {
             Text("马赛克颗粒度")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -384,7 +393,7 @@ struct InlineOptionsToolbar: View {
     }
 
     private var eraserOptions: some View {
-        HStack(spacing: Theme.Spacing.md) {
+        optionGroup {
             Text("橡皮大小")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -393,7 +402,7 @@ struct InlineOptionsToolbar: View {
     }
 
     private var scrollOptions: some View {
-        HStack(spacing: Theme.Spacing.md) {
+        optionGroup {
             Image(systemName: "scroll")
                 .font(Theme.Typography.bar)
                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -418,7 +427,7 @@ struct InlineOptionsToolbar: View {
     }
 
     private var cropOptions: some View {
-        HStack(spacing: Theme.Spacing.md) {
+        optionGroup {
             Text("拖拽框选要保留的区域（拖控制点微调）")
                 .font(Theme.Typography.bar)
                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -455,11 +464,28 @@ struct InlineOptionsToolbar: View {
         }
     }
 
+    /// 选项之间的分组分隔线：横排时是竖线，竖排时是横线（跟着二级菜单的走向走）。
+    /// 一组选项：横排 / 竖排跟着二级菜单的走向走（主工具栏竖排时二级菜单也竖着排）。
+    @ViewBuilder private func optionGroup<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        if model.isVerticalLayout {
+            VStack(spacing: Theme.Spacing.sm, content: content)
+        } else {
+            HStack(spacing: Theme.Spacing.md, content: content)
+        }
+    }
+
     private var vSeparator: some View {
         Rectangle()
             .fill(Theme.Colors.separator)
-            .frame(width: Theme.Size.hairline, height: 16)
-            .padding(.horizontal, 2)
+            .frame(
+                width: model.isVerticalLayout ? 16 : Theme.Size.hairline,
+                height: model.isVerticalLayout ? Theme.Size.hairline : 16
+            )
+            .padding(
+                model.isVerticalLayout
+                    ? EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0)
+                    : EdgeInsets(top: 0, leading: 2, bottom: 0, trailing: 2)
+            )
     }
 
     /// 滚动截图的两个选项：图标 + 文字，点一下就用这个模式开跑。

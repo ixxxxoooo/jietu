@@ -587,6 +587,41 @@ struct InlineToolbarTests {
         #expect(vertical.height > horizontal.height, "竖排更高")
     }
 
+    @Test("二级菜单也能竖排：竖排时更窄更高")
+    func optionsToolbarSupportsVerticalLayout() {
+        let model = InlineToolbarModel()
+        model.tool = .text
+        let host = NSHostingView(rootView: InlineOptionsToolbar(model: model))
+        host.layoutSubtreeIfNeeded()
+        let horizontal = host.fittingSize
+
+        model.isVerticalLayout = true
+        host.layoutSubtreeIfNeeded()
+        let vertical = host.fittingSize
+
+        #expect(horizontal.width > horizontal.height, "横排本该是宽的一条")
+        #expect(vertical.width < horizontal.width, "竖排更窄")
+        #expect(vertical.height > horizontal.height, "竖排更高")
+    }
+
+    @Test("工具栏摆放：竖排时二级菜单也竖着贴在主栏旁边")
+    func optionsToolbarSitsBesideVerticalMainBar() async throws {
+        // 贴屏幕底部、靠左的选区：下面没位置，右侧有足够位置摆「主栏 + 二级菜单」这一列。
+        let canvas = Self.makeInlineRegionCanvas(region: CGRect(x: 20, y: 20, width: 300, height: 200))
+        #expect(canvas.debugSelectTool(.text))
+        // 二级菜单是随光标工具变化之后（下一个主队列周期）才重排的，等它跑完。
+        await Self.drainMainQueue()
+
+        let layout = canvas.debugToolbarLayout
+        #expect(layout.isVertical, "主栏竖排")
+        let options = try #require(layout.options)
+        #expect(
+            abs(options.minX - (layout.main.maxX + 10)) <= 1,
+            "二级菜单要竖着贴在主栏外侧（主栏 maxX=\(layout.main.maxX) → 二级 minX≈\(layout.main.maxX + 10)）"
+        )
+        #expect(abs(options.maxY - layout.main.maxY) <= 1, "与主栏顶部对齐")
+    }
+
     @Test("工具栏摆放：下面放得下就横排贴在选区下面")
     func toolbarDocksBelowWhenThereIsRoom() {
         // 图 600×400 px → 300×200 点居中（选区下方还有 ~330pt）。
