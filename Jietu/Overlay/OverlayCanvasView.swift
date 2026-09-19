@@ -397,8 +397,47 @@ final class OverlayCanvasView: NSView {
         return annotation.id
     }
 
-    /// 自检用：等价于点文字二级菜单里的「描边 / 标注」开关。
+    /// 自检用：现在有没有正在输入的文本框。
+    var debugIsEditingText: Bool { textField != nil }
+
+    /// 自检用：当前那条文字标注（按落定顺序取最后一条）。
+    var debugLastTextAnnotation: Annotation? {
+        annotations.last(where: { if case .text = $0.kind { return true } else { return false } })
+    }
+
+    /// 自检用：往正在输入的文本框里打字（等价于用户敲键盘）。
+    @discardableResult
+    func debugTypeText(_ text: String) -> Bool {
+        guard let field = textField else { return false }
+        field.stringValue = text
+        fitInlineTextField()
+        return true
+    }
+
+    /// 自检用：等价于点文字二级菜单里的「描边 / 标注」开关（含那条「刷到选中文字」的回调）。
     func debugSetTextStyle(hasStroke: Bool, hasCallout: Bool) {
+        debugSetTextStroke(hasStroke)
+        debugSetTextCallout(hasCallout)
+    }
+
+    /// 自检用：等价于点一下「描边」复选框。
+    func debugSetTextStroke(_ on: Bool) {
+        guard let model = toolbarModel else { return }
+        model.textHasStroke = on
+        model.onTextStyleChange?(.stroke)
+    }
+
+    /// 自检用：等价于点一下「标注」复选框。
+    func debugSetTextCallout(_ on: Bool) {
+        guard let model = toolbarModel else { return }
+        model.textHasCallout = on
+        model.onTextStyleChange?(.callout)
+    }
+
+    /// 自检用：只改工具栏上的取值、**不**触发回调。
+    ///
+    /// 用来模拟「工具栏当前值 ≠ 选中那条文字上的值」这种状态，验证别的东西变化时不会去覆盖它。
+    func debugSetTextStyleWithoutApplying(hasStroke: Bool, hasCallout: Bool) {
         toolbarModel?.textHasStroke = hasStroke
         toolbarModel?.textHasCallout = hasCallout
     }
@@ -2599,6 +2638,9 @@ final class OverlayCanvasView: NSView {
         model.onUndo = { [weak self] in self?.inlineUndo() }
         model.onRedo = { [weak self] in self?.inlineRedo() }
         model.onApplyCrop = { [weak self] in self?.applyCrop() }
+        model.onTextStyleChange = { [weak self] effect in
+            self?.applyTextStyleToSelection(effect)
+        }
         model.onCancelCrop = { [weak self] in self?.cancelCrop() }
         model.onSave = { [weak self] in
             guard let self, let image = self.currentAnnotatedImage() else { return }
@@ -2734,8 +2776,7 @@ final class OverlayCanvasView: NSView {
             _ = model.tool
             _ = model.showScroll
             _ = model.isLiveTextActive
-            // 正在输入（文本框）或选中了一条文字：都要盯着文字样式，改了当场刷上去。
-            if self.textField != nil || self.selectedTextID != nil {
+            if self.textField != nil {
                 _ = model.fontSize
                 _ = model.color
                 _ = model.textHasStroke
@@ -2748,7 +2789,7 @@ final class OverlayCanvasView: NSView {
                     self.applyInlineTextStyle(field, model: model)
                     self.fitInlineTextField()
                 }
-                self.applyTextStyleToSelection(model)
+
                 if model.tool == .crop && self.cropInitialState == nil {
                     self.cropInitialState = Snapshot(
                         annotations: self.annotations,
@@ -2774,29 +2815,24 @@ final class OverlayCanvasView: NSView {
         }
     }
 
-    /// 选中的那条文字（没选或选中的不是文字 → nil）。
-    private var selectedTextID: UUID? {
-        guard let selectedID,
-            let annotation = annotations.first(where: { $0.id == selectedID }),
-            case .text = annotation.kind
-        else { return nil }
-        return selectedID
-    }
-
-    /// 把工具栏上刚改的文字样式**当场**刷到选中的那条文字上。
+    /// 用户点了文字二级菜单里的「描边 / 标注」：把这一项**当场**刷到选中的那条文字上。
     ///
-    /// 用户的期望：选中一段文字后点「描边 / 标注」要立刻看见效果，而不是等下一次输入文字才生效。
+    /// 只由那个开关的回调触发（`onTextStyleChange`），**不能**挂在工具栏的通用观察上——
+    /// 否则选中一条文字之后，换个工具 / 调个颜色都会拿工具栏当前值去覆盖它，把已有样式改坏。
+    /// 也只动被点的那一项：点「描边」不该顺手把这条文字上的「标注」也改掉。
     /// 正在输入文字时走的是文本框那条路（`applyInlineTextStyle`），这里只管「没在输入、但选中了一条文字」。
-    private func applyTextStyleToSelection(_ model: InlineToolbarModel) {
-        guard textField == nil, let selectedID,
+    private func applyTextStyleToSelection(_ effect: InlineToolbarModel.TextEffect) {
+        guard textField == nil, let model = toolbarModel, let selectedID,
             let index = annotations.firstIndex(where: { $0.id == selectedID }),
             case .text = annotations[index].kind
         else { return }
-        let updated = annotations[index]
-            .withTextStroke(model.textHasStroke)
-            .withTextCallout(model.textHasCallout)
+        let updated: Annotation
+        switch effect {
+        case .stroke: updated = annotations[index].withTextStroke(model.textHasStroke)
+        case .callout: updated = annotations[index].withTextCallout(model.textHasCallout)
+        }
         guard updated != annotations[index] else { return }
-        // 描边 / 标注是离散开关（不像滑块会连着刷），一次切换算一步撤销。
+        // 开关是离散的（不像滑块会连着刷），一次切换算一步撤销。
         pushUndo()
         annotations[index] = updated
         updateAnnotationLayer()
@@ -2914,7 +2950,8 @@ final class OverlayCanvasView: NSView {
         inset: CGFloat,
         gap: CGFloat
     ) {
-        let x = side == .right ? bounds.maxX - inset - size.width : bounds.minX + inset
+        // **贴着选区**摆（不是贴屏幕边）：选区右边放不下才轮到左边，两边都放不下则走兜底。
+        let x = side == .right ? selection.maxX + gap : selection.minX - gap - size.width
         var y = selection.midY - size.height / 2
         y = min(max(y, bounds.minY + inset), max(bounds.minY + inset, bounds.maxY - size.height - inset))
         main.frame = CGRect(origin: CGPoint(x: x, y: y), size: size)
@@ -2947,9 +2984,9 @@ final class OverlayCanvasView: NSView {
         guard size.width > 0, size.height > 0 else { return }
 
         if vertical {
-            // 主栏贴右边 → 二级菜单挂在它左边；贴左边 → 挂在它右边。
+            // 主栏贴着选区，二级菜单挂在主栏**外侧**（离选区远的那一边），别挤在选区和主栏中间。
             let mainIsOnRight = mainFrame.midX > bounds.midX
-            var x = mainIsOnRight ? mainFrame.minX - gap - size.width : mainFrame.maxX + gap
+            var x = mainIsOnRight ? mainFrame.maxX + gap : mainFrame.minX - gap - size.width
             x = min(max(x, bounds.minX + inset), max(bounds.minX + inset, bounds.maxX - size.width - inset))
             let y = min(
                 max(mainFrame.maxY - size.height, bounds.minY + inset),

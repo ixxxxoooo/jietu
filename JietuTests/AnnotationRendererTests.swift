@@ -7,6 +7,27 @@ import Testing
 /// @author ixxxxoooo
 @Suite("标注渲染")
 struct AnnotationRendererTests {
+    /// 整张图的像素数据（用于「两张图到底一不一样」这种全量比较）。
+    static func pixelData(_ image: CGImage) -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        guard
+            let context = CGContext(
+                data: &bytes,
+                width: image.width,
+                height: image.height,
+                bitsPerComponent: 8,
+                bytesPerRow: image.width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { return [] }
+        context.draw(
+            image,
+            in: CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        )
+        return bytes
+    }
+
     private func sample(_ image: CGImage, _ x: Int, _ y: Int) throws -> PixelSampler.Sample {
         try #require(PixelSampler.sample(image, atPixel: CGPoint(x: x, y: y)))
     }
@@ -128,8 +149,9 @@ struct AnnotationRendererTests {
 
     @Test("矩形圆角：角上不再是实心，方角则相反")
     func rectangleCornerStyle() throws {
-        let base = TestImage.solidBlack(side: 40)
-        let rect = CGRect(x: 4, y: 4, width: 32, height: 32)
+        // 用大一点的矩形：半径 = 短边 × 0.08，方框越大角上倒掉的那块越明显，像素断言才不飘。
+        let base = TestImage.solidBlack(side: 90)
+        let rect = CGRect(x: 5, y: 5, width: 80, height: 80)
         let square = Annotation(kind: .rectangle(rect), color: .white, lineWidth: 3)
         let rounded = Annotation(
             kind: .rectangle(rect),
@@ -142,28 +164,51 @@ struct AnnotationRendererTests {
         let roundedImage = try #require(AnnotationRenderer.render(base: base, annotations: [rounded]))
 
         // 取矩形左上角那个像素：方角的角正落在描边上（亮），圆角已经倒掉（暗）。
-        // 半径 5.76 + 线宽 3 → 角点离圆角弧还有 2.4px，够干净。
-        let cornerOfSquare = try sample(squareImage, 4, 4)
-        let cornerOfRounded = try sample(roundedImage, 4, 4)
+        // 半径 6.4 + 线宽 3 → 角点离圆角弧还有 2.6px，够干净。
+        let cornerOfSquare = try sample(squareImage, 5, 5)
+        let cornerOfRounded = try sample(roundedImage, 5, 5)
         #expect(cornerOfSquare.red >= 180, "方角的角应该是描边")
         #expect(cornerOfRounded.red <= 90, "圆角把角倒掉了（角上还会有一点点抗锯齿）")
 
         // 四条边中点仍应被描边压住：圆角只倒角，不是把整个矩形缩一圈。
-        let edgeOfRounded = try sample(roundedImage, 20, 4)
+        let edgeOfRounded = try sample(roundedImage, 45, 5)
         #expect(edgeOfRounded.red >= 200)
 
-        // 半径按短边比例算，方角恒为 0。
+        // 半径按短边比例算，方角恒为 0；比例要小（0.08，不是一眼看上去像胶囊）。
         #expect(RectCornerStyle.radius(for: rect, style: .square) == 0)
         #expect(
-            abs(RectCornerStyle.radius(for: rect, style: .rounded) - 32 * 0.18) < 0.001
+            abs(RectCornerStyle.radius(for: rect, style: .rounded) - 80 * 0.08) < 0.001
         )
+        #expect(RectCornerStyle.roundedRadiusRatio <= 0.1, "圆角要收着点，别太大")
+    }
+
+    @Test("文字：描边与标注真的画进成图（不是只改了旗标）")
+    func textEffectsChangeRenderedPixels() throws {
+        // 底色中灰、字用红色：这样描边走的是「白描边」（见 `drawText` 的对比色规则），
+        // 在灰底上真的看得见——用纯黑底 + 白字测会得到「黑描边配黑底」，测不出东西。
+        let base = TestImage.make(width: 90, height: 90) { _, _ in (128, 128, 128) }
+        let make: (Bool, Bool) -> Annotation = { stroke, callout in
+            Annotation(
+                kind: .text(origin: CGPoint(x: 26, y: 40), string: "星", fontSize: 26),
+                color: .red,
+                lineWidth: 3,
+                textHasStroke: stroke,
+                textHasCallout: callout
+            )
+        }
+        let plain = try #require(AnnotationRenderer.render(base: base, annotations: [make(false, false)]))
+        let stroked = try #require(AnnotationRenderer.render(base: base, annotations: [make(true, false)]))
+        let callout = try #require(AnnotationRenderer.render(base: base, annotations: [make(false, true)]))
+
+        #expect(Self.pixelData(plain) != Self.pixelData(stroked), "描边要在成图里看得见")
+        #expect(Self.pixelData(plain) != Self.pixelData(callout), "标注底板要在成图里看得见")
     }
 
     @Test("矩形圆角：填充模式下的四个角也是圆角")
     func roundedRectangleKeepsFillMode() throws {
-        let base = TestImage.solidBlack(side: 40)
+        let base = TestImage.solidBlack(side: 90)
         let annotation = Annotation(
-            kind: .rectangle(CGRect(x: 4, y: 4, width: 32, height: 32)),
+            kind: .rectangle(CGRect(x: 5, y: 5, width: 80, height: 80)),
             color: .red,
             lineWidth: 3,
             shapeFillMode: .opaque,
@@ -171,9 +216,9 @@ struct AnnotationRendererTests {
         )
         let rendered = try #require(AnnotationRenderer.render(base: base, annotations: [annotation]))
 
-        let center = try sample(rendered, 20, 20)
+        let center = try sample(rendered, 45, 45)
         #expect(center.red >= 200, "里面照旧填充")
-        let corner = try sample(rendered, 4, 4)
+        let corner = try sample(rendered, 5, 5)
         #expect(corner.red <= 90, "角上被倒掉")
     }
 

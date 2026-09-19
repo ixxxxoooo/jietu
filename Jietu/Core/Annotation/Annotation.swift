@@ -155,7 +155,8 @@ enum RectCornerStyle: String, CaseIterable, Identifiable, Codable {
     }
 
     /// 圆角半径按短边的比例算：矩形拖大拖小，观感一致（小矩形也不会倒成胶囊）。
-    static let roundedRadiusRatio: CGFloat = 0.18
+    /// 取一个不大的比例——圆角只是让方框显得柔和些，别一眼看上去像胶囊。
+    static let roundedRadiusRatio: CGFloat = 0.08
 
     /// 给定矩形实际用的圆角半径（方角为 0）。
     static func radius(for rect: CGRect, style: RectCornerStyle) -> CGFloat {

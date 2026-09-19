@@ -49,6 +49,17 @@ final class InlineToolbarModel {
     var onRecord: (() -> Void)?
     var onConfirm: (() -> Void)?
     var onCancel: (() -> Void)?
+    /// 用户点了文字二级菜单里的「描边 / 标注」——只在**真的点了**的时候报，并说明点的是哪一项。
+    ///
+    /// 这样画布只把这一项刷到选中的那条文字上：别的工具栏变化（换工具、调颜色）不去动它，
+    /// 点「描边」也不会顺手把这条文字上的「标注」覆盖掉。
+    var onTextStyleChange: ((TextEffect) -> Void)?
+
+    /// 文字的两个开关式特效。
+    enum TextEffect {
+        case stroke
+        case callout
+    }
     var onApplyCrop: (() -> Void)?
     var onCancelCrop: (() -> Void)?
 
@@ -342,9 +353,11 @@ struct InlineOptionsToolbar: View {
             vSeparator
             HUDCheckboxButton(title: "描边", isSelected: model.textHasStroke) {
                 model.textHasStroke.toggle()
+                model.onTextStyleChange?(.stroke)
             }
             HUDCheckboxButton(title: "标注", isSelected: model.textHasCallout) {
                 model.textHasCallout.toggle()
+                model.onTextStyleChange?(.callout)
             }
         }
     }

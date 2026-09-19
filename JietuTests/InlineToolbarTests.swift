@@ -606,7 +606,10 @@ struct InlineToolbarTests {
         let side = Self.makeInlineRegionCanvas(region: CGRect(x: 200, y: 20, width: 600, height: 200))
         let layout = side.debugToolbarLayout
         #expect(layout.isVertical, "下面放不下就该竖排")
-        #expect(layout.main.maxX > 900, "停到右侧（贴画布右边缘）")
+        #expect(
+            abs(layout.main.minX - (side.debugSelection!.maxX + 10)) <= 1,
+            "要**贴着选区**右侧摆（选区 maxX=800 → 工具栏 minX≈810），不是贴到屏幕边上去"
+        )
 
         // 横跨整屏的选区：左右也塞不下 → 退回选区上方。
         let wide = Self.makeInlineRegionCanvas(region: CGRect(x: 20, y: 20, width: 960, height: 200))
@@ -631,6 +634,70 @@ struct InlineToolbarTests {
         let updated = try #require(canvas.debugAnnotation(id))
         #expect(updated.textHasStroke, "选中的文字要当场带上描边，而不是等下一次输入")
         #expect(updated.textHasCallout, "标注气泡同理")
+    }
+
+    @Test("文字：正在输入时切描边，落定之后这条文字就是带描边的")
+    func textStrokeAppliesToLiveFieldThenCommit() async throws {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        #expect(canvas.debugSelectTool(.text))
+
+        // 和用户一样：点一下开始输入、打字。
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 400, y: 400)))
+        canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 400, y: 400)))
+        #expect(canvas.debugIsEditingText, "点了该出现输入框")
+        #expect(canvas.debugTypeText("星"))
+
+        // 输入框还开着的时候点「描边」。
+        canvas.debugSetTextStyle(hasStroke: true, hasCallout: false)
+        await Self.drainMainQueue()
+        #expect(canvas.debugIsEditingText, "切样式不该把输入框弄没")
+
+        // 落定 → 这条文字带描边。
+        canvas.mouseDown(with: Self.mouse(.leftMouseDown, at: NSPoint(x: 850, y: 200)))
+        canvas.mouseUp(with: Self.mouse(.leftMouseUp, at: NSPoint(x: 850, y: 200)))
+        let annotation = try #require(canvas.debugLastTextAnnotation)
+        #expect(annotation.textHasStroke, "刚切了描边，落定后就该是描边的字")
+        if case .text(_, let string, _) = annotation.kind {
+            #expect(string == "星")
+        } else {
+            Issue.record("最后一条不是文字")
+        }
+    }
+
+    @Test("文字：点「描边」不会顺手把这条文字的「标注」也改掉")
+    func strokeToggleLeavesCalloutAlone() throws {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        // 造一条「带标注」的文字。
+        canvas.debugSetTextStyle(hasStroke: false, hasCallout: true)
+        let id = try #require(canvas.debugInsertText("星", atViewPoint: CGPoint(x: 300, y: 400)))
+        #expect(canvas.debugAnnotation(id)?.textHasCallout == true)
+
+        // 工具栏上的「标注」和这条文字不一致（比如重启后默认是关的），而用户只点了「描边」。
+        canvas.debugSetTextStyleWithoutApplying(hasStroke: false, hasCallout: false)
+        canvas.debugSetTextStroke(true)
+
+        let annotation = try #require(canvas.debugAnnotation(id))
+        #expect(annotation.textHasStroke, "点的就是描边，要生效")
+        #expect(annotation.textHasCallout, "没点标注，不能把它抹掉")
+    }
+
+    @Test("文字：换工具等无关变化不会把选中文字的描边 / 标注改掉")
+    func unrelatedToolbarChangesDoNotClobberTextStyle() async throws {
+        let canvas = Self.makeRestoredCanvas(canvas: CGSize(width: 1000, height: 800))
+        // 造一条「带描边 + 标注」的文字。
+        canvas.debugSetTextStyle(hasStroke: true, hasCallout: true)
+        let id = try #require(canvas.debugInsertText("星", atViewPoint: CGPoint(x: 300, y: 400)))
+        #expect(canvas.debugSelectedID == id)
+
+        // 工具栏上的取值和这条文字不一致（用户可能刚在别处调过），但不该因此被抹掉。
+        canvas.debugSetTextStyleWithoutApplying(hasStroke: false, hasCallout: false)
+        #expect(canvas.debugSelectTool(.rectangle))
+        canvas.debugSelectTool(.text)   // 再换回来
+        await Self.drainMainQueue()
+
+        let annotation = try #require(canvas.debugAnnotation(id))
+        #expect(annotation.textHasStroke, "换工具不该把描边抹掉")
+        #expect(annotation.textHasCallout, "换工具不该把标注抹掉")
     }
 
     // MARK: - 就地编辑测试脚手架
