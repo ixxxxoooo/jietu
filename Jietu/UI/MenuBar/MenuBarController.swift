@@ -123,7 +123,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         menu.addItem(recentCaptureItem())
-        menu.addItem(item("打开截图文件夹", #selector(handleOpenFolder), symbol: "folder"))
+        menu.addItem(item("打开保存文件夹", #selector(handleOpenFolder), symbol: "folder"))
 
         menu.addItem(.separator())
 
@@ -226,7 +226,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func recentCaptureItem() -> NSMenuItem {
-        let parent = NSMenuItem(title: "最近截图", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: "最近记录", action: nil, keyEquivalent: "")
         parent.image = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: nil)
         parent.submenu = recentMenu
         return parent
@@ -267,7 +267,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         // 窗口式阴影，跟菜单本身完全不是一回事（用户报的「显示异常」就是它）。
         // 一条原生的灰字菜单项就够了：和「暂无…」这种系统写法一致。
         guard !items.isEmpty else {
-            let empty = NSMenuItem(title: "暂无最近截图", action: nil, keyEquivalent: "")
+            let empty = NSMenuItem(title: "暂无最近记录", action: nil, keyEquivalent: "")
             empty.isEnabled = false
             recentMenu.addItem(empty)
             return

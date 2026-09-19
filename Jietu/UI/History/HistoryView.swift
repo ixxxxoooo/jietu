@@ -12,6 +12,13 @@ struct HistoryItem: Identifiable, Sendable {
     let url: URL?
     /// 会话内截图的原始位图（可选）。
     let cgImage: CGImage?
+    /// 录屏条目：能被播放器打开的视频本体（截图条目为 nil）。
+    var videoURL: URL?
+    /// 录屏时长（秒），卡片上那枚「▶ 0:12」角标用它。
+    var videoDuration: TimeInterval?
+
+    /// 这是不是一段录屏。
+    var isVideo: Bool { videoURL != nil }
 
     var resolutionDescription: String? {
         if let cgImage {
@@ -116,7 +123,9 @@ struct HistoryCardView: View {
 
                 Spacer(minLength: 4)
 
-                if let info = item.resolutionDescription ?? item.fileSizeDescription {
+                if let info = item.isVideo
+                    ? item.fileSizeDescription : (item.resolutionDescription ?? item.fileSizeDescription)
+                {
                     Text(info)
                         .font(Theme.Typography.numeric)
                         .foregroundStyle(Theme.Colors.textTertiary)
@@ -141,6 +150,21 @@ struct HistoryCardView: View {
                         .font(Theme.Typography.rowSubtitle)
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
+
+                // 录屏条目：封面正中挂一枚「▶ 0:12」——一眼看出这是段视频、多长
+                // （和录屏收工那张浮窗卡片同一套语言）。
+                if let duration = item.videoDuration {
+                    HStack(spacing: 4) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text(QuickAccessVideoView.durationText(duration))
+                            .font(Theme.Typography.numeric)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .frame(height: 20)
+                    .background(Capsule().fill(.black.opacity(0.55)))
+                }
             }
             .overlay(
                 shape.strokeBorder(
@@ -153,7 +177,9 @@ struct HistoryCardView: View {
             HStack(spacing: 8) {
                 Spacer()
 
-                if onCopy != nil {
+                // 录屏条目不显示「复制」：那是复制位图的按钮，对 mp4 没意义
+                // （文件本身可以拖出去，或在访达里拿）。
+                if onCopy != nil, !item.isVideo {
                     Button {
                         onCopy?(item)
                         copied = true
@@ -272,7 +298,7 @@ struct RecentHistoryMenuView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.Colors.accent)
 
-            Text("最近截图")
+            Text("最近记录")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.Colors.textPrimary)
 
@@ -296,7 +322,7 @@ struct RecentHistoryMenuView: View {
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
                 .buttonStyle(.plain)
-                .help("打开截图文件夹")
+                .help("打开保存文件夹")
             }
 
             if let onClear, !items.isEmpty {
@@ -320,10 +346,10 @@ struct RecentHistoryMenuView: View {
                 Image(systemName: "photo.on.rectangle.angled")
                     .font(.system(size: 26))
                     .foregroundStyle(Theme.Colors.textSecondary.opacity(0.6))
-                Text("暂无最近截图")
+                Text("暂无最近记录")
                     .font(Theme.Typography.rowSubtitle)
                     .foregroundStyle(Theme.Colors.textSecondary)
-                Text("截图后会自动展示在这里")
+                Text("截图与录屏都会自动展示在这里")
                     .font(.system(size: 10))
                     .foregroundStyle(Theme.Colors.textTertiary)
             }

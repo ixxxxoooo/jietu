@@ -247,6 +247,12 @@ extension AppDelegate {
 
     /// 打开历史某一项进入标注（居中原地编辑）。
     func openHistoryItem(_ item: HistoryItem) {
+        // 录屏条目：点它就播（系统快速查看，与收工浮窗卡片上的「播放」同一套）。
+        // 别往标注编辑器送——那是图片的东西。
+        if let videoURL = item.videoURL {
+            VideoQuickLookPresenter.shared.present(videoURL)
+            return
+        }
         if let cgImage = item.cgImage {
             openInlineEditor(cgImage, allowsCrop: true)
             return
@@ -274,16 +280,20 @@ extension AppDelegate {
 
         // 落盘历史：唯一的那份（重启后全靠它）。
         for entry in HistoryStore.shared.entries {
-            let url = entry.displayURL
+            let url = entry.openURL
             guard !seenURLs.contains(url) else { continue }
             seenURLs.insert(url)
             result.append(
                 HistoryItem(
                     id: entry.id,
                     date: entry.date,
-                    image: HistoryThumbnailCache.shared.image(for: url),
+                    // 缩略图取**历史目录里那份**：录屏是封面 PNG（本体在保存目录，不进历史）。
+                    image: HistoryThumbnailCache.shared.image(for: entry.historyURL),
+                    // 录屏条目：url 指视频本体（打开 / 在访达中显示都该落到它上面）。
                     url: url,
-                    cgImage: nil
+                    cgImage: nil,
+                    videoURL: entry.videoURL,
+                    videoDuration: entry.videoDuration
                 )
             )
         }

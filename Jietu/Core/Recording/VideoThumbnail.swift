@@ -27,4 +27,21 @@ enum VideoThumbnail {
         guard let image = try? await generator.image(at: time).image else { return nil }
         return (image, duration)
     }
+
+    /// 取不到封面时的占位图（中性灰底）。
+    ///
+    /// 用途：录屏**必须**能进「最近记录」——封面只是好看，缺了它不能让整条记录消失
+    /// （用户报的「录完东西不见了」正是因为历史里什么都没有）。
+    static func placeholder(width: Int = 320, height: Int = 180) -> CGImage? {
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { return nil }
+        context.setFillColor(CGColor(gray: 0.24, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
+    }
 }

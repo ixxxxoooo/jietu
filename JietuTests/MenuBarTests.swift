@@ -144,7 +144,7 @@ struct MenuBarTests {
         #expect(model.isAccessibilityGranted == AccessibilityPermission.isGranted)
     }
 
-    @Test("截图历史合并到最近截图：主菜单保留最近截图且二级子菜单承载预览卡片")
+    @Test("截图历史合并到最近记录：主菜单保留入口且二级子菜单承载预览卡片")
     @MainActor
     func recentCapturesMergedWithHistory() {
         let menuBar = MenuBarController()
@@ -152,11 +152,11 @@ struct MenuBarTests {
         let menu = menuBar.menuForTesting
 
         let titles = menu.items.map(\.title)
-        #expect(titles.contains("最近截图"))
+        #expect(titles.contains("最近记录"))
         #expect(!titles.contains { $0.contains("截图历史") })
 
-        guard let recentItem = menu.items.first(where: { $0.title == "最近截图" }) else {
-            Issue.record("未找到「最近截图」菜单项")
+        guard let recentItem = menu.items.first(where: { $0.title == "最近记录" }) else {
+            Issue.record("未找到「最近记录」菜单项")
             return
         }
         #expect(recentItem.submenu != nil)
@@ -177,7 +177,7 @@ struct MenuBarTests {
         #expect(recentMenu.items.first?.view is MenuHostingView<RecentHistoryMenuView>)
     }
 
-    @Test("没有最近截图时，「最近截图」子菜单是一条原生灰字项（不再是一大块白卡片）")
+    @Test("没有最近记录时，「最近记录」子菜单是一条原生灰字项（不再是一大块白卡片）")
     @MainActor
     func emptyRecentMenuFallsBackToNativeItem() {
         let menuBar = MenuBarController()
@@ -187,7 +187,7 @@ struct MenuBarTests {
         let recentMenu = menuBar.recentMenuForTesting
         #expect(recentMenu.items.count == 1)
         let only = recentMenu.items[0]
-        #expect(only.title == "暂无最近截图")
+        #expect(only.title == "暂无最近记录")
         #expect(only.isEnabled == false)
         #expect(only.view == nil, "空状态不该再塞那张 320pt 宽的卡片视图")
 

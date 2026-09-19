@@ -339,6 +339,29 @@ extension AppDelegate {
                         + "，卡片 \(Int(cardSize.width))×\(Int(cardSize.height))"
                 )
                 budgets.append(("收工后浮窗出现视频卡", cardUp ? 0 : nil, 0))
+
+                // 5. 录屏必须进「最近记录」：浮窗卡片会到点自动关闭，历史是唯一的持久入口
+                //    （用户实测报的「录完东西不见了」就是因为录屏压根不进历史）。
+                // 记录是异步落的（要等封面），等一小会儿再查——不能靠「正好已经写完了」。
+                try? await Task.sleep(for: .milliseconds(900))
+                let recordedVideoPaths = HistoryStore.shared.entries.compactMap(\.videoPath)
+                // 两边都归一化再比：`/var` 与 `/private/var` 是同一个地方（见 HistoryStore）。
+                let mp4Path = mp4?.path
+                let inHistory = mp4Path.map { path in
+                    let normalized = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+                    return recordedVideoPaths.contains(normalized)
+                } ?? false
+                report.append(
+                    "录屏进了「最近记录」：\(inHistory ? "是" : "**否**")"
+                        + "（历史共 \(HistoryStore.shared.entries.count) 条）"
+                )
+                report.append(
+                    "  本次成片=\(mp4Path ?? "无")"
+                )
+                for path in recordedVideoPaths {
+                    report.append("  历史里的=\(path)")
+                }
+                budgets.append(("录屏进最近记录", inHistory ? 0 : nil, 0))
                 if cardUp,
                     let shots = try? await capture.captureAllDisplays(excludingOwnApplication: false),
                     let shot = shots.first(where: { $0.displayID == NSScreen.main?.jietu_displayID })

@@ -3,6 +3,12 @@ import Foundation
 
 /// 「最近截图」的一条记录。
 ///
+/// 两种条目：
+/// - **截图**：`historyPath` 指向历史目录里的原图 PNG；
+/// - **录屏**：`historyPath` 指向历史目录里的**封面缩略图**，视频本体在 `videoPath`
+///   （用户保存目录里那个 mp4）——本体动辄几十上百 MB，复制进历史等于占用翻倍，
+///   所以只记路径，用户挪走它就点不开了（和截图 `savedPath` 一个规矩）。
+///
 /// @author ixxxxoooo
 struct HistoryEntry: Codable, Identifiable, Hashable {
     let id: String
@@ -11,11 +17,21 @@ struct HistoryEntry: Codable, Identifiable, Hashable {
     let historyPath: String
     /// 用户「保存到磁盘」/ 另存为得到的那一份（可能没有）：打开、在访达中显示优先用它。
     var savedPath: String?
+    /// 录屏：视频本体在磁盘上的路径。截图条目为 nil。
+    var videoPath: String?
+    /// 录屏时长（秒），卡片与菜单上显示。
+    var videoDuration: TimeInterval?
 
     var historyURL: URL { URL(fileURLWithPath: historyPath) }
     var savedURL: URL? { savedPath.map { URL(fileURLWithPath: $0) } }
     /// 对外用哪个：有用户自己那份就用它（打开 / 在访达中显示都该落到用户的文件上）。
     var displayURL: URL { savedURL ?? historyURL }
+    /// 这是不是一段录屏。
+    var isVideo: Bool { videoPath != nil }
+    /// 录屏本体（能被播放器打开的那个）。
+    var videoURL: URL? { videoPath.map { URL(fileURLWithPath: $0) } }
+    /// 点开时该给谁：录屏给视频本体，截图给用户那份（没有就历史那份）。
+    var openURL: URL { videoURL ?? displayURL }
 }
 
 /// 「最近截图」的**落盘**历史。
@@ -65,7 +81,9 @@ final class HistoryStore {
         guard let data = CaptureOutput.pngData(image), (try? data.write(to: url, options: .atomic)) != nil
         else { return nil }
 
-        let entry = HistoryEntry(id: id, date: date, historyPath: url.path, savedPath: nil)
+        let entry = HistoryEntry(
+            id: id, date: date, historyPath: Self.normalizedPath(url), savedPath: nil
+        )
         entries.insert(entry, at: 0)
         prune()
         save()
@@ -75,8 +93,51 @@ final class HistoryStore {
     /// 用户把这张截图存到磁盘（自动保存或另存为）之后回填：打开 / 在访达中显示改用它。
     func attachSavedFile(_ url: URL, to id: String?) {
         guard let id, let index = entries.firstIndex(where: { $0.id == id }) else { return }
-        entries[index].savedPath = url.path
+        entries[index].savedPath = Self.normalizedPath(url)
         save()
+    }
+
+    /// 记一段录屏：历史目录里只放**封面缩略图**，视频本体留在用户保存目录。
+    ///
+    /// 为什么不像截图那样复制一份：一段几分钟的录屏几十上百 MB，复制进历史等于占用翻倍，
+    /// 而「最近记录」要的只是「能找到它」。所以只记路径 —— 用户把视频挪走/删掉，
+    /// 这条就点不开了（和截图条目失去 `savedPath` 是同一个规矩）。
+    @discardableResult
+    func recordVideo(
+        at videoURL: URL, cover: CGImage, duration: TimeInterval, date: Date = Date()
+    ) -> HistoryEntry? {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let id = UUID().uuidString
+        let coverURL = directory.appendingPathComponent(
+            "\(Self.fileStamp(date))-\(id.prefix(8))-cover.png"
+        )
+        guard let data = CaptureOutput.pngData(cover),
+            (try? data.write(to: coverURL, options: .atomic)) != nil
+        else { return nil }
+
+        let path = Self.normalizedPath(videoURL)
+        let entry = HistoryEntry(
+            id: id, date: date, historyPath: Self.normalizedPath(coverURL), savedPath: path,
+            videoPath: path, videoDuration: duration
+        )
+        entries.insert(entry, at: 0)
+        prune()
+        save()
+        return entry
+    }
+
+    /// 录屏封面后补：先用占位图把条目**同步**记上（「东西在」这件事一刻都不能等），
+    /// 真封面取到后再换掉它。
+    func updateCover(_ cover: CGImage, duration: TimeInterval, for id: String) {
+        guard let index = entries.firstIndex(where: { $0.id == id }),
+            let data = CaptureOutput.pngData(cover)
+        else { return }
+        let url = entries[index].historyURL
+        guard (try? data.write(to: url, options: .atomic)) != nil else { return }
+        if duration > 0 { entries[index].videoDuration = duration }
+        save()
+        // 缩略图缓存要失效，否则菜单里还挂着那张占位图（录屏收工是低频操作，整清即可）。
+        HistoryThumbnailCache.shared.clear()
     }
 
     /// 自检用：历史目录（拿它另开一个实例，模拟「重启后再读一遍」）。
@@ -106,8 +167,13 @@ final class HistoryStore {
             let stored = try? JSONDecoder().decode([HistoryEntry].self, from: data)
         else { return }
         // 历史目录被谁清掉过：索引里那些找不到文件的条目直接丢掉。
+        // 录屏条目还要看**视频本体**在不在（历史里只有封面）——本体被删/挪走就点不开了。
         let fileManager = FileManager.default
-        entries = stored.filter { fileManager.fileExists(atPath: $0.historyPath) }
+        entries = stored.filter { entry in
+            guard fileManager.fileExists(atPath: entry.historyPath) else { return false }
+            guard let videoPath = entry.videoPath else { return true }
+            return fileManager.fileExists(atPath: videoPath)
+        }
         if entries.count != stored.count { save() }
     }
 
@@ -138,6 +204,15 @@ final class HistoryStore {
     private func size(of url: URL) -> Int64 {
         let values = try? url.resourceValues(forKeys: [.fileSizeKey])
         return Int64(values?.fileSize ?? 0)
+    }
+
+    /// 存进索引的路径统一写法。
+    ///
+    /// macOS 上 `/var` 与 `/private/var` 指向同一个地方，两个 API 给出的写法还不一样
+    /// （实测自检里 `moveFile` 给的带 `/private`、目录枚举给的不带）。不归一的话
+    /// **同一个文件会被当成两个**：去重失效、菜单里出现重复条目、回填 `savedPath` 找不到人。
+    private static func normalizedPath(_ url: URL) -> String {
+        url.resolvingSymlinksInPath().path
     }
 
     /// 文件名里的时间戳：`20260918-020304`，光看目录也知道什么时候截的。

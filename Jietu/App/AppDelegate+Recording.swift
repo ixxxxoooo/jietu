@@ -212,6 +212,22 @@ extension AppDelegate {
             if settings.showSaveNotification {
                 notifier.notifyRecordingSaved(fileURL: url, duration: elapsed)
             }
+            // **立刻**进「最近记录」：浮窗卡片会到点自动关闭，历史是那之后唯一的入口。
+            // 先用占位封面同步记上——「东西在」这件事一刻都不能等；真封面是异步取的，
+            // 取到了再换掉（用户实测报的「录完东西不见了」就是历史里压根没有录屏）。
+            if let placeholder = VideoThumbnail.placeholder(),
+                let entry = HistoryStore.shared.recordVideo(
+                    at: url, cover: placeholder, duration: elapsed
+                )
+            {
+                let id = entry.id
+                Task { @MainActor in
+                    guard let card = await VideoThumbnail.make(for: url) else { return }
+                    HistoryStore.shared.updateCover(
+                        card.image, duration: card.duration, for: id
+                    )
+                }
+            }
             Task { @MainActor [weak self] in
                 await self?.presentRecordingCard(
                     url: url, elapsed: elapsed, displayID: displayID

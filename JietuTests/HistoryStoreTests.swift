@@ -96,4 +96,52 @@ struct HistoryStoreTests {
         try FileManager.default.removeItem(atPath: entry.historyPath)
         #expect(HistoryStore(directory: directory).entries.isEmpty)
     }
+
+    @Test("录屏进「最近记录」：只存封面缩略图，本体留在保存目录，点开给的是视频")
+    func recordsVideoWithoutCopyingIt() throws {
+        let (store, directory) = makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // 造一个「录屏文件」放在别处（模拟用户的保存目录）。
+        let videoDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jietu-video-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: videoDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: videoDirectory) }
+        let videoURL = videoDirectory.appendingPathComponent("录屏.mp4")
+        try Data("fake".utf8).write(to: videoURL)
+
+        let entry = try #require(
+            store.recordVideo(at: videoURL, cover: image(), duration: 12.5)
+        )
+        #expect(entry.isVideo)
+        #expect(entry.videoDuration == 12.5)
+        #expect(entry.openURL == videoURL, "点开要落到视频本体上")
+        #expect(entry.historyURL.pathExtension == "png", "历史目录里存的是封面 PNG")
+        #expect(entry.historyURL.path != videoURL.path)
+        #expect(FileManager.default.fileExists(atPath: videoURL.path), "视频本体不许被搬走/复制")
+
+        // 换个实例读同一个目录（= 重启）：条目还在，封面也读得回来。
+        let reopened = HistoryStore(directory: directory)
+        let restored = try #require(reopened.entries.first)
+        #expect(restored.isVideo)
+        #expect(restored.videoDuration == 12.5)
+        #expect(restored.openURL == videoURL)
+        #expect(FileManager.default.fileExists(atPath: restored.historyPath))
+    }
+
+    @Test("录屏本体被删掉后，重启读索引时这条要丢掉（点不开的条目不该留在菜单里）")
+    func dropsVideoEntriesWhoseFileIsGone() throws {
+        let (store, directory) = makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let videoURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jietu-gone-\(UUID().uuidString).mp4")
+        try Data("fake".utf8).write(to: videoURL)
+        store.recordVideo(at: videoURL, cover: image(), duration: 3)
+        #expect(store.entries.count == 1)
+
+        try FileManager.default.removeItem(at: videoURL)
+        let reopened = HistoryStore(directory: directory)
+        #expect(reopened.entries.isEmpty, "本体没了，这条就该消失")
+    }
 }
