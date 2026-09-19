@@ -1,6 +1,6 @@
 # 测试覆盖对照表
 
-> 截至 2026-09-19，326 个 `@Test`，37 个 `@Suite`。
+> 截至 2026-09-19，329 个 `@Test`，36 个 `@Suite`。
 >
 > 「selftest」列标注了 `AppDelegate+SelfTest.swift` 中的 DEBUG 自检命令覆盖情况。
 > selftest 在真实窗口环境里跑，能覆盖单元测试难以触达的 UI 层。
@@ -40,6 +40,7 @@
 | `DisplayGeometry.swift` | `DisplayGeometryTests` | — |
 | `DisplaySnapshot.swift` | `DisplaySnapshotTests` | — |
 | `PixelSampler.swift` | `CaptureOutputTests` (间接) | — |
+| `ScreenPixelProbe.swift` | `ScreenPixelProbeTests` | — |
 | `WindowEffects.swift` | `WindowEffectsTests` | ✅ 窗口截图 |
 | `WindowInfo.swift` | — | ✅ 窗口列表 |
 
@@ -130,7 +131,10 @@
 | 源文件 | 单元测试 | selftest |
 |--------|----------|----------|
 | `CaptureSession.swift` | — | ✅ 截图流程 |
+| `ColorPickerCard.swift` | — | — |
+| `ColorPickerOverlay.swift` | — | — |
 | `InlineAnnotationToolbar.swift` | `InlineToolbarModelTests` | ✅ 工具栏 |
+| `LoupeReadoutCard.swift` | — | ✅ 放大镜 |
 | `OverlayCanvasView.swift` | `OverlayCanvasCropTests`, `OverlayCanvasZoomTests` | ✅ 遮罩画布 |
 | `OverlayCanvasView+Actions.swift` | `OverlayCanvasZoomTests` | ✅ |
 | `OverlayCanvasView+InlineAnnotation.swift` | `InlineToolbarModelTests` | ✅ |
@@ -146,6 +150,7 @@
 | `PinLiveTextDelegate.swift` | — | — |
 | `PinPanel.swift` | — | — |
 | `PinWindowController.swift` | `PinWindowTests` | ✅ |
+| `PixelLoupeCard.swift` | — | ✅ 放大镜外观 / 取像素 |
 | `QuickAccessControlsView.swift` | `QuickAccessTests` | — |
 | `QuickAccessPanelController.swift` | `QuickAccessTests` | ✅ Quick Access |
 | `QuickAccessVideoView.swift` | — | — |

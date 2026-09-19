@@ -48,6 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 取色完成后的回执浮窗（复制到色号后说一句「已复制 #RRGGBB」）。
     var colorToast: ToastPanel?
 
+    /// 正在取色的覆盖层（同一时刻只允许一层）。
+    var colorPicker: ColorPickerOverlay?
+
     /// 滚动长图的右侧实时预览。
     var scrollingPreview: ScrollingPreviewPanel?
     /// 本次滚动长图的选区（含三套换算好的坐标）：用户中途改选区时跟着更新。

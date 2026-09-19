@@ -64,32 +64,6 @@ extension OverlayCanvasView {
     }
 }
 
-/// 放大镜的图层几何。
-///
-/// 单独抽出来是为了能单测：`contentsRect` 的 y 原点在 macOS 上并不直观
-/// （见 `JietuTests/ContentRectOriginTests`）——实测非 flipped 图层里
-/// **y = 0 取的是图像最后一行**，所以窗口的上边距要换算成「距底边的下边距」。
-///
-/// @author ixxxxoooo
-enum LoupeGeometry {
-    /// 采样窗口（图像像素、原点左上）→ `contentsRect`。
-    static func contentsRect(
-        sourceOrigin: CGPoint,
-        cells: Int,
-        imageSize: CGSize
-    ) -> CGRect {
-        guard imageSize.width > 0, imageSize.height > 0 else { return .zero }
-        return CGRect(
-            x: sourceOrigin.x / imageSize.width,
-            // 屏幕坐标是「原点左上」，而 contentsRect 的 y 是「距图像底边」——
-            // 少这一次翻转，放大镜就会整体上下镜像（鼠标在空白处，镜里却全是内容）。
-            y: (imageSize.height - sourceOrigin.y - CGFloat(cells)) / imageSize.height,
-            width: CGFloat(cells) / imageSize.width,
-            height: CGFloat(cells) / imageSize.height
-        )
-    }
-}
-
 /// 选区尺寸胶囊标签图层：使用 CoreText 绘制单行尺寸文本，上下左右留白精确对称，避免垂直偏心错位。
 nonisolated final class PillLabelLayer: CALayer {
     let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)

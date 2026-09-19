@@ -86,17 +86,13 @@ final class OverlayCanvasView: NSView {
 
     // MARK: - Loupe（跟随光标的像素放大镜）
 
-    /// 方形像素网格 + 读数面板：鼠标走到哪跟到哪，用来对着像素抠选区。
-    enum Loupe {
-        /// 边长（point）。
-        static let side: CGFloat = 136
-        /// 网格格数（奇数：光标那一格正好在正中）。
-        static let cells = 13
-        /// 与光标之间的间距。
-        static let gap: CGFloat = 16
-    }
-
-    var sampledColor: PixelSampler.Sample?
+    /// 放大镜卡片（镜面 + 坐标 / 区域 / 色值）：鼠标走到哪跟到哪，用来对着像素抠选区。
+    ///
+    /// 尺寸与外观全在 `PixelLoupeCard` 里 —— 和取色器那张卡是同一个组件，不在这里重描。
+    let loupeCardModel = LoupeCardModel()
+    var loupeCardHost: PixelLoupeCardHost<LoupeReadoutCard>?
+    /// 镜面现在取的采样窗口（图像像素、原点左上）：窗口没换就不重新裁图。
+    var loupeSourceOrigin: CGPoint?
     var lastSampledPixel: CGPoint?
 
     #if DEBUG
@@ -216,21 +212,6 @@ final class OverlayCanvasView: NSView {
     let sizeLabelLayer = PillLabelLayer()
     let windowLabelLayer = CATextLayer()
     let hintLayer = CATextLayer()
-
-    // 放大镜：图 + 网格 + 十字带 + 中心格 + 边框，读数面板单独几层。
-    let loupeShadowLayer = CAShapeLayer()
-    let loupeBorderLayer = CAShapeLayer()
-    let loupeImageLayer = CALayer()
-    let loupeGridDarkLayer = CAShapeLayer()
-    let loupeGridLightLayer = CAShapeLayer()
-    let loupeGuideLayer = CAShapeLayer()
-    let loupeCellShadowLayer = CAShapeLayer()
-    let loupeCellLayer = CAShapeLayer()
-    let loupePanelLayer = CALayer()
-    let loupeCoordinateLayer = CATextLayer()
-    let loupeRegionLayer = CATextLayer()
-    let loupeColorLayer = CATextLayer()
-    let loupeSwatchLayer = CALayer()
 
     var trackingArea: NSTrackingArea?
 
@@ -494,26 +475,26 @@ final class OverlayCanvasView: NSView {
         cropImage.map { CGSize(width: $0.width, height: $0.height) }
     }
 
-    /// 自检用：放大镜的「模型 frame」与「当前呈现 frame」。
+    /// 自检用：放大镜卡片的「模型 frame」与「当前呈现 frame」。
     ///
     /// 有隐式动画时两者会不同（呈现值还在半路上）——用来盯住「跟随光标不该有动画」。
     var debugLoupePresentation: (model: CGRect, presentation: CGRect?, isHidden: Bool) {
         (
-            model: loupeImageLayer.frame,
-            presentation: loupeImageLayer.presentation()?.frame,
-            isHidden: loupeImageLayer.isHidden
+            model: loupeCardHost?.frame ?? .zero,
+            presentation: loupeCardHost?.layer?.presentation()?.frame,
+            isHidden: loupeCardHost?.isHidden ?? true
         )
     }
 
     /// 自检用：放大镜当前取的是哪一块像素、光标落在哪一格。
     struct DebugLoupeState {
-        /// 放大镜在画布（本显示器 local，原点左下）里的位置。
+        /// 镜面在画布（本显示器 local，原点左下）里的位置。
         let frame: CGRect
         /// 采样窗口在图像里的左上角（图像像素、原点左上）。
         let sourceOrigin: CGPoint
         /// 光标像素（图像像素、原点左上）。
         let cursorPixel: CGPoint
-        /// 光标的像素格子在放大镜里的位置（左上角为 0）。
+        /// 光标的像素格子在镜面里的位置（左上角为 0）。
         let cell: CGPoint
         /// 当前格子的格边长（point）。
         let cellSide: CGFloat
@@ -522,8 +503,7 @@ final class OverlayCanvasView: NSView {
     }
 
     var debugLoupeState: DebugLoupeState? {
-        guard !loupeImageLayer.isHidden else { return nil }
-        guard let state = loupeDebugState else { return nil }
+        guard let state = loupeDebugState, !(loupeCardHost?.isHidden ?? true) else { return nil }
         return state
     }
 
@@ -718,140 +698,23 @@ final class OverlayCanvasView: NSView {
         }
         windowLabelLayer.isHidden = true
 
-        configureLoupe(scale: scale, root: root)
+        configureLoupe()
         updateAllLayers()
     }
 
-    /// 放大镜各层：图（nearest，硬边像素）+ 两层网格（深浅内容上都看得见）
-    /// + 十字带 + 中心格描边 + 外框，读数面板单独几层。
+    /// 放大镜卡片：一个宿主视图，内容（镜面 + 读数）由 `LoupeReadoutCard` 画。
     ///
-    /// 外框不用「粗描边圈一圈」——那是块状灰边，厚且糊。改成论坛通用的浮空做法：
-    /// 一层柔和投影托起来 + 一根 1px 发丝线（外侧白、内侧墨），转角走 `.continuous`。
-    func configureLoupe(scale: CGFloat, root: CALayer) {
-        // 投影载体：本身被上面的图完全盖住，只为投出阴影。
-        loupeShadowLayer.fillColor = NSColor.black.cgColor
-        loupeShadowLayer.strokeColor = nil
-        loupeShadowLayer.shadowColor = NSColor.black.cgColor
-        loupeShadowLayer.shadowOpacity = 0.38
-        loupeShadowLayer.shadowRadius = 12
-        loupeShadowLayer.shadowOffset = CGSize(width: 0, height: -4)
-        loupeShadowLayer.cornerRadius = Theme.Radius.card
-        loupeShadowLayer.cornerCurve = .continuous
-
-        // 外圈发丝线：深色内容上把边界提出来。
-        loupeBorderLayer.fillColor = nil
-        loupeBorderLayer.strokeColor = nil
-        loupeBorderLayer.backgroundColor = nil
-        loupeBorderLayer.borderWidth = 1
-        loupeBorderLayer.borderColor = NSColor.white.withAlphaComponent(0.45).cgColor
-        loupeBorderLayer.cornerRadius = Theme.Radius.card
-        loupeBorderLayer.cornerCurve = .continuous
-
-        loupeImageLayer.contents = snapshot.image
-        loupeImageLayer.contentsGravity = .resize
-        loupeImageLayer.magnificationFilter = .nearest
-        loupeImageLayer.minificationFilter = .nearest
-        loupeImageLayer.cornerRadius = Theme.Radius.card
-        loupeImageLayer.cornerCurve = .continuous
-        loupeImageLayer.masksToBounds = true
-        loupeImageLayer.contentsScale = scale
-        // 内圈发丝线：浅色内容上把边界提出来（与上一条一深一浅，任何底色都看得见）。
-        loupeImageLayer.borderWidth = 1
-        loupeImageLayer.borderColor = NSColor.black.withAlphaComponent(0.15).cgColor
-
-        loupeGridDarkLayer.fillColor = nil
-        loupeGridDarkLayer.strokeColor = NSColor.black.withAlphaComponent(0.28).cgColor
-        loupeGridDarkLayer.lineWidth = 0.5
-        loupeGridLightLayer.fillColor = nil
-        loupeGridLightLayer.strokeColor = NSColor.white.withAlphaComponent(0.16).cgColor
-        loupeGridLightLayer.lineWidth = 0.5
-
-        // 十字带：光标那一行 / 一列整条淡淡染一下（品牌绿），中心格再描一圈白的。
-        loupeGuideLayer.fillColor = NSColor(Theme.selectionGreen)
-            .withAlphaComponent(0.16).cgColor
-        loupeGuideLayer.strokeColor = nil
-        loupeCellShadowLayer.fillColor = nil
-        loupeCellShadowLayer.strokeColor = NSColor.black.withAlphaComponent(0.45).cgColor
-        loupeCellShadowLayer.lineWidth = 2
-        loupeCellLayer.fillColor = nil
-        loupeCellLayer.strokeColor = NSColor.white.withAlphaComponent(0.95).cgColor
-        loupeCellLayer.lineWidth = 1.5
-
-        for layer in [
-            loupeShadowLayer, loupeBorderLayer, loupeImageLayer, loupeGridDarkLayer,
-            loupeGridLightLayer, loupeGuideLayer, loupeCellShadowLayer, loupeCellLayer,
-        ] {
-            layer.isHidden = true
-            layer.actions = Self.loupeNoActions
-            root.addSublayer(layer)
-        }
-
-        // 读数面板：深墨压底（内容什么颜色都得读得清）+ `Radius.card` 圆角
-        // + ramp 的 `border` 发丝线 + 一层柔和投影，和浮窗 / 工具栏同一套观感。
-        loupePanelLayer.backgroundColor = NSColor.black.withAlphaComponent(0.72).cgColor
-        loupePanelLayer.cornerRadius = Theme.Radius.card
-        loupePanelLayer.cornerCurve = .continuous
-        loupePanelLayer.borderWidth = 1
-        loupePanelLayer.borderColor = NSColor.white.withAlphaComponent(0.20).cgColor
-        loupePanelLayer.shadowColor = NSColor.black.cgColor
-        loupePanelLayer.shadowOpacity = 0.35
-        loupePanelLayer.shadowRadius = 10
-        loupePanelLayer.shadowOffset = CGSize(width: 0, height: -3)
-        loupePanelLayer.isHidden = true
-        loupePanelLayer.actions = Self.loupeNoActions
-        root.addSublayer(loupePanelLayer)
-
-        for textLayer in [loupeCoordinateLayer, loupeRegionLayer, loupeColorLayer] {
-            textLayer.fontSize = 11
-            textLayer.alignmentMode = .left
-            textLayer.truncationMode = .none
-            textLayer.contentsScale = scale
-            textLayer.isHidden = true
-            textLayer.actions = Self.loupeNoActions
-            root.addSublayer(textLayer)
-        }
-        loupeSwatchLayer.cornerRadius = Theme.Radius.glyph
-        loupeSwatchLayer.cornerCurve = .continuous
-        loupeSwatchLayer.borderWidth = 1
-        loupeSwatchLayer.borderColor = NSColor.white.withAlphaComponent(0.35).cgColor
-        loupeSwatchLayer.isHidden = true
-        loupeSwatchLayer.actions = Self.loupeNoActions
-        root.addSublayer(loupeSwatchLayer)
+    /// 它是本视图的**子视图**（不是图层）：卡片压在冻结图与压暗层之上，跟手移动只改 frame；
+    /// 宿主不吃鼠标事件（`PixelLoupeCardHost`），不会挡住框选那一下。
+    func configureLoupe() {
+        let card = PixelLoupeCardHost(rootView: LoupeReadoutCard(model: loupeCardModel))
+        card.translatesAutoresizingMaskIntoConstraints = true
+        // 卡片自己有投影，别让宿主把投影裁掉。
+        card.layer?.masksToBounds = false
+        card.isHidden = true
+        addSubview(card)
+        loupeCardHost = card
     }
-
-    /// 读数行：标签走 ramp 的次级墨（0.60），数值走主墨（1.00）+ 等宽数字
-    /// （数值跟着光标刷新，等宽才不会左右抖）。
-    static func loupeReadoutRow(label: String, value: String) -> NSAttributedString {
-        let row = NSMutableAttributedString(
-            string: label,
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: NSColor.white.withAlphaComponent(0.60),
-            ]
-        )
-        row.append(
-            NSAttributedString(
-                string: value,
-                attributes: [
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
-                    .foregroundColor: NSColor.white,
-                ]
-            )
-        )
-        return row
-    }
-
-    /// 放大镜全程跟手：**关掉隐式动画**。
-    ///
-    /// 否则第一次显示时图层从 `(0,0)`（图层坐标的左下角）动画到光标处，
-    /// 看起来就是「放大镜从左下角滑过来」；跟着鼠标移动也会慢半拍。
-    static let loupeNoActions: [String: CAAction] = [
-        "hidden": NSNull(), "opacity": NSNull(), "contents": NSNull(),
-        "contentsRect": NSNull(), "path": NSNull(), "fillColor": NSNull(),
-        "strokeColor": NSNull(), "lineWidth": NSNull(), "backgroundColor": NSNull(),
-        "cornerRadius": NSNull(), "borderWidth": NSNull(), "borderColor": NSNull(),
-        "position": NSNull(), "bounds": NSNull(), "frame": NSNull(), "string": NSNull(),
-    ]
 
     func configureBorderLayer(_ layer: CAShapeLayer, color: NSColor) {
         layer.fillColor = nil
@@ -886,10 +749,7 @@ final class OverlayCanvasView: NSView {
         imageLayer.contentsScale = scale
         // 标注层尺寸由 updateAnnotationLayer() 按选区设置，这里不能重置成整屏。
         annotationLayer.contentsScale = scale
-        for textLayer in [
-            sizeLabelLayer, windowLabelLayer, hintLayer,
-            loupeCoordinateLayer, loupeRegionLayer, loupeColorLayer,
-        ] {
+        for textLayer in [sizeLabelLayer, windowLabelLayer, hintLayer] {
             textLayer.contentsScale = scale
         }
         updateAllLayers()

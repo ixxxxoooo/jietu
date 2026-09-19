@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 
@@ -16,6 +17,16 @@ enum PixelSampler {
 
         var hexString: String {
             String(format: "#%02X%02X%02X", red, green, blue)
+        }
+
+        /// 画色块用的颜色（放大镜的色值行、取色回执上的那枚方块）。
+        var nsColor: NSColor {
+            NSColor(
+                srgbRed: CGFloat(red) / 255,
+                green: CGFloat(green) / 255,
+                blue: CGFloat(blue) / 255,
+                alpha: CGFloat(alpha) / 255
+            )
         }
     }
 
