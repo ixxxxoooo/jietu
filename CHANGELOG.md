@@ -6,21 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
-### Changed
-- Cut the DMG from 4.2 MB to 2.9 MB (−31%) with no visible change: LZMA (`ULMO`) compression instead of zlib, an alpha-free RGB window backdrop, and a self-drawn icon for `Fix Gatekeeper.app` instead of the 409 KB stock asset catalog `osacompile` ships
+## [0.0.3] — 2026-09-20
 
 ### Added
 - `Scripts/helper-icon.swift` draws the `Fix Gatekeeper.app` icon (amber tile with a shield check, deliberately distinct from the blue `Jietu.app` tile)
-
-## [0.0.3] — 2026-09-20
 
 ### Changed
 - Redesigned the DMG installer window: a 660×420 layout on custom artwork, with fixed positions for `Jietu.app`, `Applications` and `Fix Gatekeeper.app`, centered on screen and without toolbar/status bar
 - Install notes are now drawn on the DMG window artwork instead of shipped as a text file
 - `Scripts/build-dmg.sh` packages through a writable intermediate image, saves the window geometry / background / icon positions into the image's `.DS_Store`, and verifies the result before reporting size and checksum
+- Cut the DMG from 4.2 MB to 2.9 MB (−31%) with no visible change: LZMA (`ULMO`) compression instead of zlib, an alpha-free RGB window backdrop, and a self-drawn icon for `Fix Gatekeeper.app` instead of the 409 KB stock asset catalog `osacompile` ships
 
 ### Removed
 - `00-请先读我.txt` from the DMG — its install notes moved into the window artwork
+- `CONTRIBUTING.md`, and the `Contributing` / `Acknowledgments` sections of the READMEs
 
 ### Fixed
 - Release workflow: let `build-dmg.sh` do the build so it can fall back to ad-hoc signing when the self-signed `Jietu` certificate is absent, instead of failing with `No certificate matching 'Jietu' found`
