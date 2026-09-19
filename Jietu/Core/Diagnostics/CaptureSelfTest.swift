@@ -23,6 +23,7 @@ import UniformTypeIdentifiers
 ///   Jietu --selftest-quickaccess <输出目录> 浮窗图标：逐个注入点击，量响应速度（含截图）
 ///   Jietu --selftest-scroll-cost            滚动长图每帧成本：拼接 / 预览（含老做法对比）
 ///   Jietu --selftest-record <输出目录>       录屏：真录一段（含暂停），读回成片验时长/尺寸
+///   Jietu --selftest-video-tools <输出目录>   成片再加工：GIF 导出 + 裁剪导出，读回产物校验
 ///   Jietu --selftest-inline-draw <输出目录>   就地标注：验证「框里还能再画框」
 ///   Jietu --selftest-inline-scroll <输出目录>
 ///                                           就地工具栏的「滚动截图」：点开手动 / 自动并截图
@@ -38,6 +39,11 @@ enum CaptureSelfTest {
 
     /// 需要完整接线的录屏自检：菜单/遮罩/红框/控制条/落盘，一条链走完。
     static let appLevelRecordingFlag = "--selftest-app-record"
+
+    /// 成片再加工自检（GIF / 裁剪）：只造合成视频 + 转码，不建窗口、不抢屏幕，
+    /// 所以它**允许**与正式实例同时在场（单例守卫为它放行）。
+    static let videoToolsFlag = "--selftest-video-tools"
+
     /// 「最近截图」子菜单长什么样：空历史 / 有截图各弹一次拍一张。
     static let appLevelRecentMenuFlag = "--selftest-app-recent-menu"
 
@@ -122,6 +128,16 @@ enum CaptureSelfTest {
         case "--selftest-record":
             // 录屏：真录一段（中间暂停一次），再用 AVFoundation 读回成片验时长 / 尺寸 / 音视频轨。
             runRecordTest(
+                outputDirectory: URL(
+                    fileURLWithPath: value ?? NSTemporaryDirectory(),
+                    isDirectory: true
+                )
+            )
+            return true
+
+        case videoToolsFlag:
+            // 成片再加工：造一段合成视频，跑真实的 GIF 导出与裁剪导出，读回产物校验。
+            VideoToolsSelfTest.run(
                 outputDirectory: URL(
                     fileURLWithPath: value ?? NSTemporaryDirectory(),
                     isDirectory: true

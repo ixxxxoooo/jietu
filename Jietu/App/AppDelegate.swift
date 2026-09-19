@@ -345,7 +345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // app 级自检常与正式实例同时在场（它要真接线，不能当成"多开"被杀掉）。
         for flag in [
             CaptureSelfTest.appLevelInlineScrollFlag, CaptureSelfTest.appLevelRecordingFlag,
-            CaptureSelfTest.appLevelRecentMenuFlag,
+            CaptureSelfTest.appLevelRecentMenuFlag, CaptureSelfTest.videoToolsFlag,
         ] where CommandLine.arguments.contains(flag) {
             return false
         }
