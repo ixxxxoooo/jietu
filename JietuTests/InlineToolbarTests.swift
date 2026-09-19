@@ -619,7 +619,10 @@ struct InlineToolbarTests {
             abs(options.minX - (layout.main.maxX + 10)) <= 1,
             "二级菜单要竖着贴在主栏外侧（主栏 maxX=\(layout.main.maxX) → 二级 minX≈\(layout.main.maxX + 10)）"
         )
-        #expect(abs(options.maxY - layout.main.maxY) <= 1, "与主栏顶部对齐")
+        #expect(
+            abs(options.midY - layout.main.midY) <= 1,
+            "与主栏上下居中（主栏 midY=\(layout.main.midY)，二级 midY=\(options.midY)）"
+        )
     }
 
     @Test("滑块 / 色板竖排：自己也竖过来（滑块变高、色板变一列）")

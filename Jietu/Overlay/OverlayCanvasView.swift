@@ -2989,11 +2989,12 @@ final class OverlayCanvasView: NSView {
         guard size.width > 0, size.height > 0 else { return }
 
         if let side {
-            // 主栏贴着选区，二级菜单挂在主栏**外侧**（离选区远的那一边），别挤在选区和主栏中间。
+            // 主栏贴着选区，二级菜单挂在主栏**外侧**（离选区远的那一边），别挤在选区和主栏中间；
+            // 竖直方向与主栏**上下居中**（主栏本身相对选区居中，这样两条栏看着是一体的）。
             var x = side == .right ? mainFrame.maxX + gap : mainFrame.minX - gap - size.width
             x = min(max(x, bounds.minX + inset), max(bounds.minX + inset, bounds.maxX - size.width - inset))
             let y = min(
-                max(mainFrame.maxY - size.height, bounds.minY + inset),
+                max(mainFrame.midY - size.height / 2, bounds.minY + inset),
                 max(bounds.minY + inset, bounds.maxY - size.height - inset)
             )
             options.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
