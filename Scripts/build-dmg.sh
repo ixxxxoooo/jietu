@@ -49,8 +49,11 @@ echo "==> 1/6 构建（${CONFIG}）"
 # "No certificate matching 'Jietu' found"（GitHub 上前三次 Release 就是这么挂的）。
 # 有证书就用它（本地重签名后屏幕录制授权更稳），没有就退回 ad-hoc——
 # 但不能用 CODE_SIGNING_ALLOWED=NO，那样产物没有签名身份，TCC 会认不出来。
+#
+# 检测证书时不带 -v：自签名证书通常是 CSSMERR_TP_NOT_TRUSTED（未受系统信任），
+# 带 -v 只列「有效」证书会漏掉它，导致本地也退回 ad-hoc，签名身份变了 TCC 授权就丢了。
 SIGN_OVERRIDES=""
-if ! security find-identity -v -p codesigning 2>/dev/null | grep -q '"Jietu"'; then
+if ! security find-identity -p codesigning 2>/dev/null | grep -q '"Jietu"'; then
     echo "    未找到「Jietu」自签名证书 → 改用 ad-hoc 签名"
     SIGN_OVERRIDES="CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Automatic"
 fi
@@ -84,7 +87,14 @@ DMG="$DIST/$APP_NAME-$VERSION.dmg"
 VOLNAME="$APP_NAME $VERSION"
 echo "    版本 $VERSION ($BUILD)  标识 $BUNDLE_ID"
 echo "    架构 $(lipo -archs "$APP/Contents/MacOS/$APP_NAME")"
-echo "    签名 $(codesign -dv --verbose=4 "$APP" 2>&1 | sed -n 's/^Authority=//p' | head -1)"
+SIGN_AUTHORITY="$(codesign -dv --verbose=4 "$APP" 2>&1 | sed -n 's/^Authority=//p' | head -1)"
+echo "    签名 ${SIGN_AUTHORITY:-ad-hoc}"
+# 本地构建（有 Jietu 证书）必须用 Jietu 签名，不能意外退回 ad-hoc——
+# 否则签名身份和 Debug 构建不一致，TCC 授权（屏幕录制等）会丢。
+if [ -z "$SIGN_OVERRIDES" ] && [ -z "$SIGN_AUTHORITY" ]; then
+    echo "警告：有 Jietu 证书却产出了 ad-hoc 签名，签名身份不一致"
+    exit 1
+fi
 
 # ---------- 3/6 暂存 ----------
 echo "==> 3/6 暂存"
@@ -182,9 +192,17 @@ mkdir -p "$STAGE"
 ditto "$APP" "$STAGE/$APP_NAME.app"
 ln -s /Applications "$STAGE/Applications"
 
+# 预先清除主 App 上可能残留的隔离属性。构建产物通常不带，但用户曾手动
+# 拷贝过、或 Xcode 偶尔从网络缓存恢复时可能沾上；装进 DMG 前清干净，
+# 这样用户从 DMG 拖出来时自身不带隔离（只有 DMG 外壳可能有，由 Fix Gatekeeper 处理）。
+xattr -dr com.apple.quarantine "$STAGE/$APP_NAME.app" 2>/dev/null || true
+
 # 解除隔离的小工具：从网上下载的 DMG 里，任何可执行文件（.command / .app）第一次
 # 都会被 Gatekeeper 拦截——这正是「解除隔离」工具自己也打不开的原因。
 # 正确用法是：右键 → 打开（与打开自签名 Jietu.app 同一套流程），说明就画在背景图上。
+#
+# 先尝试无提权移除（用户自己拖入的 App 隔离属性通常不需要 root），
+# 失败了再用 `with administrator privileges` 提权重试（弹系统密码框）。
 HELPER_SCRIPT="$(mktemp -t jietu-fix-gatekeeper).applescript"
 cat > "$HELPER_SCRIPT" <<'OSA'
 -- 移除 /Applications/Jietu.app 的隔离属性。
@@ -198,12 +216,35 @@ on run
 		display dialog "请先把 Jietu.app 拖到「应用程序」文件夹，再运行本工具。" & return & return & "Please drag Jietu.app into Applications first." buttons {"OK"} default button 1 with title "Jietu" with icon caution
 		return
 	end try
+
+	-- 先尝试无提权移除
+	set needsAdmin to false
 	try
 		do shell script "xattr -dr com.apple.quarantine " & quoted form of appPath
-		display dialog "已移除隔离属性，现在可以正常打开 Jietu。" & return & return & "Quarantine removed. You can open Jietu normally now." buttons {"OK"} default button 1 with title "Jietu"
-	on error errMsg
-		display dialog "失败 / Failed：" & return & errMsg buttons {"OK"} default button 1 with title "Jietu" with icon stop
+	on error
+		set needsAdmin to true
 	end try
+
+	-- 无提权失败则提权重试（弹系统密码框）
+	if needsAdmin then
+		try
+			do shell script "xattr -dr com.apple.quarantine " & quoted form of appPath with administrator privileges
+		on error errMsg
+			display dialog "失败 / Failed：" & return & errMsg buttons {"OK"} default button 1 with title "Jietu" with icon stop
+			return
+		end try
+	end if
+
+	-- 验证隔离属性确实已移除
+	try
+		set qResult to do shell script "xattr " & quoted form of appPath & " 2>/dev/null | grep -c quarantine || true"
+		if qResult is not "0" then
+			display dialog "隔离属性未能完全移除，请手动执行：" & return & "xattr -dr com.apple.quarantine " & appPath buttons {"OK"} default button 1 with title "Jietu" with icon caution
+			return
+		end if
+	end try
+
+	display dialog "已移除隔离属性，现在可以正常打开 Jietu。" & return & return & "Quarantine removed. You can open Jietu normally now." buttons {"OK"} default button 1 with title "Jietu"
 end run
 OSA
 
@@ -347,4 +388,5 @@ echo "    大小   $(du -h "$DMG" | cut -f1)"
 echo "    sha256 $(shasum -a 256 "$DMG" | cut -d' ' -f1)"
 echo
 echo "注：自签名证书未受系统信任，别人下载后首次打开需右键「打开」，"
-echo "    或先执行 xattr -dr com.apple.quarantine /Applications/$APP_NAME.app"
+echo "    或用 DMG 里的「Fix Gatekeeper.app」（右键打开）自动移除隔离属性，"
+echo "    或手动执行 xattr -dr com.apple.quarantine /Applications/$APP_NAME.app"
