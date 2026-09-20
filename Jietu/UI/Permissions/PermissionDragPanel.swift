@@ -191,7 +191,12 @@ final class PermissionDragController {
             return
         }
         misses = 0
-        panel?.snap(to: target)
+        // 拖拽中不碰几何和层级：`snap` 会把面板重新排到系统设置**上方**，正好推翻
+        // 拖拽时的「沉下去 + 鼠标穿透」，drop 目标也会跟着重算——拖到一半把窗口挪了，
+        // 是拖拽最容易白拖的一种方式。松手后再跟上去就行（0.4s 一轮，看不出来）。
+        if !isDraggingApp {
+            panel?.snap(to: target)
+        }
 
         // 兜底：拖拽回调万一没回来（拖到别的 App 上被打断），面板不能卡在鼠标穿透上，
         // 否则里面的按钮全都点不动。
@@ -250,10 +255,18 @@ struct PermissionDragView: View {
 
     private var footer: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.md) {
-            Text(pane.dragHint)
-                .font(Theme.Typography.rowSubtitle)
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text(pane.dragHint)
+                    .font(Theme.Typography.rowSubtitle)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // 那一行已经在列表里的时候，单靠拖拽是没用的（拖不出第二行），
+                // 得先把旧记录删掉——这正是「拖进去还不生效」的来路。
+                Text(L10n.dragPanelStaleRow)
+                    .font(Theme.Typography.compactKeyCap)
+                    .foregroundStyle(Theme.Colors.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Spacer(minLength: 0)
             GlassButton(
                 title: L10n.dragPanelRestart,

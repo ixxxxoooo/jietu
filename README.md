@@ -63,16 +63,17 @@
 
 Download the latest `.dmg` from [Releases](https://github.com/ixxxxoooo/jietu/releases/latest), open it, and drag `Jietu.app` to `/Applications`.
 
-> **First launch note:** The app is self-signed (no Developer ID / notarization). macOS Gatekeeper will block the first launch. Before opening, run in Terminal:
+> **First launch note:** The app is self-signed (no Developer ID / notarization), so macOS Gatekeeper blocks the first launch. Before opening, run this in Terminal — the DMG also ships **`安装说明（可复制命令）.txt`** with the same line, ready to copy:
 >
 > ```
 > xattr -dr com.apple.quarantine /Applications/Jietu.app
 > ```
-> 4. Or right-click **Jietu.app** → **Open** → **Open**.
+>
+> Alternatively: right-click **Jietu.app** → **Open** → **Open**.
 
 ### Grant Permissions
 
-1. **Screen Recording** (required) — go to **System Settings › Privacy & Security › Screen Recording**, add Jietu, then **restart the app** (macOS requires a relaunch after granting).
+1. **Screen Recording** (required) — **System Settings › Privacy & Security › Screen & System Audio Recording**, then drag Jietu in (or click **+**) and turn it on, then **restart the app** (macOS requires a relaunch after granting). If Jietu is **already listed but the app still reports “not granted”**, that row is left over from an earlier build: select it, remove it with **−**, add it again, then restart.
 2. **Accessibility** (optional) — only needed for auto-scroll in Scrolling Capture. Go to **System Settings › Privacy & Security › Accessibility** and add Jietu. No restart required.
 3. **Notifications** (optional) — allow banners so “saved” feedback appears after writing to disk.
 

@@ -494,12 +494,13 @@
 "drag_panel.close" = "Close";
 "drag_panel.restart" = "Restart Jietu";
 "drag_panel.restart_help" = "Restart required after authorization to take effect";
+"drag_panel.stale_row" = "Already listed but still \"not granted\"? That row is left over from an earlier build: select it, remove it with −, then drag the card in again.";
 
 // MARK: - Permission Panes
 
 "perm_pane.screen_recording" = "Screen Recording";
 "perm_pane.accessibility" = "Accessibility";
-"perm_pane.drag_hint_sr" = "The list accepts drag-and-drop: dragging it in is the same as adding and authorizing.";
+"perm_pane.drag_hint_sr" = "The list accepts drag-and-drop: drag the card in, then turn it on there.";
 "perm_pane.drag_hint_ax" = "The Accessibility list accepts drag-and-drop: dragging it in authorizes it for auto-scroll capture.";
 
 // MARK: - Arrow Style

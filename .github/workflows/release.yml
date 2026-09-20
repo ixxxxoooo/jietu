@@ -14,8 +14,9 @@ permissions:
 jobs:
   build-and-release:
     name: Build DMG & Create Release
-    # 工程的部署目标是 macOS 26；runner 上也没有本机的自签名证书，
-    # 所以构建/签名/排版/打包全部交给 Scripts/build-dmg.sh（它会自己退回 ad-hoc 签名）。
+    # 工程的部署目标是 macOS 26，构建/签名/排版/打包全部交给 Scripts/build-dmg.sh。
+    # runner 上没有本机的自签名证书「Jietu」，所以下面那步先把证书从 secrets 导进
+    # 临时钥匙串：build-dmg.sh 找不到证书就拒绝产出 ad-hoc 签名的 DMG。
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
@@ -28,14 +29,62 @@ jobs:
           echo "Using ${XCODE}"
           sudo xcode-select -s "$XCODE"
 
+      # 签名身份必须**和本地、和历史版本一致**：TCC（屏幕录制等）把授权记在 App 的
+      # 代码签名身份上。ad-hoc 签名的身份是 cdhash（这一个二进制的指纹），每次构建都变，
+      # 用户每次升级都要重新授权一遍；用同一张证书签，要求就一直是
+      # `identifier + certificate leaf`，重装 / 升级都认同一份授权。
+      #
+      # 一次性配置（见 AGENTS.md「发布」一节）：
+      #   本机导出 → JIETU_CERT_P12_BASE64、JIETU_CERT_P12_PASSWORD 两个 secrets
+      #
+      # 打 tag 的正式发布**必须有**证书：ad-hoc 签出来的 App，签名身份每次构建都变，
+      # 用户每升级一次就要重新授权一次屏幕录制。手动 workflow_dispatch 只是验打包流程，
+      # 允许降级（相当于 JIETU_ALLOW_ADHOC=1），但要显眼地警告。
+      - name: Import signing identity
+        env:
+          P12_BASE64: ${{ secrets.JIETU_CERT_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.JIETU_CERT_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${P12_BASE64:-}" ]; then
+            if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+              echo "::error::secrets 里没有 JIETU_CERT_P12_BASE64。没有这张证书只能 ad-hoc 签名，"
+              echo "::error::那样用户每升级一次就要重新授权一次屏幕录制（见 AGENTS.md「发布」一节）。"
+              exit 1
+            fi
+            echo "::warning::没有签名证书，本次（手动触发、非发布）退回 ad-hoc 签名，产物不适合发给用户"
+            echo "JIETU_ALLOW_ADHOC=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/jietu-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          printf '%s' "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/jietu.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/jietu.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          # codesign 用私钥时要过这道 ACL，少了它就会卡在「钥匙串授权」上。
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" \
+            $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/jietu.p12"
+          security find-identity -p codesigning | grep '"Jietu"' \
+            || { echo "::error::导入后仍然找不到「Jietu」身份"; exit 1; }
+
       - name: Extract version from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      # 不要再单独 xcodebuild 一次：那样会绕开 build-dmg.sh 里的签名回退
-      # （runner 没有自签名证书「Jietu」→ 改用 ad-hoc），之前三次 Release 就挂在这里。
+      # 不要再单独 xcodebuild 一次：那样会绕开 build-dmg.sh 里的签名身份守门。
       - name: Build DMG
         run: bash Scripts/build-dmg.sh
+
+      # 私钥只在这个 job 里活着：钥匙串连同临时文件一起删掉。
+      - name: Clean up signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/jietu-signing.keychain-db" || true
 
       - name: Compute checksums
         id: checksum
@@ -68,10 +117,15 @@ jobs:
                ```
                xattr -dr com.apple.quarantine /Applications/Jietu.app
                ```
+               The DMG also ships `安装说明（可复制命令）.txt` — the same line, ready to copy.
 
             ### Permissions
 
-            - **Screen Recording** (required): System Settings › Privacy & Security › Screen Recording → add Jietu → restart app.
+            - **Screen Recording** (required): System Settings › Privacy & Security ›
+              Screen & System Audio Recording → drag Jietu in (or click **+** and pick it)
+              → turn it on → then restart Jietu.
+              If **Jietu.app is already listed but the app still reports "not granted"**,
+              select that row, remove it with **−**, add it again, and restart Jietu.
             - **Accessibility** (optional, for auto-scroll): System Settings › Privacy & Security › Accessibility → add Jietu.
 
             ### Checksum

@@ -64,8 +64,13 @@ final class AppBundleDragSourceView: NSView, NSDraggingSource {
     }
 
     /// 整个卡片都是拖拽热区（内部 SwiftUI 关掉了命中测试）。
+    ///
+    /// `hitTest(_:)` 收到的是**父视图坐标系**里的点（不是自己的 bounds），
+    /// 得先换算再比。按 bounds 直接比只在视图恰好落在父视图原点 (0,0) 时才对；
+    /// SwiftUI 给一点偏移，热区就会跟着错位——按在卡片上也不起拖拽。
     override func hitTest(_ point: NSPoint) -> NSView? {
-        bounds.contains(point) ? self : nil
+        guard let superview else { return nil }
+        return bounds.contains(convert(point, from: superview)) ? self : nil
     }
 
     override var intrinsicContentSize: NSSize {

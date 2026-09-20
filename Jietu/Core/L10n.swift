@@ -522,6 +522,8 @@ enum L10n {
     static var dragPanelClose: String { s("drag_panel.close") }
     static var dragPanelRestart: String { s("drag_panel.restart") }
     static var dragPanelRestartHelp: String { s("drag_panel.restart_help") }
+    /// 列表里已经有一行、却还是未授权时怎么收场（旧签名身份留下的死行）。
+    static var dragPanelStaleRow: String { s("drag_panel.stale_row") }
 
     // MARK: - 权限面板
 

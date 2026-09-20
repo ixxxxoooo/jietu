@@ -12,7 +12,7 @@
 //
 // 用法：
 //   swift Scripts/dmg-background.swift --out <目录> --size 660x420 \
-//       --app 200,210 --applications 460,210 \
+//       --app 200,185 --applications 460,185 --command 200,320 \
 //       --name Jietu --version 0.0.2 --repo github.com/ixxxxoooo/jietu
 //
 // @author ixxxxoooo
@@ -27,8 +27,10 @@ struct Config {
     /// 出血：Finder 从 .DS_Store 恢复窗口时，内容区会比脚本设定的略宽略高，
     /// 画面比设计稿多画一圈，就不会在右边 / 下边露白边。设计稿本身仍对齐左上角。
     var bleed = CGSize(width: 16, height: 12)
-    var app = CGPoint(x: 200, y: 210)
-    var applications = CGPoint(x: 460, y: 210)
+    var app = CGPoint(x: 200, y: 185)
+    var applications = CGPoint(x: 460, y: 185)
+    /// 安装说明（可复制命令）那份 txt 的槽位；说明文字画在它右边。
+    var command = CGPoint(x: 200, y: 320)
     var appName = "Jietu"
     var version = ""
     var repo = ""
@@ -58,6 +60,8 @@ func parseConfig() -> Config {
             if let p = point(value) { config.app = p }
         case "--applications":
             if let p = point(value) { config.applications = p }
+        case "--command":
+            if let p = point(value) { config.command = p }
         default:
             FileHandle.standardError.write("未知参数：\(flag)\n".data(using: .utf8)!)
         }
@@ -212,13 +216,18 @@ func renderImage(_ config: Config, scale: CGFloat) -> NSBitmapImageRep? {
     brand.withAlphaComponent(0.55).setStroke()
     head.stroke()
 
-    // 5. 底部提示：首次打开前需用命令行移除隔离属性。
-    let hintY = max(config.app.y, config.applications.y) + 80
-    draw(text("首次打开前请在终端执行：", font(12.5, .medium), inkBody),
-         centerX: centerX, topY: hintY)
+    // 5. 安装说明：命令写在这份 txt 旁边。
+    //    背景图上的字选不中也复制不了，所以那份 txt（build-dmg.sh 写进镜像）
+    //    才是用户真正要用的东西；这里画的命令只负责「一眼能看到是什么」。
+    let captionX = config.command.x + 56
+    draw(text("首次打开前请在终端执行：", font(13, .medium), inkBody),
+         left: captionX, centerY: config.command.y - 10)
     draw(text("xattr -dr com.apple.quarantine /Applications/\(config.appName).app",
               NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular), inkSoft),
-         centerX: centerX, topY: hintY + 20)
+         left: captionX, centerY: config.command.y + 11)
+    draw(text("这行命令在左边那份 txt 里有一份，可以直接复制",
+              font(11.5), inkFaint),
+         left: captionX, centerY: config.command.y + 31)
 
     // 6. 页脚：仓库地址。
     if !config.repo.isEmpty {

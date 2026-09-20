@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+- The DMG ships `安装说明（可复制命令）.txt` (bilingual plain text) with the quarantine command on a line of its own, so it can be selected and copied — the same line drawn on the window artwork is a PNG and cannot be selected
+- The drag-to-authorize panel explains the stale-row case: if the app is **already listed but still reports "not granted"**, that row is left over from an earlier build — select it, remove it with `−`, then drag the app in again
+
+### Changed
+- `Scripts/build-dmg.sh` prints the app's designated requirement ("identity") and **refuses to produce an ad-hoc-signed DMG** unless `JIETU_ALLOW_ADHOC=1` is set: an ad-hoc requirement is a `cdhash`, which changes on every build, so every upgrade would make users re-authorize screen recording all over again
+- The release workflow imports the self-signed `Jietu` identity from repository secrets (`JIETU_CERT_P12_BASE64` / `JIETU_CERT_P12_PASSWORD`) into a temporary keychain, so CI-built releases carry the same stable identity as local builds; the keychain is deleted right after the build
+- DMG window layout: the `Jietu.app` / `Applications` icons moved up, and the install-notes file takes the third slot below them with its caption drawn alongside
+
+### Removed
+- `Fix Gatekeeper.app` and `Scripts/helper-icon.swift` — a downloaded executable cannot remove its own quarantine flag, so the DMG hands the command over as text instead
+
+### Fixed
+- `AppBundleDragSourceView.hitTest(_:)` compared a point given in the **superview's** coordinate space against its own bounds, moving the card's drag hot zone whenever SwiftUI placed it away from its superview's origin
+- The drag panel no longer re-snaps and re-orders itself while a drag is in progress — it used to be lifted back above the System Settings window every 0.4 s, fighting the pass-through that lets the drop land there
+
 ## [0.0.3] — 2026-09-20
 
 ### Added

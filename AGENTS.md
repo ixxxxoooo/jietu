@@ -90,13 +90,35 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
 构建、签名、窗口排版、打包、复验全在这一个脚本里，workflow 不再单独 `xcodebuild`
 （那样会绕开脚本里的签名回退，之前三次 Release 就是挂在 `No certificate matching 'Jietu'`）。
 
-- **签名**：本机有自签名证书 `Jietu` 就用它；没有（CI runner）自动退回 ad-hoc，
-  所以同一个脚本本地和 CI 都能跑。任何情况下都别用 `CODE_SIGNING_ALLOWED=NO`。
+- **签名身份必须稳定**（这条最要紧，TCC 授权全压在它上面）：
+  用同一张自签名证书 `Jietu` 签出来的 App，设计要求（designated requirement）是
+  `identifier "com.ixxxxoooo.jietu" and certificate leaf = H"aec7af8f…"`，
+  **重装 / 升级 / 换机器构建都认同一份「屏幕录制」授权**；ad-hoc 签出来的设计要求会退化成
+  `cdhash H"…"`——那是「这一个二进制」的指纹，**每构建一次就换一个身份**，用户每次升级都得
+  重新授权一次，而且重拖也救不回来（列表里那一行早就在了，拖不出第二行）。
+  所以 `build-dmg.sh` 取不到 `Jietu` 证书时**直接拒绝出包**，只认 `JIETU_ALLOW_ADHOC=1`
+  这个显式降级；出包时会打印实际的「身份」一行，本地和 CI 应该看到同一串。
+  - CI 的一次性配置：把证书连同私钥导出成 `.p12`，填进两个仓库 secret
+    （`JIETU_CERT_P12_BASE64`、`JIETU_CERT_P12_PASSWORD`），`release.yml` 会把它导进
+    临时钥匙串再签名。导出（本机钥匙串登录项里有这张证书，注意是**连同私钥**）：
+    ```bash
+    security export -t identities -f pkcs12 -k ~/Library/Keychains/login.keychain-db \
+      -P "<给 p12 的密码>" -o /tmp/jietu.p12
+    base64 -i /tmp/jietu.p12 | pbcopy   # 粘进 JIETU_CERT_P12_BASE64
+    rm -P /tmp/jietu.p12
+    ```
+  - 已经中招（列表里那一行是旧身份留下的死记录、开关开着却仍是未授权）：在系统设置里
+    选中那一行按 `−` 删掉，再把 App 拖回去、打开开关、重启 Jietu。
 - **镜像工具**：优先 `diskutil image`（macOS 26+），旧系统回退 `hdiutil`，脚本自己探测；
   可用 `JIETU_IMAGE_TOOL=diskutil|hdiutil` 强制某条路径做验证。
 - **窗口版式**（背景图 + 图标位置）靠 Finder 把设置写进镜像的 `.DS_Store`：本机排不上直接失败
   （那是真 bug）；CI 上拿不到 Finder 自动化授权则跳过并打 `::warning::`，DMG 照样出，
-  只是回到系统默认版式。
+  只是回到系统默认版式。三个槽位（App / Applications / 安装说明）的几何只在
+  `build-dmg.sh` 的「DMG 版式」一节里写一次。
+- **可复制的安装命令**：`xattr -dr com.apple.quarantine …` 必须随镜像带一份**真文件**
+  （`安装说明（可复制命令）.txt`）。背景图上那行字是 PNG 像素，选不中也复制不了；
+  更不能塞 `.command` / `.app`——从下载来的 DMG 里第一次打开会被 Gatekeeper 拦掉
+  （「解隔离的工具自己也被隔离」，已经踩过两次）。
 - **体积**：两处都别动，动了 DMG 会悄悄变大——最终压缩格式用 LZMA（`ULMO`，比 zlib 省约 18%）；
   窗口背景图是不带 alpha 的 RGB（带 alpha 白涨约 180KB）。这几条 `build-dmg.sh` 里都有守门。
 - 只想验打包流程、不发布：在 Actions 里手动跑 `Release`（`workflow_dispatch`），

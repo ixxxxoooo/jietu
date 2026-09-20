@@ -8,9 +8,10 @@
 # 用法：bash Scripts/build-dmg.sh
 #
 # 输出：dist/Jietu-<版本>.dmg，里面是
-#   Jietu.app            主程序
-#   Applications         软链，拖进去就是安装
-#   .background/         窗口背景图：安装说明直接画在图上
+#   Jietu.app                   主程序
+#   Applications                软链，拖进去就是安装
+#   安装说明（可复制命令）.txt     解隔离命令的**可复制**副本（背景图上的字选不中）
+#   .background/                窗口背景图：安装说明直接画在图上
 #
 # 窗口版式（背景图 + 图标位置）由 dmg-background.swift 出图、
 # dmg-layout.applescript 摆位，几何只在下面的「DMG 版式」一节里写一次。
@@ -30,8 +31,12 @@ REPO_URL="github.com/ixxxxoooo/jietu"
 # 内容区尺寸 = 背景图的设计稿尺寸；槽位坐标是图标中心（设计稿左上角为原点）。
 DMG_W=660
 DMG_H=420
-SLOT_APP="200,210"
-SLOT_APPLICATIONS="460,210"
+SLOT_APP="200,185"
+SLOT_APPLICATIONS="460,185"
+# 第三个槽位：安装说明。背景图上的命令是画出来的，选不中也复制不了，
+# 所以那份命令必须再给一份真文件，用户打开就能全选复制。
+SLOT_COMMAND="200,320"
+COMMAND_FILE_NAME="安装说明（可复制命令）.txt"
 ICON_SIZE=100
 TEXT_SIZE=12
 # Finder 窗口的 bounds 含标题栏，想要内容区高 DMG_H 就得多给这一截。
@@ -43,17 +48,30 @@ BLEED_Y=12
 
 # ---------- 1/6 构建 ----------
 echo "==> 1/6 构建（${CONFIG}）"
-# CI runner 上没有本机那张自签名证书「Jietu」，直接构建会报
-# "No certificate matching 'Jietu' found"（GitHub 上前三次 Release 就是这么挂的）。
-# 有证书就用它（本地重签名后屏幕录制授权更稳），没有就退回 ad-hoc——
-# 但不能用 CODE_SIGNING_ALLOWED=NO，那样产物没有签名身份，TCC 会认不出来。
+# 签名身份必须**稳定**，TCC（屏幕录制等）把授权记在 App 的代码签名身份上：
+#   · 证书「Jietu」签名 → 要求是 `identifier + certificate leaf`，重装 / 升级都认同一份授权；
+#   · ad-hoc 签名 → 要求退化成 `cdhash`（就是「这一个二进制」的指纹），
+#     **每构建一次就换一个身份**，用户每次升级都得重新授权一遍——而且这时把 App
+#     重拖进系统设置也没用，那一行早就在列表里了。
+# 所以 ad-hoc 只能显式降级：设 JIETU_ALLOW_ADHOC=1（默认拒绝，见 2/6 的身份守门）。
 #
 # 检测证书时不带 -v：自签名证书通常是 CSSMERR_TP_NOT_TRUSTED（未受系统信任），
 # 带 -v 只列「有效」证书会漏掉它，导致本地也退回 ad-hoc，签名身份变了 TCC 授权就丢了。
+# 也不能用 CODE_SIGNING_ALLOWED=NO：产物没有签名身份，TCC 直接认不出来。
 SIGN_OVERRIDES=""
-if ! security find-identity -p codesigning 2>/dev/null | grep -q '"Jietu"'; then
-    echo "    未找到「Jietu」自签名证书 → 改用 ad-hoc 签名"
+if security find-identity -p codesigning 2>/dev/null | grep -q '"Jietu"'; then
+    :
+elif [ "${JIETU_ALLOW_ADHOC:-}" = "1" ]; then
+    echo "    ⚠️  JIETU_ALLOW_ADHOC=1 → 改用 ad-hoc 签名"
+    echo "        这份 DMG 的签名身份每次构建都会变，用户升级后要重新授权屏幕录制。"
     SIGN_OVERRIDES="CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Automatic"
+else
+    echo "找不到自签名证书「Jietu」，拒绝产出 ad-hoc 签名的 DMG：" >&2
+    echo "  该签名的身份会随每次构建变化，用户升级一次就要重新授权一次屏幕录制。" >&2
+    echo "  · CI：把证书导出成 .p12 配进仓库 secrets（见 AGENTS.md「发布」一节）" >&2
+    echo "  · 本机：钥匙串登录项里应有「Jietu」证书（security find-identity -p codesigning）" >&2
+    echo "  · 只想验打包流程：JIETU_ALLOW_ADHOC=1 bash Scripts/build-dmg.sh" >&2
+    exit 1
 fi
 LOG="$(mktemp -t jietu-release)"
 # $SIGN_OVERRIDES 故意不加引号：要把两条 build setting 拆成两个参数传给 xcodebuild。
@@ -86,13 +104,23 @@ VOLNAME="$APP_NAME $VERSION"
 echo "    版本 $VERSION ($BUILD)  标识 $BUNDLE_ID"
 echo "    架构 $(lipo -archs "$APP/Contents/MacOS/$APP_NAME")"
 SIGN_AUTHORITY="$(codesign -dv --verbose=4 "$APP" 2>&1 | sed -n 's/^Authority=//p' | head -1)"
+# 设计要求（designated requirement）＝ TCC 认 App 的那把「钥匙」。
+# 带 certificate leaf 才是稳定身份；只剩 cdhash 就是 ad-hoc（每次构建都换）。
+DESIGNATED_REQ="$(codesign -d -r- "$APP" 2>&1 | sed -n 's/^designated => //p')"
 echo "    签名 ${SIGN_AUTHORITY:-ad-hoc}"
-# 本地构建（有 Jietu 证书）必须用 Jietu 签名，不能意外退回 ad-hoc——
-# 否则签名身份和 Debug 构建不一致，TCC 授权（屏幕录制等）会丢。
-if [ -z "$SIGN_OVERRIDES" ] && [ -z "$SIGN_AUTHORITY" ]; then
-    echo "警告：有 Jietu 证书却产出了 ad-hoc 签名，签名身份不一致"
-    exit 1
-fi
+echo "    身份 ${DESIGNATED_REQ}"
+case "$DESIGNATED_REQ" in
+    *cdhash*)
+        if [ "${JIETU_ALLOW_ADHOC:-}" = "1" ]; then
+            echo "    ⚠️  身份是 cdhash（ad-hoc）：用户升级后要重新授权屏幕录制"
+        else
+            echo "身份是 cdhash（ad-hoc）：每次构建都换签名身份，用户升级后要重新授权屏幕录制" >&2
+            echo "（真要用这份产物试打包，加 JIETU_ALLOW_ADHOC=1）" >&2
+            exit 1
+        fi
+        ;;
+    "") echo "取不到设计要求，拒绝继续：$APP" >&2; exit 1 ;;
+esac
 
 # ---------- 3/6 暂存 ----------
 echo "==> 3/6 暂存"
@@ -195,7 +223,46 @@ ln -s /Applications "$STAGE/Applications"
 # 这样用户从 DMG 拖出来时自身不带隔离（DMG 外壳的隔离由用户用命令行移除）。
 xattr -dr com.apple.quarantine "$STAGE/$APP_NAME.app" 2>/dev/null || true
 
-# 窗口背景图：安装说明（原来那份 00-请先读我.txt）画在上面。
+# 安装说明：**背景图上的命令选不中也复制不了**（那是一片 PNG 像素），
+# 所以同一份命令必须以真文件随镜像发一份，用户打开就能全选复制。
+# 只有纯文本能这么干：`.command` / `.app` 从「下载来的 DMG」里第一次打开会被
+# Gatekeeper 拦掉——「解隔离的小工具自己也被隔离」就是这么来的（已经踩过两次）。
+cat > "$STAGE/$COMMAND_FILE_NAME" <<EOF
+Jietu 首次打开前请先执行下面这一步（只需一次）
+Run this once before the first launch of Jietu
+
+把下面这行命令复制到「终端」里回车（命令可以整行选中复制）：
+Copy the line below into Terminal and press return:
+
+xattr -dr com.apple.quarantine /Applications/$APP_NAME.app
+
+
+它只做一件事：去掉这个 App 上「从网上下载」的隔离标记。
+不做的话，第一次打开会被 Gatekeeper 拦住（提示「无法验证开发者」或「已损坏」）。
+也可以在 Finder 里右键 $APP_NAME.app → 「打开」→ 再点「打开」，效果一样。
+
+This just clears the "downloaded from the internet" quarantine flag.
+Without it, Gatekeeper blocks the first launch. Right-click → Open → Open also works.
+
+
+授权（打开 Jietu 之后）
+Permissions (after Jietu is running)
+
+· 屏幕录制（必需）：没有它截图只有空白。
+  菜单栏「拖拽授权「屏幕录制」…」，或设置页「权限 › 授权屏幕录制」。
+  若列表里已经有 $APP_NAME.app 却仍显示未授权：先选中那一行点「−」删掉，
+  再重新拖进去并打开开关，最后点「重启 Jietu」。
+
+· 辅助功能（可选，仅滚动长图自动滚动用）：不授权也能手动滚动。
+
+· Screen Recording (required) — without it, captures come out blank.
+· Accessibility (optional) — only for auto-scroll in scrolling capture.
+
+
+更多说明 / More: https://$REPO_URL
+EOF
+
+# 窗口背景图：安装说明画在上面（可复制的命令在上面那份 txt 里）。
 echo "    渲染窗口背景图"
 mkdir -p "$STAGE/.background"
 swift Scripts/dmg-background.swift \
@@ -204,6 +271,7 @@ swift Scripts/dmg-background.swift \
     --bleed "${BLEED_X},${BLEED_Y}" \
     --app "$SLOT_APP" \
     --applications "$SLOT_APPLICATIONS" \
+    --command "$SLOT_COMMAND" \
     --name "$APP_NAME" \
     --version "$VERSION" \
     --repo "$REPO_URL" \
@@ -241,6 +309,7 @@ attach_image "$RW" "$MNT" 0 || { echo "挂载可写镜像失败"; exit 1; }
 MOUNTED=1
 [ -d "$MNT/$APP_NAME.app" ] || { echo "可写镜像里没有 $APP_NAME.app"; exit 1; }
 [ -L "$MNT/Applications" ] || { echo "可写镜像里没有 Applications 软链"; exit 1; }
+[ -f "$MNT/$COMMAND_FILE_NAME" ] || { echo "可写镜像里没有 $COMMAND_FILE_NAME"; exit 1; }
 
 # Finder 排版：背景图、窗口尺寸、图标位置都靠这一步落到 .DS_Store。
 # Finder 写 .DS_Store 是异步的，偶尔要等一下才落盘，所以失败就重试几次。
@@ -251,7 +320,8 @@ if [ "$FINDER_OK" -eq 1 ]; then
         if osascript Scripts/dmg-layout.applescript \
             "$(basename "$MNT")" "$VOLNAME" \
             "$DMG_W" "$DMG_H" "$TITLEBAR" "$ICON_SIZE" "$TEXT_SIZE" \
-            ${SLOT_APP//,/ } ${SLOT_APPLICATIONS//,/ } \
+            "$COMMAND_FILE_NAME" \
+            ${SLOT_APP//,/ } ${SLOT_APPLICATIONS//,/ } ${SLOT_COMMAND//,/ } \
             > "$LAYOUT_LOG" 2>&1 && [ -f "$MNT/.DS_Store" ]; then
             LAYOUT_OK=1
             break
@@ -288,7 +358,9 @@ VERIFY_MOUNTED=1
 
 [ -d "$VERIFY_MNT/$APP_NAME.app" ] || { echo "镜像里没有 $APP_NAME.app"; exit 1; }
 [ -L "$VERIFY_MNT/Applications" ] || { echo "镜像里没有 Applications 软链"; exit 1; }
-# 安装说明已经画进背景图，那份 txt 不该再出现——出现了就是这脚本漏改。
+# 可复制的命令必须真的在镜像里，否则用户只剩背景图上那行选不中的字。
+[ -f "$VERIFY_MNT/$COMMAND_FILE_NAME" ] || { echo "镜像里没有 ${COMMAND_FILE_NAME}（可复制的安装命令）"; exit 1; }
+# 老那份 txt 已经废弃（说明改画在背景图上），再出现就是这脚本漏改。
 [ ! -e "$VERIFY_MNT/00-请先读我.txt" ] || { echo "镜像里还留着 00-请先读我.txt"; exit 1; }
 [ -f "$VERIFY_MNT/.background/background.png" ] || { echo "镜像里没有窗口背景图"; exit 1; }
 if [ "$FINDER_OK" -eq 1 ]; then
@@ -314,5 +386,6 @@ echo "==> 6/6 OK  $(pwd)/$DMG"
 echo "    大小   $(du -h "$DMG" | cut -f1)"
 echo "    sha256 $(shasum -a 256 "$DMG" | cut -d' ' -f1)"
 echo
-echo "注：自签名证书未受系统信任，别人下载后首次打开前需在终端执行："
+echo "注：自签名证书未受系统信任，别人下载后首次打开前需在终端执行下面这条"
+echo "    （镜像里的「${COMMAND_FILE_NAME}」也有一份，可直接复制）："
 echo "    xattr -dr com.apple.quarantine /Applications/$APP_NAME.app"

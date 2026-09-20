@@ -1,6 +1,6 @@
 # 测试覆盖对照表
 
-> 截至 2026-09-19，329 个 `@Test`，36 个 `@Suite`。
+> 截至 2026-09-20，332 个 `@Test`，37 个 `@Suite`。
 >
 > 「selftest」列标注了 `AppDelegate+SelfTest.swift` 中的 DEBUG 自检命令覆盖情况。
 > selftest 在真实窗口环境里跑，能覆盖单元测试难以触达的 UI 层。
@@ -210,7 +210,7 @@
 
 | 源文件 | 单元测试 | selftest |
 |--------|----------|----------|
-| `AppBundleDragCard.swift` | — | — |
+| `AppBundleDragCard.swift` | `AppBundleDragCardTests` | — |
 | `PermissionDragPanel.swift` | — | — |
 
 ## UI/Recording
