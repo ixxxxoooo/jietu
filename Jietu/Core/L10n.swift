@@ -40,6 +40,7 @@ enum L10n {
     // MARK: - 设置页分类
 
     static var settingsGeneral: String { s("settings.general") }
+    static var settingsAppearance: String { s("settings.appearance") }
     static var settingsCapture: String { s("settings.capture") }
     static var settingsHotkeys: String { s("settings.hotkeys") }
     static var settingsQuickAccess: String { s("settings.quick_access") }
@@ -65,7 +66,13 @@ enum L10n {
     static var generalDefaultBehaviorFooter: String { s("general.default_behavior_footer") }
     static var generalTheme: String { s("general.theme") }
     static var generalThemeDesc: String { s("general.theme_desc") }
-    static var generalSectionAppearance: String { s("general.section_appearance") }
+
+    // MARK: - 外观设置
+
+    static var appearanceSectionInterface: String { s("appearance.section_interface") }
+    static var appearanceSectionPin: String { s("appearance.section_pin") }
+    static var appearancePinBorderGlow: String { s("appearance.pin_border_glow") }
+    static var appearancePinBorderGlowDesc: String { s("appearance.pin_border_glow_desc") }
 
     // MARK: - 外观
 

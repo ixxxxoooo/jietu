@@ -29,6 +29,7 @@
 // MARK: - Settings Sections
 
 "settings.general" = "General";
+"settings.appearance" = "Appearance";
 "settings.capture" = "Capture";
 "settings.hotkeys" = "Hotkeys";
 "settings.quick_access" = "Quick Access";
@@ -54,7 +55,13 @@
 "general.default_behavior_footer" = "These are the default behaviors for every capture.";
 "general.theme" = "Theme";
 "general.theme_desc" = "Follow system, or lock Jietu to light / dark mode.";
-"general.section_appearance" = "Appearance";
+
+// MARK: - Appearance Settings
+
+"appearance.section_interface" = "Interface";
+"appearance.section_pin" = "Pinned Images";
+"appearance.pin_border_glow" = "Border glow";
+"appearance.pin_border_glow_desc" = "Add a selection-green halo around pinned images that scales with them. Off keeps the default window shadow.";
 
 // MARK: - Appearance
 

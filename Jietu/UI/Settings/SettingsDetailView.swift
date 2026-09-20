@@ -16,6 +16,8 @@ struct SettingsDetailView: View {
             switch navigation.section {
             case .general:
                 GeneralSettingsPane(settings: settings)
+            case .appearance:
+                AppearanceSettingsPane(settings: settings)
             case .capture:
                 CaptureSettingsPane(settings: settings)
             case .hotkeys:

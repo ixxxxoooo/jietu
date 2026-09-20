@@ -142,6 +142,19 @@ struct SettingsStoreTests {
         #expect(reloaded.hotkeyAreaCapture?.keyCode == 5)
     }
 
+    @Test("钉图边框光晕默认关，开关可持久化")
+    func pinBorderGlowDefaultsAndPersists() {
+        let (defaults, suite) = TestUserDefaults.make()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let store = SettingsStore(defaults: defaults)
+        #expect(store.pinBorderGlow == false, "默认保持现状（只走窗口阴影）")
+
+        store.pinBorderGlow = true
+        let reloaded = SettingsStore(defaults: defaults)
+        #expect(reloaded.pinBorderGlow == true)
+    }
+
     @Test("最近截图按新到旧排序，且去重、限长")
     func recentCaptures() throws {
         let (defaults, suite) = TestUserDefaults.make()

@@ -7,6 +7,8 @@ enum PinGeometry {
     static let defaultEdgeTolerance: CGFloat = 8
     static let defaultCornerTolerance: CGFloat = 12
     static let defaultMinSide: CGFloat = 60
+    /// 钉图圆角。光晕那圈亮线按同一个半径画，两者才对得上。
+    static let defaultCornerRadius: CGFloat = 10
 
     /// 检测鼠标在视图内命中的调整手柄（8 向）。
     static func handle(

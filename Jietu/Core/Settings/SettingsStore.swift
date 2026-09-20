@@ -16,6 +16,7 @@ final class SettingsStore {
         static let editorShortcuts = "editor.shortcuts"
         static let appearance = "appearance.theme"
         static let language = "appearance.language"
+        static let pinBorderGlow = "appearance.pinBorderGlow"
         static let copyToClipboard = "behavior.copyToClipboard"
         static let playShutterSound = "behavior.playShutterSound"
         static let saveToDisk = "behavior.saveToDisk"
@@ -92,6 +93,12 @@ final class SettingsStore {
             defaults.set(language.rawValue, forKey: Key.language)
             language.apply()
         }
+    }
+
+    /// 钉图边框是否开一圈选区绿的光晕。关 = 现状（仅系统阴影）。
+    /// 只影响之后新钉的图，已在屏上的钉图不回改。
+    var pinBorderGlow: Bool {
+        didSet { defaults.set(pinBorderGlow, forKey: Key.pinBorderGlow) }
     }
 
     var playShutterSound: Bool {
@@ -225,6 +232,7 @@ final class SettingsStore {
         let loadedLanguage =
             defaults.string(forKey: Key.language).flatMap(AppLanguage.init) ?? .system
         self.language = loadedLanguage
+        self.pinBorderGlow = defaults.object(forKey: Key.pinBorderGlow) as? Bool ?? false
         self.copyToClipboard = defaults.object(forKey: Key.copyToClipboard) as? Bool ?? true
         self.playShutterSound = defaults.object(forKey: Key.playShutterSound) as? Bool ?? true
         self.saveToDisk = defaults.object(forKey: Key.saveToDisk) as? Bool ?? false

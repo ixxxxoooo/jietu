@@ -5,6 +5,7 @@ import SwiftUI
 /// @author ixxxxoooo
 enum SettingsSection: String, CaseIterable, Identifiable {
     case general
+    case appearance
     case capture
     case hotkeys
     case quickAccess
@@ -18,6 +19,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: return L10n.settingsGeneral
+        case .appearance: return L10n.settingsAppearance
         case .capture: return L10n.settingsCapture
         case .hotkeys: return L10n.settingsHotkeys
         case .quickAccess: return L10n.settingsQuickAccess
@@ -31,6 +33,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .general: return "gearshape"
+        case .appearance: return "paintbrush"
         case .capture: return "camera.viewfinder"
         case .hotkeys: return "keyboard"
         case .quickAccess: return "rectangle.on.rectangle"

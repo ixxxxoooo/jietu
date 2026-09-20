@@ -36,7 +36,7 @@ final class PinContentView: NSView {
         self.nsImage = NSImage(cgImage: image, size: frame.size)
         super.init(frame: frame)
         wantsLayer = true
-        layer?.cornerRadius = 10
+        layer?.cornerRadius = PinGeometry.defaultCornerRadius
         layer?.masksToBounds = true
         layerContentsRedrawPolicy = .duringViewResize
         configureEditButton()

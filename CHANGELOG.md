@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
+- Settings gained an **Appearance** section (theme, language, pinned-image styling); theme and language moved out of General into it
+- **Pin border glow** (off by default): a pinned image can carry a halo in the selection green instead of the plain window shadow. It follows the image as it moves and scales, and applies to images pinned after the switch is turned on
 - The DMG ships `安装说明.txt` — a short bilingual note whose second line is the quarantine command, so it can be selected and copied as a whole (the same line drawn on the window artwork is a PNG and cannot be selected). Permission guidance stays in the app's own onboarding instead of being duplicated there
 - The drag-to-authorize panel explains the stale-row case: if the app is **already listed but still reports "not granted"**, that row is left over from an earlier build — select it, remove it with `−`, then drag the app in again
 

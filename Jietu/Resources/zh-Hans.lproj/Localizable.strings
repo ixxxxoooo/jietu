@@ -29,6 +29,7 @@
 // MARK: - 设置页分类
 
 "settings.general" = "通用";
+"settings.appearance" = "外观";
 "settings.capture" = "截图";
 "settings.hotkeys" = "快捷键";
 "settings.quick_access" = "浮窗";
@@ -54,7 +55,13 @@
 "general.default_behavior_footer" = "这些是每次截图都会用到的默认行为。";
 "general.theme" = "主题";
 "general.theme_desc" = "跟随系统，或把 Jietu 固定为浅色 / 深色。";
-"general.section_appearance" = "外观";
+
+// MARK: - 外观设置
+
+"appearance.section_interface" = "界面";
+"appearance.section_pin" = "钉图";
+"appearance.pin_border_glow" = "边框光晕";
+"appearance.pin_border_glow_desc" = "在钉图四周加一圈选区绿的光晕，随钉图一起缩放。关掉则保持默认的窗口阴影。";
 
 // MARK: - 外观
 

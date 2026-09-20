@@ -78,6 +78,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         // 外观跟着设置走：跟随系统（nil）或锁定浅色 / 深色。
         settings.appearance.apply()
+        // 钉图的边框光晕（设置页「外观 › 钉图」）：钉图自己不认识设置存储，由这里接上。
+        // **必须在这里接**——下面的自检早退点之前就会钉图（`--selftest-pin`），
+        // 接晚了那个开关在自检里不生效，光晕有没有画出来就验不了。
+        PinWindowController.isBorderGlowEnabled = { [weak self] in
+            self?.settings.pinBorderGlow ?? false
+        }
 
         #if DEBUG
         // 自检模式：不建菜单栏、不注册热键，跑完自己退出。

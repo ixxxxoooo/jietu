@@ -24,9 +24,16 @@ final class PinWindowController: NSObject {
     /// 钉图本身不碰编辑器——它连 AppDelegate 都不该知道；这条闭包由 AppDelegate 在启动时接上。
     static var onRequestEdit: ((CGImage, CGRect) -> Void)?
 
-    private let window: NSWindow
+    /// 新钉的图要不要加边框光晕（设置页「外观 › 钉图」）。
+    ///
+    /// 同样由 AppDelegate 接上设置存储；只影响之后新钉的图，已经在屏上的不回改。
+    static var isBorderGlowEnabled: () -> Bool = { false }
+
+    private let window: PinPanel
     private let content: PinContentView
     private var monitor: Any?
+    /// 开了光晕才有的那一层发光窗口。
+    private var glow: PinGlowController?
 
     /// 钉一张截图。多张可共存。
     ///
@@ -95,6 +102,16 @@ final class PinWindowController: NSObject {
         content.onRequestClose = { [weak self] in self?.close() }
         content.onRequestEdit = { [weak self] in self?.requestEdit() }
 
+        if PinWindowController.isBorderGlowEnabled() {
+            // 系统阴影收掉：光晕自己就是一圈发光，两者叠着只会发灰。
+            window.hasShadow = false
+            let glow = PinGlowController(pinWindow: window)
+            window.onFrameChanged = { [weak glow] frame in
+                glow?.syncFrame(forPinFrame: frame)
+            }
+            self.glow = glow
+        }
+
         // Esc / ⌘W 快捷关闭当前 key 钉图浮窗
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.window.isKeyWindow else { return event }
@@ -127,10 +144,26 @@ final class PinWindowController: NSObject {
             NSEvent.removeMonitor(monitor)
             self.monitor = nil
         }
+        glow?.detach()
+        glow = nil
         window.orderOut(nil)
         PinWindowController.controllers.removeAll { $0 === self }
         // 若还有剩余钉图，激活上一张为 key window
         PinWindowController.controllers.last?.window.makeKeyAndOrderFront(nil)
+    }
+
+    // MARK: - 测试钩子
+
+    /// 测试用：当前每张钉图上的光晕窗口 frame（没开光晕的钉图不在里面）。
+    static var pinnedGlowFramesForTesting: [CGRect] {
+        controllers.compactMap { $0.glow?.frameForTesting }
+    }
+
+    /// 测试用：把还钉着的图全收掉（用例之间别互相留窗口）。
+    static func closeAllForTesting() {
+        for controller in controllers {
+            controller.close()
+        }
     }
 
 }
