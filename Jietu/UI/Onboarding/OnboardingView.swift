@@ -237,11 +237,7 @@ struct OnboardingView: View {
                 }
             }
             HStack(spacing: Theme.Spacing.md) {
-                caption(
-                    model.suggestsRelaunch
-                        ? L10n.onboardingRelaunchHint
-                        : L10n.onboardingDragHint
-                )
+                caption(permissionCaption)
                 Spacer(minLength: 0)
                 // 辅助功能是可选权限：动作不占行内的状态位，跟它排在同一条次要动作线上
                 // （设置页也是这个分工：状态归状态、动作另起一行）。
@@ -376,6 +372,15 @@ struct OnboardingView: View {
             .font(.caption)
             .foregroundStyle(.tertiary)
             .padding(.horizontal, Theme.Spacing.xs)
+    }
+
+    /// 卡片下那行小字：按当前状态挑一句最有用的话。
+    ///
+    /// 已经授权、也不需要重启时**不**讲「把卡片拖进列表」——那时候那句话是废话；
+    /// 换成「撤销授权要重启才看得出来」，正好回答「我在系统设置里删了，怎么还显示已授权」。
+    private var permissionCaption: String {
+        if model.suggestsRelaunch { return L10n.onboardingRelaunchHint }
+        return model.isGranted ? L10n.permRecheckStaleHint : L10n.onboardingDragHint
     }
 
     /// 权限行右侧的状态标识。两种权限、两种情况都走这一份：

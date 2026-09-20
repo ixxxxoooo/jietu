@@ -70,6 +70,11 @@ struct PermissionSettingsPane: View {
                 }
             } header: {
                 SettingsSectionHeader(title: L10n.permSectionScreenRecording)
+            } footer: {
+                // 撤销授权不会从正在跑的进程里收回去：不写清楚，用户会以为「重新检测」坏了。
+                Text(L10n.permRecheckStaleHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section {

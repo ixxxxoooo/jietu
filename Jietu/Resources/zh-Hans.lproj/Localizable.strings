@@ -236,6 +236,7 @@
 "perm.screen_recording_denied" = "没有它，截图会返回空白画面。";
 "perm.recheck" = "重新检测";
 "perm.recheck_help" = "立刻再读一次系统里的授权状态";
+"perm.recheck_stale_hint" = "「重新检测」看的是本进程启动时拿到的授权：在系统设置里勾上或撤销，都请重启 Jietu 再判断。";
 "perm.grant_target" = "授权对象";
 "perm.grant_target_desc" = "在「系统设置 › 隐私与安全性 › 屏幕录制」里勾选它；若列表里没有它，点列表左下的「+」手动选中这个 App。";
 "perm.grant_action" = "授权操作";

@@ -236,6 +236,7 @@
 "perm.screen_recording_denied" = "Without it, captures will return blank images.";
 "perm.recheck" = "Recheck";
 "perm.recheck_help" = "Re-read the system authorization status now";
+"perm.recheck_stale_hint" = "\"Recheck\" reports the access this process got at launch — after granting or revoking in System Settings, restart Jietu before trusting it.";
 "perm.grant_target" = "Grant Target";
 "perm.grant_target_desc" = "Check it in \"System Settings › Privacy & Security › Screen Recording\"; if not listed, click \"+\" at the bottom left to manually add this app.";
 "perm.grant_action" = "Grant Action";

@@ -248,6 +248,8 @@ enum L10n {
     static var permScreenRecordingDenied: String { s("perm.screen_recording_denied") }
     static var permRecheck: String { s("perm.recheck") }
     static var permRecheckHelp: String { s("perm.recheck_help") }
+    /// 「重新检测」读的是**本进程**启动时拿到的授权：勾选与撤销都要重启才反映出来。
+    static var permRecheckStaleHint: String { s("perm.recheck_stale_hint") }
     static var permGrantTarget: String { s("perm.grant_target") }
     static var permGrantTargetDesc: String { s("perm.grant_target_desc") }
     static var permGrantAction: String { s("perm.grant_action") }
