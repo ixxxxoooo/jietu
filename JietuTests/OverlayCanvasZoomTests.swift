@@ -133,4 +133,112 @@ struct OverlayCanvasZoomTests {
         #expect(committedRect != nil, "松开鼠标应立即提交截图，无需双击或按回车")
         #expect(committedRect!.width >= 100 && committedRect!.height >= 100)
     }
+
+    // MARK: - ⌘D 钉图
+
+    @Test("原地编辑里按 ⌘D：把当前这张（含标注）钉上，交给 onPinImage")
+    func commandDPinsAnnotatedImage() throws {
+        let (canvas, image) = makeCanvas()
+        canvas.restoreImageForInlineEditing(image)
+
+        var pinned: (image: CGImage, rect: CGRect)?
+        canvas.onPinImage = { image, rect in pinned = (image, rect) }
+
+        canvas.keyDown(with: commandKeyEvent("d"))
+
+        let pinnedImage = try #require(pinned?.image, "⌘D 应当把当前图交出去钉")
+        #expect(pinnedImage.width == image.width && pinnedImage.height == image.height)
+        #expect(pinned?.rect == canvas.debugSelection, "钉的位置就是当前选区")
+    }
+
+    @Test("还没进标注时按 ⌘D：把当前选区钉上，交给 onPinSelection")
+    func commandDPinsCurrentSelection() {
+        let (canvas, _) = makeCanvas()
+        canvas.debugSetSelection(CGRect(x: 120, y: 90, width: 300, height: 200))
+
+        var pinnedRect: CGRect?
+        canvas.onPinSelection = { rect in pinnedRect = rect }
+        canvas.keyDown(with: commandKeyEvent("d"))
+
+        #expect(pinnedRect == CGRect(x: 120, y: 90, width: 300, height: 200))
+    }
+
+    @Test("拖拽中途按 ⌘D 不算数：不钉一块还没框完的区域")
+    func commandDIgnoresUnsettledSelection() {
+        let (canvas, _) = makeCanvas()
+        canvas.debugSetSelection(CGRect(x: 120, y: 90, width: 300, height: 200))
+        // 拖拽中（选区还在变）
+        canvas.mouseDown(
+            with: mouseEvent(.leftMouseDown, at: NSPoint(x: 120, y: 90))
+        )
+        canvas.mouseDragged(
+            with: mouseEvent(.leftMouseDragged, at: NSPoint(x: 420, y: 290))
+        )
+
+        var pinnedRect: CGRect?
+        canvas.onPinSelection = { rect in pinnedRect = rect }
+        canvas.keyDown(with: commandKeyEvent("d"))
+
+        #expect(pinnedRect == nil, "框选还没定下来时不该钉")
+    }
+
+    // MARK: - 脚手架
+
+    /// 800×600 的冻结帧 + 一块 1000×800 的遮罩画布（和真实遮罩同一套构造）。
+    private func makeCanvas() -> (OverlayCanvasView, CGImage) {
+        let ctx = CGContext(
+            data: nil,
+            width: 800,
+            height: 600,
+            bitsPerComponent: 8,
+            bytesPerRow: 800 * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        let image = ctx.makeImage()!
+        let snapshot = DisplaySnapshot(
+            displayID: 1,
+            screenFrameInPoints: CGRect(x: 0, y: 0, width: 1000, height: 800),
+            nominalScaleFactor: 2,
+            image: image
+        )
+        let session = CaptureSession(snapshots: [snapshot], windows: [])
+        let canvas = OverlayCanvasView(
+            snapshot: snapshot,
+            session: session,
+            displayIndex: 1,
+            displayCount: 1
+        )
+        canvas.frame = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        return (canvas, image)
+    }
+
+    private func commandKeyEvent(_ character: String) -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [.command],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: character,
+            charactersIgnoringModifiers: character,
+            isARepeat: false,
+            keyCode: 2 // kVK_ANSI_D
+        )!
+    }
+
+    private func mouseEvent(_ type: NSEvent.EventType, at point: NSPoint) -> NSEvent {
+        NSEvent.mouseEvent(
+            with: type,
+            location: point,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: type == .leftMouseDown ? 1 : 0
+        )!
+    }
 }

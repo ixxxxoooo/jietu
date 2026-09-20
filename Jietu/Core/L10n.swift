@@ -229,6 +229,7 @@ enum L10n {
     static var toolbarSave: String { s("toolbar.save") }
     static var toolbarSaveHelp: String { s("toolbar.save_help") }
     static var toolbarPin: String { s("toolbar.pin") }
+    static var toolbarPinHelp: String { s("toolbar.pin_help") }
     static var toolbarCancel: String { s("toolbar.cancel") }
     static var toolbarConfirm: String { s("toolbar.confirm") }
     static var toolbarOCR: String { s("toolbar.ocr") }

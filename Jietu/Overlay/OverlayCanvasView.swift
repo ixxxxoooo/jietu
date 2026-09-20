@@ -123,6 +123,8 @@ final class OverlayCanvasView: NSView {
     /// 原地工具栏的「下载 / 钉图」回调（钉图额外带选区 local rect，用于原地钉）。
     var onSaveImage: ((CGImage) -> Void)?
     var onPinImage: ((CGImage, CGRect) -> Void)?
+    /// 还没进标注时按 ⌘D：把当前选区（local）原样钉上；裁剪由 Coordinator 从冻结帧里做。
+    var onPinSelection: ((CGRect) -> Void)?
     /// 标注默认样式：原地工具栏开出来时用它，改完回报给外部记住。
     var annotationDefaults: AnnotationDefaults = .standard
     var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)?

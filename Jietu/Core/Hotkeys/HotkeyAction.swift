@@ -1,9 +1,10 @@
+import Carbon.HIToolbox
 import Foundation
 
 /// 可绑定全局热键的动作。
 ///
-/// 每个动作默认**不设**热键（避免和系统 / 其它 App 抢组合键），
-/// 用户想用哪个就在设置页自己录一个，也可以随时清除。
+/// 除 `defaults` 里那几个（区域截图出厂配 ⌃⌘A）之外，其余动作默认**不设**热键
+/// （避免和系统 / 其它 App 抢组合键），用户想用哪个就在设置页自己录一个，也可以随时清除。
 ///
 /// @author ixxxxoooo
 enum HotkeyAction: String, CaseIterable, Identifiable, Codable {
@@ -61,4 +62,17 @@ enum HotkeyAction: String, CaseIterable, Identifiable, Codable {
 
     /// 定时截图热键使用的延时（秒）。
     static let timedCaptureDelay: TimeInterval = 5
+
+    /// 出厂就配好的全局热键。
+    ///
+    /// 只给**最常用的一条**（区域截图 ⌃⌘A）：截图工具没有「按一下就能截」的入口太别扭，
+    /// 而这个组合键既不在系统快捷键表里，也不常被别的 App 占。
+    /// 只对「用户自己没设过这个动作」生效——在设置页清掉之后**不会再填回来**
+    /// （见 `SettingsStore.init` 里的一次性补齐）。
+    static let defaults: [HotkeyAction: Hotkey] = [
+        .areaCapture: Hotkey(
+            keyCode: UInt32(kVK_ANSI_A),
+            carbonModifiers: UInt32(cmdKey | controlKey)
+        )
+    ]
 }

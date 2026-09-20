@@ -20,7 +20,7 @@ struct SettingsStoreTests {
         #expect(store.showSaveNotification == true)
         #expect(store.quickAccessAutoCloseDelay == 30)
         #expect(store.saveFormat == .png)
-        #expect(store.hotkeyAreaCapture == nil)
+        #expect(store.hotkeyAreaCapture == HotkeyAction.defaults[.areaCapture])
     }
 
     @Test("录屏默认不开麦克风，开关可持久化")
@@ -37,15 +37,48 @@ struct SettingsStoreTests {
         #expect(reloaded.recordMicrophone == true)
     }
 
-    @Test("默认不设置任何热键")
-    func defaultHotkeysAreEmpty() {
+    @Test("出厂热键：区域截图配 ⌃⌘A，其余动作不设")
+    func defaultHotkeysMatchFactoryDefaults() {
         let (defaults, suite) = TestUserDefaults.make()
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let store = SettingsStore(defaults: defaults)
-        for action in HotkeyAction.allCases {
-            #expect(store.hotkey(for: action) == nil)
+        let areaCapture = store.hotkey(for: .areaCapture)
+        #expect(areaCapture == HotkeyAction.defaults[.areaCapture])
+        #expect(areaCapture?.displayString == "⌃⌘A")
+        for action in HotkeyAction.allCases where HotkeyAction.defaults[action] == nil {
+            #expect(store.hotkey(for: action) == nil, "\(action) 默认不该有热键")
         }
+    }
+
+    @Test("把出厂默认热键清掉后，重启不会再填回来")
+    func clearedDefaultHotkeyStaysCleared() {
+        let (defaults, suite) = TestUserDefaults.make()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let store = SettingsStore(defaults: defaults)
+        store.setHotkey(nil, for: .areaCapture)
+
+        let reloaded = SettingsStore(defaults: defaults)
+        #expect(reloaded.hotkey(for: .areaCapture) == nil, "用户清掉的就是清掉了")
+    }
+
+    @Test("老用户升级上来：没设过的动作补上出厂默认，自己设过的保持原样")
+    func upgradeSeedsDefaultsForUntouchedActions() throws {
+        let (defaults, suite) = TestUserDefaults.make()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        // 模拟升级前的存档：只有一条用户自己设的热键（键名与 SettingsStore 里的存储键一致）。
+        let custom = Hotkey(keyCode: 3, carbonModifiers: UInt32(cmdKey | shiftKey))
+        let raw = ["fullScreenCapture": custom]
+        defaults.set(try JSONEncoder().encode(raw), forKey: "hotkeys.map")
+
+        let store = SettingsStore(defaults: defaults)
+        #expect(store.hotkey(for: .fullScreenCapture) == custom, "用户自己设过的不能被默认盖掉")
+        #expect(
+            store.hotkey(for: .areaCapture) == HotkeyAction.defaults[.areaCapture],
+            "没设过的补上出厂默认"
+        )
     }
 
     @Test("多个热键各自独立持久化，清除后不再存在")
@@ -61,7 +94,7 @@ struct SettingsStoreTests {
         let reloaded = SettingsStore(defaults: defaults)
         #expect(reloaded.hotkey(for: .windowCapture) == windowKey)
         #expect(reloaded.hotkey(for: .timedCapture)?.keyCode == 9)
-        #expect(reloaded.hotkey(for: .areaCapture) == nil)
+        #expect(reloaded.hotkey(for: .scrollingCapture) == nil)
 
         // 清除只影响该动作。
         reloaded.setHotkey(nil, for: .windowCapture)

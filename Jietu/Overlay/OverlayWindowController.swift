@@ -81,6 +81,11 @@ final class OverlayWindowController {
         get { canvas.onPinImage }
         set { canvas.onPinImage = newValue }
     }
+    /// 还没进标注时按 ⌘D 钉当前选区。
+    var onPinSelection: ((CGRect) -> Void)? {
+        get { canvas.onPinSelection }
+        set { canvas.onPinSelection = newValue }
+    }
 
     /// 原地标注的样式变更（工具 / 颜色 / 参数），由 Coordinator 转给外部记住。
     var onAnnotationDefaultsChange: ((AnnotationDefaults) -> Void)? {

@@ -107,7 +107,7 @@
 // MARK: - Hotkeys Settings
 
 "hotkeys.section_global" = "Global Hotkeys";
-"hotkeys.section_global_footer" = "No hotkeys are set by default. Click the recorder and press a key combination to bind; hover over the recorder and click ✕ to clear.\nGlobal hotkeys override the same key combination in other apps. Avoid commonly used shortcuts.";
+"hotkeys.section_global_footer" = "Area capture ships with ⌃⌘A; the other actions start unset. Click the recorder and press a key combination to bind; hover over the recorder and click ✕ to clear.\nGlobal hotkeys override the same key combination in other apps. Avoid commonly used shortcuts.";
 "hotkeys.section_editor" = "Annotation Editing";
 "hotkeys.section_editor_footer" = "Only active inside the annotation editor (inline editing), does not take up system-level key combinations. Default: ⌘Z undo, ⇧⌘Z redo, can also be changed.\nThis is separate from the global hotkeys above — setting ⌘Z as global would override undo in all other apps.";
 "hotkeys.reset_default" = "Reset Default (⌘Z / ⇧⌘Z)";
@@ -217,6 +217,7 @@
 "toolbar.save" = "Save";
 "toolbar.save_help" = "Save (⌘S)";
 "toolbar.pin" = "Pin";
+"toolbar.pin_help" = "Pin (⌘D)";
 "toolbar.cancel" = "Cancel";
 "toolbar.confirm" = "Confirm";
 "toolbar.ocr" = "Recognize Text";

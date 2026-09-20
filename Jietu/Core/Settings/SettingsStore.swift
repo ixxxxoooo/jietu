@@ -12,6 +12,8 @@ final class SettingsStore {
         static let hotkeys = "hotkeys.map"
         /// 旧版本只存区域截图一个热键，启动时迁移到 `hotkeys`。
         static let legacyHotkeyAreaCapture = "hotkey.areaCapture"
+        /// 出厂默认热键是否已经补过（老用户升级后补一次，之后用户自己清掉就不再填回）。
+        static let hotkeysDefaultsSeeded = "hotkeys.defaultsSeeded"
         /// 标注编辑器内部的两条快捷键（撤销 / 重做）。
         static let editorShortcuts = "editor.shortcuts"
         static let appearance = "appearance.theme"
@@ -40,7 +42,7 @@ final class SettingsStore {
 
     private let defaults: UserDefaults
 
-    /// 各动作的全局热键。**没设置的动作不在表里**（默认全部不设）。
+    /// 各动作的全局热键。**没设置的动作不在表里**（只有 `HotkeyAction.defaults` 里那几个出厂自带）。
     var hotkeys: [HotkeyAction: Hotkey] {
         didSet { persistHotkeys() }
     }
@@ -314,13 +316,34 @@ final class SettingsStore {
             self.editorShortcuts = .standard
         }
 
+        // 默认热键只在**首次**（含升级后的第一次）补上，所以要等所有属性都就位之后再做。
+        seedDefaultHotkeysIfNeeded()
+
         // 启动时把语言偏好写回 AppleLanguages，保证 L10n / 系统文案一致。
         loadedLanguage.apply()
     }
 
+    /// 出厂默认热键**只补一次**：给还没设过该动作的用户填上 `HotkeyAction.defaults`。
+    ///
+    /// 用一次性标记而不是「表是空的才补」：用户在设置页清掉某个热键之后表里就少了那一条，
+    /// 下次启动不该又给他填回来（和编辑器快捷键那套「解绑后不自动填回默认」一个口径）。
+    /// 老用户升级上来同样会补这一次。
+    private func seedDefaultHotkeysIfNeeded() {
+        guard !defaults.bool(forKey: Key.hotkeysDefaultsSeeded) else { return }
+        defaults.set(true, forKey: Key.hotkeysDefaultsSeeded)
+
+        var seeded = hotkeys
+        for (action, hotkey) in HotkeyAction.defaults where seeded[action] == nil {
+            seeded[action] = hotkey
+        }
+        guard seeded != hotkeys else { return }
+        hotkeys = seeded
+        // init 里赋值不触发 didSet，得手动写回磁盘（否则下次启动又会走一遍「还没补过」）。
+        persistHotkeys()
+    }
+
     /// 出厂默认保存目录：`~/Pictures/Jietu`。
-    private static func defaultSaveDirectory() -> URL {
-        let pictures = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first
+    private static func defaultSaveDirectory() -> URL {        let pictures = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first
         return (pictures ?? FileManager.default.homeDirectoryForCurrentUser)
             .appendingPathComponent("Jietu", isDirectory: true)
     }

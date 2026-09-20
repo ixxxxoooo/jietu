@@ -109,6 +109,10 @@ extension OverlayCanvasView {
                         return
                     }
                 }
+                if isCommandKey(event, "d") {
+                    pinAnnotatedImage()
+                    return
+                }
             }
             switch event.keyCode {
             case 53: // Esc
@@ -138,6 +142,11 @@ extension OverlayCanvasView {
             }
             return
         }
+        // 选区还没进标注（浮窗预览模式，或框完还没松手那会儿）按 ⌘D：把框住的这块原样钉上。
+        if isCommandKey(event, "d") {
+            pinCurrentSelection()
+            return
+        }
         switch event.keyCode {
         case 53: // kVK_Escape
             onCancel?()
@@ -159,5 +168,32 @@ extension OverlayCanvasView {
         default:
             super.keyDown(with: event)
         }
+    }
+
+    // MARK: - ⌘D：钉图
+
+    /// 是不是「只按了 ⌘ 的某个字母键」（⌘S / ⌘D 这类本地快捷键都走它）。
+    ///
+    /// 按 `charactersIgnoringModifiers` 而不是 keyCode：非英文键盘布局下 keyCode 会漂。
+    func isCommandKey(_ event: NSEvent, _ character: String) -> Bool {
+        event.modifierFlags.intersection([.command, .shift, .control, .option]) == .command
+            && event.charactersIgnoringModifiers?.lowercased() == character
+    }
+
+    /// 原地编辑里按 ⌘D：把当前这张（含标注）钉到屏幕上——和工具栏那颗「钉图」同一条路。
+    func pinAnnotatedImage() {
+        guard let image = currentAnnotatedImage() else { return }
+        onPinImage?(image, selection ?? .zero)
+    }
+
+    /// 还没进标注时按 ⌘D：把当前选区原样钉上（图由协调器从冻结帧里裁，画布不碰裁剪）。
+    ///
+    /// 只认「已经定下来」的选区：拖拽中途按不算，免得钉上一块还没框完的区域；
+    /// 滚动长图那套选区域是「选给滚动用的」，也不参与。
+    func pinCurrentSelection() {
+        guard !isRegionPickMode, case .settled = interaction,
+            let selection, selection.width >= 1, selection.height >= 1
+        else { return }
+        onPinSelection?(selection)
     }
 }

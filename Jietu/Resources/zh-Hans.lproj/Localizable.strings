@@ -107,7 +107,7 @@
 // MARK: - 快捷键设置
 
 "hotkeys.section_global" = "全局热键";
-"hotkeys.section_global_footer" = "默认都不设置快捷键，点一下录制器再按组合键即可录入；悬停录制器时右侧的 ✕ 可清除。\n全局热键会抢占其它 App 的同名组合键，建议避开常用组合。";
+"hotkeys.section_global_footer" = "区域截图出厂配了 ⌃⌘A，其余动作默认不设；点一下录制器再按组合键即可录入，悬停录制器时右侧的 ✕ 可清除。\n全局热键会抢占其它 App 的同名组合键，建议避开常用组合。";
 "hotkeys.section_editor" = "标注编辑";
 "hotkeys.section_editor_footer" = "只在标注编辑器里生效（原地编辑），不占用系统级组合键，所以默认就配好：⌘Z 撤销、⇧⌘Z 重做，也可以改成别的。\n这与上面那组全局热键是两回事——把 ⌘Z 设成全局会抢掉其它 App 的撤销。";
 "hotkeys.reset_default" = "恢复默认（⌘Z / ⇧⌘Z）";
@@ -217,6 +217,7 @@
 "toolbar.save" = "保存";
 "toolbar.save_help" = "保存 (⌘S)";
 "toolbar.pin" = "钉图";
+"toolbar.pin_help" = "钉图 (⌘D)";
 "toolbar.cancel" = "取消";
 "toolbar.confirm" = "确认";
 "toolbar.ocr" = "识别文字";

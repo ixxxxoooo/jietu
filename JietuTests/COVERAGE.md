@@ -1,6 +1,6 @@
 # 测试覆盖对照表
 
-> 截至 2026-09-20，340 个 `@Test`，38 个 `@Suite`。
+> 截至 2026-09-20，345 个 `@Test`，38 个 `@Suite`。
 >
 > 「selftest」列标注了 `AppDelegate+SelfTest.swift` 中的 DEBUG 自检命令覆盖情况。
 > selftest 在真实窗口环境里跑，能覆盖单元测试难以触达的 UI 层。
@@ -63,7 +63,7 @@
 |--------|----------|----------|
 | `EditorShortcut.swift` | `EditorShortcutTests` | — |
 | `Hotkey.swift` | `HotkeyTests` | — |
-| `HotkeyAction.swift` | `HotkeyCenterTests` | — |
+| `HotkeyAction.swift` | `HotkeyCenterTests`, `SettingsStoreTests` | — |
 | `HotkeyCenter.swift` | `HotkeyCenterTests` | — |
 
 ## Core/ImageIO

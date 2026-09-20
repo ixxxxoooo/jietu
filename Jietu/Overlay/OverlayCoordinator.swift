@@ -159,6 +159,17 @@ final class OverlayCoordinator {
                 self.onPinImage?(image, rect)
                 self.finish(.cancelled, reason: "pin")
             }
+            // 还没进标注就按 ⌘D：裁冻结帧里框住的那块，同样钉在原地。
+            controller.onPinSelection = { [weak self] localRect in
+                guard let self else { return }
+                guard let image = CaptureOutput.crop(snapshot, toLocalRect: localRect) else {
+                    self.logger.error("crop produced empty image")
+                    return
+                }
+                let rect = self.screenRect(forLocalRect: localRect, snapshot: snapshot)
+                self.onPinImage?(image, rect)
+                self.finish(.cancelled, reason: "pin-selection")
+            }
             controller.onAnnotationDefaultsChange = { [weak self] updated in
                 self?.annotationDefaults = updated
                 self?.onAnnotationDefaultsChange?(updated)

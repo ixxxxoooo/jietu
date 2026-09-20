@@ -103,7 +103,10 @@ struct SettingsPanesConsistencyTests {
         #expect(store.jpegQuality == 0.9, "默认 JPEG 质量应为 0.9")
         #expect(store.editorMode == EditorMode.inline, "默认编辑模式应为原地编辑")
         #expect(store.quickAccessPosition == QuickAccessPosition.bottomLeft, "默认 Quick Access 位置应为左下角")
-        #expect(store.hotkeys.isEmpty, "默认不设任何全局热键")
+        #expect(
+            store.hotkeys == HotkeyAction.defaults,
+            "出厂只配 HotkeyAction.defaults 里那几条（区域截图 ⌃⌘A）"
+        )
         #expect(store.recordSystemAudio == false, "默认不录系统音频")
         #expect(store.recordFrameRate == 30, "默认录屏帧率应为 30")
         #expect(store.windowShadowEnabled == false, "默认不加窗口阴影")

@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
+- **Area capture now ships with ⌃⌘A as its default global hotkey**; the other actions still start unset, and clearing this one in Settings keeps it cleared instead of being filled back in
+- **⌘D pins the current image** from the capture UI: press it while selecting to pin the region as-is, or inside the inline editor to pin the annotated result. The toolbar's pin button carries the shortcut in its tooltip
 - Settings gained an **Appearance** section (theme, language, pinned-image styling); theme and language moved out of General into it
 - **Pin border glow** (off by default): a pinned image can carry a halo in the selection green instead of the plain window shadow. It follows the image as it moves and scales, and applies to images pinned after the switch is turned on
 - The DMG ships `安装说明.txt` — a short bilingual note whose second line is the quarantine command, so it can be selected and copied as a whole (the same line drawn on the window artwork is a PNG and cannot be selected). Permission guidance stays in the app's own onboarding instead of being duplicated there

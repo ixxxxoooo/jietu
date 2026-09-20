@@ -192,7 +192,12 @@ struct InlineMainToolbar: View {
         ) {
             model.onSave?()
         }
-        BarIconButton(title: L10n.toolbarPin, systemImage: "pin") {
+        BarIconButton(
+            title: L10n.toolbarPin,
+            systemImage: "pin",
+            help: L10n.toolbarPinHelp,
+            key: "d"
+        ) {
             model.onPin?()
         }
         BarIconButton(
