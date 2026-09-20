@@ -195,12 +195,7 @@ struct OnboardingView: View {
                     systemImage: "camera.viewfinder",
                     tint: model.isGranted ? Theme.Colors.success : Theme.Colors.accent
                 ) {
-                    OnboardingStatusBadge(
-                        title: model.isGranted ? L10n.permGranted : L10n.permNotGranted,
-                        systemImage: model.isGranted
-                            ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
-                        tint: model.isGranted ? Theme.Colors.success : Theme.Colors.warning
-                    )
+                    permissionBadge(granted: model.isGranted)
                 }
                 OnboardingDivider()
                 OnboardingRow(
@@ -211,18 +206,7 @@ struct OnboardingView: View {
                     systemImage: "hand.tap",
                     tint: model.isAccessibilityGranted ? Theme.Colors.success : Theme.Colors.accent
                 ) {
-                    if model.isAccessibilityGranted {
-                        OnboardingStatusBadge(
-                            title: L10n.permGranted,
-                            systemImage: "checkmark.circle.fill",
-                            tint: Theme.Colors.success
-                        )
-                    } else {
-                        Button(L10n.onboardingGoAuthorize) {
-                            model.requestAccessibilityAccess()
-                        }
-                        .controlSize(.small)
-                    }
+                    permissionBadge(granted: model.isAccessibilityGranted)
                 }
                 OnboardingDivider()
                 OnboardingRow(
@@ -259,6 +243,15 @@ struct OnboardingView: View {
                         : L10n.onboardingDragHint
                 )
                 Spacer(minLength: 0)
+                // 辅助功能是可选权限：动作不占行内的状态位，跟它排在同一条次要动作线上
+                // （设置页也是这个分工：状态归状态、动作另起一行）。
+                if !model.isAccessibilityGranted {
+                    Button(L10n.onboardingAuthorizeAccessibility) {
+                        model.requestAccessibilityAccess()
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption)
+                }
                 Button(L10n.permRecheck) { model.refresh() }
                     .buttonStyle(.link)
                     .font(.caption)
@@ -385,6 +378,16 @@ struct OnboardingView: View {
             .padding(.horizontal, Theme.Spacing.xs)
     }
 
+    /// 权限行右侧的状态标识。两种权限、两种情况都走这一份：
+    /// 只要各家自己拼，就迟早会一边是「未授权」药丸、一边是「去授权」按钮。
+    private func permissionBadge(granted: Bool) -> OnboardingStatusBadge {
+        OnboardingStatusBadge(
+            title: granted ? L10n.permGranted : L10n.permNotGranted,
+            systemImage: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+            tint: granted ? Theme.Colors.success : Theme.Colors.warning
+        )
+    }
+
     private func hotkeyBinding(for action: HotkeyAction) -> Binding<Hotkey?> {
         Binding(
             get: { model.hotkey(for: action) },
@@ -481,7 +484,7 @@ final class OnboardingModel {
         refresh()
     }
 
-    /// 点「去授权」（辅助功能）：打开系统设置辅助功能面板并浮出拖拽面板。
+    /// 点「授权辅助功能」：打开系统设置辅助功能面板并浮出拖拽面板。
     func requestAccessibilityAccess() {
         PermissionDragController.shared.present(pane: .accessibility)
         refresh()

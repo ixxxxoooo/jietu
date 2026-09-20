@@ -291,7 +291,7 @@
 "onboarding.relaunch_desc" = "macOS limitation: authorization only takes effect in processes launched after granting.";
 "onboarding.relaunch_hint" = "Already checked but still not authorized? Click \"Restart Jietu\" to apply.";
 "onboarding.drag_hint" = "Click the authorize button to open System Settings and show the drag panel; drag the card into the list.";
-"onboarding.go_authorize" = "Authorize";
+"onboarding.authorize_accessibility" = "Authorize Accessibility";
 "onboarding.no_hotkey_hint" = "No hotkeys bound by default, to avoid conflicts with system or other apps.";
 "onboarding.from_menu_bar" = "Start from Menu Bar";
 "onboarding.from_menu_bar_desc" = "Area / Window / Full Screen / Timed / Scrolling Capture — all there.";

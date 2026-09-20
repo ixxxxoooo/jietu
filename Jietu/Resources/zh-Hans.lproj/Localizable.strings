@@ -291,7 +291,7 @@
 "onboarding.relaunch_desc" = "macOS 的限制：授权只在授权之后启动的进程里生效。";
 "onboarding.relaunch_hint" = "已经勾选却还是未授权？点「重启 Jietu」立刻生效。";
 "onboarding.drag_hint" = "点击授权按钮会打开系统设置并浮出面板，把卡片拖进列表即可。";
-"onboarding.go_authorize" = "去授权";
+"onboarding.authorize_accessibility" = "授权辅助功能";
 "onboarding.no_hotkey_hint" = "默认都不绑定，避免和系统或其它 App 抢组合键。";
 "onboarding.from_menu_bar" = "从菜单栏开始";
 "onboarding.from_menu_bar_desc" = "区域 / 窗口 / 全屏 / 定时 / 滚动长图都在那里。";

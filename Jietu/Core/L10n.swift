@@ -303,7 +303,7 @@ enum L10n {
     static var onboardingRelaunchDesc: String { s("onboarding.relaunch_desc") }
     static var onboardingRelaunchHint: String { s("onboarding.relaunch_hint") }
     static var onboardingDragHint: String { s("onboarding.drag_hint") }
-    static var onboardingGoAuthorize: String { s("onboarding.go_authorize") }
+    static var onboardingAuthorizeAccessibility: String { s("onboarding.authorize_accessibility") }
     static var onboardingNoHotkeyHint: String { s("onboarding.no_hotkey_hint") }
     static var onboardingFromMenuBar: String { s("onboarding.from_menu_bar") }
     static var onboardingFromMenuBarDesc: String { s("onboarding.from_menu_bar_desc") }
