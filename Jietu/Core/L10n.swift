@@ -58,6 +58,9 @@ enum L10n {
     static var generalCopyToClipboardDesc: String { s("general.copy_to_clipboard_desc") }
     static var generalShowNotification: String { s("general.show_notification") }
     static var generalShowNotificationDesc: String { s("general.show_notification_desc") }
+    static var generalNotificationDenied: String { s("general.notification_denied") }
+    static var generalNotificationDeniedDesc: String { s("general.notification_denied_desc") }
+    static var generalOpenNotificationSettings: String { s("general.open_notification_settings") }
     static var generalSectionGeneral: String { s("general.section_general") }
     static var generalDefaultBehaviorFooter: String { s("general.default_behavior_footer") }
     static var generalTheme: String { s("general.theme") }

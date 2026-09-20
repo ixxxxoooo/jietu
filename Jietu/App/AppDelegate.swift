@@ -66,6 +66,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 但 ScreenCaptureKit 在**同一个进程**里仍然拿不到内容，必须重启。
     /// 所以这个值在启动时确定后就不再改，Onboarding 只负责提示重启。
 
+    /// 通知的 delegate 要赶在启动结束前挂上：App 在前台时，横幅是它 `willPresent` 里要来的，
+    /// 挂晚了系统就不来问，通知只会静静躺在通知中心（见 `CaptureNotifier.installDelegate`）。
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        notifier.installDelegate()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 必须在任何权限读取之前记下来：这是判断「要不要重启」的基准。
         ScreenCapturePermission.recordLaunchState()

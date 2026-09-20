@@ -4,6 +4,11 @@ import SwiftUI
 
 struct GeneralSettingsPane: View {
     @Bindable var settings: SettingsStore
+    /// 系统那一侧是不是把 Jietu 的通知关掉了。
+    ///
+    /// 我们这边的开关说了不算：系统设置 › 通知 里没允许，保存后就是一条都不出，
+    /// 而且**完全无声**——用户只会觉得「勾了没用」。所以这里读一次真状态并直说。
+    @State private var systemNotificationsDenied = false
 
     var body: some View {
         Form {
@@ -27,6 +32,17 @@ struct GeneralSettingsPane: View {
                 .onChange(of: settings.showSaveNotification) { _, enabled in
                     if enabled {
                         CaptureNotifier.requestAuthorizationShared()
+                    }
+                    refreshNotificationAuthorization()
+                }
+                if settings.showSaveNotification && systemNotificationsDenied {
+                    LabeledContent {
+                        Button(L10n.generalOpenNotificationSettings) {
+                            CaptureNotifier.openSystemNotificationSettings()
+                        }
+                    } label: {
+                        Text(L10n.generalNotificationDenied)
+                        Text(L10n.generalNotificationDeniedDesc)
                     }
                 }
             } header: {
@@ -66,6 +82,20 @@ struct GeneralSettingsPane: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear(perform: refreshNotificationAuthorization)
+        // 用户可能刚去系统设置里改过，切回来要立刻反映。
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            refreshNotificationAuthorization()
+        }
+    }
+
+    /// 读一次系统的通知授权状态，决定要不要把「系统里被关掉了」那行提示亮出来。
+    private func refreshNotificationAuthorization() {
+        Task { @MainActor in
+            systemNotificationsDenied = await CaptureNotifier.currentAuthorization() == .denied
+        }
     }
 
     /// 语言切换后菜单栏 / 已打开窗口仍握着旧文案，提示并重启即可全量生效。

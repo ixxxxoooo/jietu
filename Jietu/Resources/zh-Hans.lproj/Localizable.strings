@@ -47,6 +47,9 @@
 "general.copy_to_clipboard_desc" = "截图后立即写入剪贴板，可直接粘贴。";
 "general.show_notification" = "保存后显示系统通知";
 "general.show_notification_desc" = "保存到磁盘后弹出通知，点击可定位文件。";
+"general.notification_denied" = "系统通知被关掉了";
+"general.notification_denied_desc" = "上面这个开关要在系统设置 › 通知里允许 Jietu，否则保存后一条都不会弹。";
+"general.open_notification_settings" = "去系统设置打开";
 "general.section_general" = "通用";
 "general.default_behavior_footer" = "这些是每次截图都会用到的默认行为。";
 "general.theme" = "主题";

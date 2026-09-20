@@ -1,5 +1,14 @@
 import AppKit
 import UserNotifications
+import os
+
+/// 通知这条路上的日志。
+///
+/// 以前这里全用 `NSLog`，而 `NSLog` 在这个 App 里并不进统一日志——于是「设置里勾了
+/// 『保存后显示系统通知』、保存完却什么都没有」变成一件查不到原因的事故：
+/// 到底是没权限、没申请、还是投递失败，日志里一个字都没有。统一改走 os.Logger，
+/// 并把授权状态本身也打出来。
+private let notifyLog = Logger(subsystem: "com.ixxxxoooo.jietu", category: "notifications")
 
 /// 截图保存后的系统通知反馈。
 ///
@@ -18,6 +27,18 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         Bundle.main.bundleIdentifier != nil
     }
 
+    /// 授权状态的可读名字（日志里看 `rawValue` 数字没意义）。
+    static func describe(_ status: UNAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: return "notDetermined"
+        case .denied: return "denied"
+        case .authorized: return "authorized"
+        case .provisional: return "provisional"
+        case .ephemeral: return "ephemeral"
+        @unknown default: return "unknown(\(status.rawValue))"
+        }
+    }
+
     /// 设置页开关打开时也能申请权限（不必等下次启动）。
     static func requestAuthorizationShared() {
         guard Bundle.main.bundleIdentifier != nil else { return }
@@ -25,30 +46,67 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
+            notifyLog.notice(
+                "status on request: \(Self.describe(settings.authorizationStatus), privacy: .public)"
+            )
             switch settings.authorizationStatus {
             case .notDetermined:
                 center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
                     if let error {
-                        NSLog("[Jietu] notification authorization failed: \(error.localizedDescription)")
+                        notifyLog.error(
+                            "authorization failed: \(error.localizedDescription, privacy: .public)"
+                        )
                         return
                     }
-                    if !granted {
-                        NSLog("[Jietu] notification permission denied")
-                    }
+                    notifyLog.notice("authorization granted: \(granted, privacy: .public)")
                 }
             case .denied:
-                NSLog("[Jietu] notification permission denied — enable in System Settings › Notifications")
+                notifyLog.notice(
+                    "authorization denied — turn it on in System Settings › Notifications"
+                )
             default:
                 break
             }
         }
     }
 
+    /// 挂上 delegate。**必须尽早**（`applicationWillFinishLaunching` 里就挂）：
+    /// App 自己在前台时，系统默认不出横幅，要由 delegate 的 `willPresent` 明确要一个；
+    /// 挂晚了系统就不会来问，于是「通知进了通知中心、右上角却不弹横幅」。
+    func installDelegate() {
+        guard isAvailable else { return }
+        let center = UNUserNotificationCenter.current()
+        let alreadyInstalled = center.delegate === self
+        center.delegate = self
+        if !alreadyInstalled {
+            notifyLog.notice("delegate installed")
+        }
+    }
+
     /// 申请通知权限；被拒绝时静默降级（仅通知不可用，不影响其它功能）。
     func requestAuthorizationIfNeeded() {
         guard isAvailable else { return }
-        UNUserNotificationCenter.current().delegate = self
+        installDelegate()
         Self.requestAuthorizationShared()
+    }
+
+    /// 读一次当前授权状态。设置页靠它显示「系统那边被关掉了」。
+    static func currentAuthorization() async -> UNAuthorizationStatus {
+        guard Bundle.main.bundleIdentifier != nil else { return .denied }
+        return await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+    }
+
+    /// 打开「系统设置 › 通知 › Jietu」这一页。
+    ///
+    /// `?id=<bundle id>` 是通知面板支持的深链，直接落到本 App 的设置页，
+    /// 省得用户在一长串 App 里翻。
+    static func openSystemNotificationSettings() {
+        guard let id = Bundle.main.bundleIdentifier,
+            let url = URL(
+                string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(id)"
+            )
+        else { return }
+        NSWorkspace.shared.open(url)
     }
 
     /// 保存成功后弹通知（带图片预览），点击定位文件。
@@ -110,16 +168,21 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { [weak self] settings in
             guard let self else { return }
+            notifyLog.notice(
+                "post \(title, privacy: .public) — status \(Self.describe(settings.authorizationStatus), privacy: .public)"
+            )
             switch settings.authorizationStatus {
             case .notDetermined:
                 // 还没问过：先申请，授权成功后再发这一条。
                 center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
                     if let error {
-                        NSLog("[Jietu] notification authorization failed: \(error.localizedDescription)")
+                        notifyLog.error(
+                            "authorization failed: \(error.localizedDescription, privacy: .public)"
+                        )
                         return
                     }
                     guard granted else {
-                        NSLog("[Jietu] notification permission denied")
+                        notifyLog.notice("authorization refused by the user")
                         return
                     }
                     self.enqueue(title: title, body: body, attachmentURL: attachmentURL)
@@ -127,7 +190,9 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
             case .authorized, .provisional, .ephemeral:
                 self.enqueue(title: title, body: body, attachmentURL: attachmentURL)
             case .denied:
-                NSLog("[Jietu] skip notification — permission denied")
+                notifyLog.notice(
+                    "skipped — notifications are off for this app in System Settings › Notifications"
+                )
             @unknown default:
                 self.enqueue(title: title, body: body, attachmentURL: attachmentURL)
             }
@@ -156,7 +221,9 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         )
         UNUserNotificationCenter.current().add(request) { error in
             if let error {
-                NSLog("[Jietu] post notification failed: \(error.localizedDescription)")
+                notifyLog.error("post failed: \(error.localizedDescription, privacy: .public)")
+            } else {
+                notifyLog.notice("posted \(request.identifier, privacy: .public)")
             }
         }
     }
@@ -164,11 +231,18 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
     // MARK: - UNUserNotificationCenterDelegate
 
     /// App 在前台时也要出横幅（Jietu 是菜单栏代理 App，截完基本算前台）。
+    ///
+    /// 这条回调是横幅的**唯一开关**：App 在前台时系统默认只把它塞进通知中心，
+    /// 不调这里、或者这里没要 `.banner`，右上角就不会弹。所以留一行日志，
+    /// 下次「只进通知中心、没有横幅」时一眼能看出系统到底有没有来问。
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        notifyLog.notice(
+            "willPresent while frontmost: \(notification.request.identifier, privacy: .public) — asking for banner"
+        )
         completionHandler([.banner, .list, .sound])
     }
 

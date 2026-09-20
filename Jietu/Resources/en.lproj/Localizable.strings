@@ -47,6 +47,9 @@
 "general.copy_to_clipboard_desc" = "Copy to clipboard immediately after capture.";
 "general.show_notification" = "Show Notification After Save";
 "general.show_notification_desc" = "Show system notification after saving, click to locate file.";
+"general.notification_denied" = "Notifications are off in macOS";
+"general.notification_denied_desc" = "The switch above only works once Jietu is allowed in System Settings › Notifications; otherwise nothing appears after saving.";
+"general.open_notification_settings" = "Open System Settings";
 "general.section_general" = "General";
 "general.default_behavior_footer" = "These are the default behaviors for every capture.";
 "general.theme" = "Theme";
