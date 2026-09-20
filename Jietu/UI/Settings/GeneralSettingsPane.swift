@@ -33,7 +33,11 @@ struct GeneralSettingsPane: View {
                     if enabled {
                         CaptureNotifier.requestAuthorizationShared()
                     }
-                    refreshNotificationAuthorization()
+                    // 授权请求是异步的，等一下再读状态，让系统有时间处理。
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(500))
+                        refreshNotificationAuthorization()
+                    }
                 }
                 if settings.showSaveNotification && systemNotificationsDenied {
                     LabeledContent {

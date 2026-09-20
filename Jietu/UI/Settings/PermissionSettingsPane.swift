@@ -125,7 +125,7 @@ struct PermissionSettingsPane: View {
             granted ? L10n.permGranted : L10n.permNotGranted,
             systemImage: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
         )
-        .foregroundStyle(granted ? Color.green : Color.orange)
+        .foregroundStyle(granted ? Theme.Colors.success : Theme.Colors.warning)
     }
 
     private func refresh() {

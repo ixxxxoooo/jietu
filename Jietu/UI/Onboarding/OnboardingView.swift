@@ -343,6 +343,8 @@ struct OnboardingView: View {
         }
     }
 
+    /// 主按钮动作。条件判断顺序与 `primaryTitle` 完全对齐：
+    /// 未授权 → 需要重启 → 辅助功能未授权 → 通用前进/完成。
     private func primaryAction() {
         switch step {
         case 1 where !model.isGranted:

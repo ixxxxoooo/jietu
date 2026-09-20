@@ -27,8 +27,8 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         Bundle.main.bundleIdentifier != nil
     }
 
-    /// 授权状态的可读名字（日志里看 `rawValue` 数字没意义）。
-    static func describe(_ status: UNAuthorizationStatus) -> String {
+    /// 授权状态的可读名字（仅限日志；`rawValue` 是数字，看不出含义）。
+    private static func describe(_ status: UNAuthorizationStatus) -> String {
         switch status {
         case .notDetermined: return "notDetermined"
         case .denied: return "denied"
@@ -174,7 +174,7 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
             switch settings.authorizationStatus {
             case .notDetermined:
                 // 还没问过：先申请，授权成功后再发这一条。
-                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
                     if let error {
                         notifyLog.error(
                             "authorization failed: \(error.localizedDescription, privacy: .public)"
@@ -185,7 +185,7 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
                         notifyLog.notice("authorization refused by the user")
                         return
                     }
-                    self.enqueue(title: title, body: body, attachmentURL: attachmentURL)
+                    self?.enqueue(title: title, body: body, attachmentURL: attachmentURL)
                 }
             case .authorized, .provisional, .ephemeral:
                 self.enqueue(title: title, body: body, attachmentURL: attachmentURL)
