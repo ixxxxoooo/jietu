@@ -98,15 +98,26 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
   重新授权一次，而且重拖也救不回来（列表里那一行早就在了，拖不出第二行）。
   所以 `build-dmg.sh` 取不到 `Jietu` 证书时**直接拒绝出包**，只认 `JIETU_ALLOW_ADHOC=1`
   这个显式降级；出包时会打印实际的「身份」一行，本地和 CI 应该看到同一串。
-  - CI 的一次性配置：把证书连同私钥导出成 `.p12`，填进两个仓库 secret
-    （`JIETU_CERT_P12_BASE64`、`JIETU_CERT_P12_PASSWORD`），`release.yml` 会把它导进
-    临时钥匙串再签名。导出（本机钥匙串登录项里有这张证书，注意是**连同私钥**）：
-    ```bash
-    security export -t identities -f pkcs12 -k ~/Library/Keychains/login.keychain-db \
-      -P "<给 p12 的密码>" -o /tmp/jietu.p12
-    base64 -i /tmp/jietu.p12 | pbcopy   # 粘进 JIETU_CERT_P12_BASE64
-    rm -P /tmp/jietu.p12
-    ```
+
+  **一次性（整仓生命周期只做一次）**：
+  1. 本机生成证书（已有「Jietu」身份就**跳过**，千万别重新生成）：
+     `bash Scripts/generate-signing-cert.sh`
+  2. 导出给 CI（已有证书、只差 secrets）：
+     `bash Scripts/export-signing-cert.sh --upload`
+     会写入两个仓库 secret：`JIETU_CERT_P12_BASE64`、`JIETU_CERT_P12_PASSWORD`。
+     文件落在 `~/.config/jietu/`（不进 git）：`jietu-signing.p12` / `.password` / `.base64`。
+  3. `release.yml` 在每次 job 里把 p12 导进**临时钥匙串** → `build-dmg.sh` 用「Jietu」签名 →
+     job 结束删掉钥匙串。打 tag 的正式发布**没有证书就失败**；手动 `workflow_dispatch`
+     才允许 `JIETU_ALLOW_ADHOC=1` 验打包（产物不适合发给用户）。
+
+  **每次 Release（打 tag 就会自动跑，不用再碰证书）**：
+  `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions 用同一张 p12 签名 → 出 DMG。
+  本地验身份：`codesign -d -r- dist/…/Jietu.app` 应看到 `certificate leaf = H"aec7af8f…"`，
+  和历史版本同一串。
+
+  **禁止**：重新跑 `generate-signing-cert.sh`、换一张新 p12、改 Release 的
+  `PRODUCT_BUNDLE_IDENTIFIER`（必须一直是 `com.ixxxxoooo.jietu`，不能带 `.dev`）。
+
   - 已经中招（列表里那一行是旧身份留下的死记录、开关开着却仍是未授权）：在系统设置里
     选中那一行按 `−` 删掉，再把 App 拖回去、打开开关、重启 Jietu。
 - **镜像工具**：优先 `diskutil image`（macOS 26+），旧系统回退 `hdiutil`，脚本自己探测；

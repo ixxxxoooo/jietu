@@ -19,3 +19,9 @@ xcuserdata/
 
 # 打包产物
 dist/
+
+# 代码签名私钥（应只在 ~/.config/jietu/，绝不能进仓库）
+*.p12
+*.p12.base64
+*.p12.password
+jietu-signing.*
