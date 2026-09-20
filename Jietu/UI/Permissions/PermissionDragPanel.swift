@@ -132,11 +132,14 @@ final class PermissionDragController {
             close()
         }
         currentPane = pane
-        if pane == .screenRecording {
-            _ = ScreenCapturePermission.request()
-        } else if pane == .accessibility {
-            _ = AccessibilityPermission.request()
-        }
+        // 两个权限都**故意不**先调系统的「申请」：
+        //   · 屏幕录制：`CGRequestScreenCaptureAccess()` 会先弹一次「Jietu 想要录制此电脑的
+        //     屏幕和音频」；
+        //   · 辅助功能：`AXIsProcessTrustedWithOptions` 会先弹「想要控制这台电脑」。
+        // 而我们紧接着就把系统设置打开、停在同一栏，还把 App 卡片浮在它下面——
+        // 那个对话框只是多一次点击（用户反馈：「已经自动打开了，不用弹这个」）。
+        // 系统列表里进 App 靠的是拖卡片 / 点「+」，不靠这次申请。
+        // （自动滚动那条路仍然会申请，那是引导用户去开辅助功能，见 AppDelegate+Scrolling。）
         pane.openSystemSettings()
         // URL 在「系统设置已经停在这一栏」时是 no-op，再显式激活一次把它拉到前台。
         SystemSettingsWindow.activate()
