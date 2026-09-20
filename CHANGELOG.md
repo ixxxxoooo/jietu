@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
-- The DMG ships `安装说明（可复制命令）.txt` (bilingual plain text) with the quarantine command on a line of its own, so it can be selected and copied — the same line drawn on the window artwork is a PNG and cannot be selected
+- The DMG ships `安装说明.txt` — a short bilingual note whose second line is the quarantine command, so it can be selected and copied as a whole (the same line drawn on the window artwork is a PNG and cannot be selected). Permission guidance stays in the app's own onboarding instead of being duplicated there
 - The drag-to-authorize panel explains the stale-row case: if the app is **already listed but still reports "not granted"**, that row is left over from an earlier build — select it, remove it with `−`, then drag the app in again
 
 ### Changed

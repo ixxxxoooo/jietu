@@ -29,7 +29,7 @@ struct Config {
     var bleed = CGSize(width: 16, height: 12)
     var app = CGPoint(x: 200, y: 185)
     var applications = CGPoint(x: 460, y: 185)
-    /// 安装说明（可复制命令）那份 txt 的槽位；说明文字画在它右边。
+    /// 安装说明那份 txt 的槽位；说明文字画在它右边。
     var command = CGPoint(x: 200, y: 320)
     var appName = "Jietu"
     var version = ""
@@ -225,8 +225,7 @@ func renderImage(_ config: Config, scale: CGFloat) -> NSBitmapImageRep? {
     draw(text("xattr -dr com.apple.quarantine /Applications/\(config.appName).app",
               NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular), inkSoft),
          left: captionX, centerY: config.command.y + 11)
-    draw(text("这行命令在左边那份 txt 里有一份，可以直接复制",
-              font(11.5), inkFaint),
+    draw(text("也可从 安装说明.txt 里直接复制", font(11.5), inkFaint),
          left: captionX, centerY: config.command.y + 31)
 
     // 6. 页脚：仓库地址。

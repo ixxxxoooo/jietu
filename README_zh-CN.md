@@ -63,7 +63,7 @@
 
 从 [Releases](https://github.com/ixxxxoooo/jietu/releases/latest) 下载最新 `.dmg`，打开后将 `Jietu.app` 拖入 `/Applications`。
 
-> **首次打开提示**：本应用使用自签名证书（无 Developer ID / 公证），macOS Gatekeeper 会拦截首次启动。打开前请在终端执行下面这行——DMG 里的 **`安装说明（可复制命令）.txt`** 里也有一份，可以直接复制：
+> **首次打开提示**：本应用使用自签名证书（无 Developer ID / 公证），macOS Gatekeeper 会拦截首次启动。打开前请在终端执行下面这行——DMG 里的 **`安装说明.txt`** 里也有一份，可以直接复制：
 >
 > ```
 > xattr -dr com.apple.quarantine /Applications/Jietu.app

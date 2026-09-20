@@ -10,7 +10,7 @@
 # 输出：dist/Jietu-<版本>.dmg，里面是
 #   Jietu.app                   主程序
 #   Applications                软链，拖进去就是安装
-#   安装说明（可复制命令）.txt     解隔离命令的**可复制**副本（背景图上的字选不中）
+#   安装说明.txt                  解隔离命令的**可复制**副本（背景图上的字选不中）
 #   .background/                窗口背景图：安装说明直接画在图上
 #
 # 窗口版式（背景图 + 图标位置）由 dmg-background.swift 出图、
@@ -36,7 +36,7 @@ SLOT_APPLICATIONS="460,185"
 # 第三个槽位：安装说明。背景图上的命令是画出来的，选不中也复制不了，
 # 所以那份命令必须再给一份真文件，用户打开就能全选复制。
 SLOT_COMMAND="200,320"
-COMMAND_FILE_NAME="安装说明（可复制命令）.txt"
+COMMAND_FILE_NAME="安装说明.txt"
 ICON_SIZE=100
 TEXT_SIZE=12
 # Finder 窗口的 bounds 含标题栏，想要内容区高 DMG_H 就得多给这一截。
@@ -227,39 +227,20 @@ xattr -dr com.apple.quarantine "$STAGE/$APP_NAME.app" 2>/dev/null || true
 # 所以同一份命令必须以真文件随镜像发一份，用户打开就能全选复制。
 # 只有纯文本能这么干：`.command` / `.app` 从「下载来的 DMG」里第一次打开会被
 # Gatekeeper 拦掉——「解隔离的小工具自己也被隔离」就是这么来的（已经踩过两次）。
+# 内容保持最短：授权那套流程 App 自己的引导页会讲，这里只说「打开前做什么」。
 cat > "$STAGE/$COMMAND_FILE_NAME" <<EOF
-Jietu 首次打开前请先执行下面这一步（只需一次）
-Run this once before the first launch of Jietu
-
-把下面这行命令复制到「终端」里回车（命令可以整行选中复制）：
-Copy the line below into Terminal and press return:
+Jietu 首次打开前，把这行复制到「终端」回车（只需一次）：
 
 xattr -dr com.apple.quarantine /Applications/$APP_NAME.app
 
 
-它只做一件事：去掉这个 App 上「从网上下载」的隔离标记。
-不做的话，第一次打开会被 Gatekeeper 拦住（提示「无法验证开发者」或「已损坏」）。
-也可以在 Finder 里右键 $APP_NAME.app → 「打开」→ 再点「打开」，效果一样。
+它只去掉这个 App 上「从网上下载」的隔离标记。不做的话，第一次打开会被 Gatekeeper
+拦住（提示「无法验证开发者」或「已损坏」）；右键 $APP_NAME.app →「打开」→ 再点
+「打开」，效果一样。
 
-This just clears the "downloaded from the internet" quarantine flag.
-Without it, Gatekeeper blocks the first launch. Right-click → Open → Open also works.
-
-
-授权（打开 Jietu 之后）
-Permissions (after Jietu is running)
-
-· 屏幕录制（必需）：没有它截图只有空白。
-  菜单栏「拖拽授权「屏幕录制」…」，或设置页「权限 › 授权屏幕录制」。
-  若列表里已经有 $APP_NAME.app 却仍显示未授权：先选中那一行点「−」删掉，
-  再重新拖进去并打开开关，最后点「重启 Jietu」。
-
-· 辅助功能（可选，仅滚动长图自动滚动用）：不授权也能手动滚动。
-
-· Screen Recording (required) — without it, captures come out blank.
-· Accessibility (optional) — only for auto-scroll in scrolling capture.
-
-
-更多说明 / More: https://$REPO_URL
+Before the first launch, copy the line above into Terminal and run it once.
+It only clears the "downloaded from the internet" quarantine flag; without it
+Gatekeeper blocks the first launch. Right-click the app → Open → Open also works.
 EOF
 
 # 窗口背景图：安装说明画在上面（可复制的命令在上面那份 txt 里）。

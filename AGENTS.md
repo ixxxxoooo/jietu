@@ -116,9 +116,10 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
   只是回到系统默认版式。三个槽位（App / Applications / 安装说明）的几何只在
   `build-dmg.sh` 的「DMG 版式」一节里写一次。
 - **可复制的安装命令**：`xattr -dr com.apple.quarantine …` 必须随镜像带一份**真文件**
-  （`安装说明（可复制命令）.txt`）。背景图上那行字是 PNG 像素，选不中也复制不了；
+  （`安装说明.txt`）。背景图上那行字是 PNG 像素，选不中也复制不了；
   更不能塞 `.command` / `.app`——从下载来的 DMG 里第一次打开会被 Gatekeeper 拦掉
-  （「解隔离的工具自己也被隔离」，已经踩过两次）。
+  （「解隔离的工具自己也被隔离」，已经踩过两次）。这份说明**保持最短**：只讲「打开前做什么」，
+  授权那套流程由 App 自己的引导页负责，别在这儿再抄一份。
 - **体积**：两处都别动，动了 DMG 会悄悄变大——最终压缩格式用 LZMA（`ULMO`，比 zlib 省约 18%）；
   窗口背景图是不带 alpha 的 RGB（带 alpha 白涨约 180KB）。这几条 `build-dmg.sh` 里都有守门。
 - 只想验打包流程、不发布：在 Actions 里手动跑 `Release`（`workflow_dispatch`），

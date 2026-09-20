@@ -63,7 +63,7 @@
 
 Download the latest `.dmg` from [Releases](https://github.com/ixxxxoooo/jietu/releases/latest), open it, and drag `Jietu.app` to `/Applications`.
 
-> **First launch note:** The app is self-signed (no Developer ID / notarization), so macOS Gatekeeper blocks the first launch. Before opening, run this in Terminal — the DMG also ships **`安装说明（可复制命令）.txt`** with the same line, ready to copy:
+> **First launch note:** The app is self-signed (no Developer ID / notarization), so macOS Gatekeeper blocks the first launch. Before opening, run this in Terminal — the DMG also ships **`安装说明.txt`** with the same line, ready to copy:
 >
 > ```
 > xattr -dr com.apple.quarantine /Applications/Jietu.app

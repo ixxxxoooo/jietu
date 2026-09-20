@@ -117,7 +117,7 @@ jobs:
                ```
                xattr -dr com.apple.quarantine /Applications/Jietu.app
                ```
-               The DMG also ships `安装说明（可复制命令）.txt` — the same line, ready to copy.
+               The DMG also ships `安装说明.txt` — the same line, ready to copy.
 
             ### Permissions
 
