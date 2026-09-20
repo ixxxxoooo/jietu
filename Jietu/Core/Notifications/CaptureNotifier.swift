@@ -204,13 +204,9 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         content.title = title
         content.body = body
         content.sound = .default
-        if let attachmentURL,
-            let attachment = try? UNNotificationAttachment(
-                identifier: "capture",
-                url: attachmentURL,
-                options: nil
-            )
-        {
+        // 附件必须给系统一份**临时副本**：直接塞用户刚存的那份，系统偶发会搬/锁文件，
+        // 横幅内容抽风或干脆不画缩略图。副本丢了也不影响用户文件。
+        if let attachmentURL, let attachment = makeAttachment(from: attachmentURL) {
             content.attachments = [attachment]
         }
 
@@ -225,6 +221,27 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
             } else {
                 notifyLog.notice("posted \(request.identifier, privacy: .public)")
             }
+        }
+    }
+
+    /// 把原图拷到临时目录再挂附件；失败就退回无附件（通知本身照发）。
+    private func makeAttachment(from fileURL: URL) -> UNNotificationAttachment? {
+        let ext = fileURL.pathExtension.isEmpty ? "png" : fileURL.pathExtension
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jietu-notify-\(UUID().uuidString).\(ext)")
+        do {
+            try FileManager.default.copyItem(at: fileURL, to: tempURL)
+            return try UNNotificationAttachment(
+                identifier: "capture",
+                url: tempURL,
+                options: nil
+            )
+        } catch {
+            notifyLog.error(
+                "attachment skipped: \(error.localizedDescription, privacy: .public)"
+            )
+            try? FileManager.default.removeItem(at: tempURL)
+            return nil
         }
     }
 

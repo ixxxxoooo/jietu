@@ -296,14 +296,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             // 遮罩窗在最上层，保存面板会被挡住：先隐藏。
             self.overlays.setOverlayHidden(true)
-            let saved = self.saveAs(image, ensuresHistory: true)
-            if saved {
+            // 通知先别发：遮罩还在，横幅会被挡掉（日志里 willPresent 到了、屏幕上却看不见）。
+            let savedURL = self.saveAs(image, ensuresHistory: true, notify: false)
+            if let savedURL {
                 // 保存完毕等同于确认，播放提示音、写入剪贴板，收起遮罩不再回到之前的区域截图状态。
                 if self.settings.playShutterSound {
                     CaptureOutput.playShutterSound()
                 }
                 self.copyToClipboard(image)
                 self.overlays.finishFromSave()
+                // 等遮罩真正拆掉再弹，给窗口层级一点时间收干净。
+                if self.settings.showSaveNotification {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                        self?.notifier.notifySaved(fileURL: savedURL)
+                    }
+                }
             } else {
                 // 用户在保存面板中点了取消：恢复遮罩继续编辑。
                 self.overlays.setOverlayHidden(false)

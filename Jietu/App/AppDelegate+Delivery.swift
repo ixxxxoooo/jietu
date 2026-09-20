@@ -177,8 +177,16 @@ extension AppDelegate {
     }
 
     /// 「存储为…」：弹系统保存面板让用户选择位置。
+    ///
+    /// - Parameter notify: 是否立刻弹系统通知。遮罩里的「另存为」应传 `false`，
+    ///   等遮罩收干净后再通知——否则横幅会被全屏遮罩挡掉，或一闪就没了。
+    /// - Returns: 写成的文件 URL；取消或失败返回 `nil`。
     @discardableResult
-    func saveAs(_ image: CGImage, ensuresHistory: Bool = false) -> Bool {
+    func saveAs(
+        _ image: CGImage,
+        ensuresHistory: Bool = false,
+        notify: Bool = true
+    ) -> URL? {
         let panel = NSSavePanel()
         panel.directoryURL = settings.saveDirectory
         panel.canCreateDirectories = true
@@ -189,7 +197,7 @@ extension AppDelegate {
         )
         panel.nameFieldStringValue = "\(base).\(settings.saveFormat.fileExtension)"
 
-        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
         do {
             let data: Data?
             switch settings.saveFormat {
@@ -203,13 +211,13 @@ extension AppDelegate {
             }
             didSave(to: url)
             // 「另存为」是用户主动操作，通知让他知道文件落在了哪。
-            if settings.showSaveNotification {
+            if notify, settings.showSaveNotification {
                 notifier.notifySaved(fileURL: url)
             }
-            return true
+            return url
         } catch {
             logger.error("save failed: \(error.localizedDescription)")
-            return false
+            return nil
         }
     }
 
