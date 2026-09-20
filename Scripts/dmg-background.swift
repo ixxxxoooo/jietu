@@ -12,7 +12,7 @@
 //
 // 用法：
 //   swift Scripts/dmg-background.swift --out <目录> --size 660x420 \
-//       --app 200,170 --applications 460,170 --helper 200,310 \
+//       --app 200,210 --applications 460,210 \
 //       --name Jietu --version 0.0.2 --repo github.com/ixxxxoooo/jietu
 //
 // @author ixxxxoooo
@@ -27,9 +27,8 @@ struct Config {
     /// 出血：Finder 从 .DS_Store 恢复窗口时，内容区会比脚本设定的略宽略高，
     /// 画面比设计稿多画一圈，就不会在右边 / 下边露白边。设计稿本身仍对齐左上角。
     var bleed = CGSize(width: 16, height: 12)
-    var app = CGPoint(x: 200, y: 170)
-    var applications = CGPoint(x: 460, y: 170)
-    var helper = CGPoint(x: 200, y: 310)
+    var app = CGPoint(x: 200, y: 210)
+    var applications = CGPoint(x: 460, y: 210)
     var appName = "Jietu"
     var version = ""
     var repo = ""
@@ -59,8 +58,6 @@ func parseConfig() -> Config {
             if let p = point(value) { config.app = p }
         case "--applications":
             if let p = point(value) { config.applications = p }
-        case "--helper":
-            if let p = point(value) { config.helper = p }
         default:
             FileHandle.standardError.write("未知参数：\(flag)\n".data(using: .utf8)!)
         }
@@ -215,12 +212,13 @@ func renderImage(_ config: Config, scale: CGFloat) -> NSBitmapImageRep? {
     brand.withAlphaComponent(0.55).setStroke()
     head.stroke()
 
-    // 5. 右下角：解除隔离工具的说明（原来写在 00-请先读我.txt 里）。
-    let captionX = config.helper.x + 56
-    draw(text("首次打开被系统拦截？", font(13, .medium), inkBody),
-         left: captionX, centerY: config.helper.y - 9)
-    draw(text("右键 Fix Gatekeeper →「打开」，即可解除隔离", font(12.5), inkSoft),
-         left: captionX, centerY: config.helper.y + 12)
+    // 5. 底部提示：首次打开前需用命令行移除隔离属性。
+    let hintY = max(config.app.y, config.applications.y) + 80
+    draw(text("首次打开前请在终端执行：", font(12.5, .medium), inkBody),
+         centerX: centerX, topY: hintY)
+    draw(text("xattr -dr com.apple.quarantine /Applications/\(config.appName).app",
+              NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular), inkSoft),
+         centerX: centerX, topY: hintY + 20)
 
     // 6. 页脚：仓库地址。
     if !config.repo.isEmpty {

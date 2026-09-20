@@ -11,12 +11,12 @@
 --
 -- 用法：osascript Scripts/dmg-layout.applescript \
 --         <卷名> <备用卷名> <内容宽> <内容高> <标题栏高> <图标尺寸> <文字尺寸> \
---         <appX> <appY> <applicationsX> <applicationsY> <helperX> <helperY>
+--         <appX> <appY> <applicationsX> <applicationsY>
 --       第一个名字优先（build-dmg.sh 传的是唯一的挂载点末段），第二个是卷名兜底。
 --
 -- @author ixxxxoooo
 on run argv
-	if (count of argv) < 13 then error "参数不足：需要 卷名×2 内容尺寸 标题栏高 图标与文字尺寸 及三个槽位坐标"
+	if (count of argv) < 11 then error "参数不足：需要 卷名×2 内容尺寸 标题栏高 图标与文字尺寸 及两个槽位坐标"
 
 	set volName to item 1 of argv
 	set altName to item 2 of argv
@@ -27,7 +27,6 @@ on run argv
 	set textSize to (item 7 of argv) as integer
 	set appPos to {(item 8 of argv) as integer, (item 9 of argv) as integer}
 	set appsPos to {(item 10 of argv) as integer, (item 11 of argv) as integer}
-	set helperPos to {(item 12 of argv) as integer, (item 13 of argv) as integer}
 
 	set diskName to ""
 	tell application "Finder" to set existingNames to name of every disk
@@ -72,7 +71,6 @@ on run argv
 			set background picture of viewOptions to file ".background:background.png"
 			set position of item "Jietu.app" of container window to appPos
 			set position of item "Applications" of container window to appsPos
-			set position of item "Fix Gatekeeper.app" of container window to helperPos
 			update without registering applications
 			delay 1
 			close container window

@@ -97,9 +97,8 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
 - **窗口版式**（背景图 + 图标位置）靠 Finder 把设置写进镜像的 `.DS_Store`：本机排不上直接失败
   （那是真 bug）；CI 上拿不到 Finder 自动化授权则跳过并打 `::warning::`，DMG 照样出，
   只是回到系统默认版式。
-- **体积**：三处都别动，动了 DMG 会悄悄变大——最终压缩格式用 LZMA（`ULMO`，比 zlib 省约 18%）；
-  窗口背景图是不带 alpha 的 RGB（带 alpha 白涨约 180KB）；`Fix Gatekeeper.app` 的图标是自绘的
-  （丢掉 `osacompile` 送的 `Assets.car`，省 400 多 KB）。这几条 `build-dmg.sh` 里都有守门。
+- **体积**：两处都别动，动了 DMG 会悄悄变大——最终压缩格式用 LZMA（`ULMO`，比 zlib 省约 18%）；
+  窗口背景图是不带 alpha 的 RGB（带 alpha 白涨约 180KB）。这几条 `build-dmg.sh` 里都有守门。
 - 只想验打包流程、不发布：在 Actions 里手动跑 `Release`（`workflow_dispatch`），
   它只构建并上传 artifact，不建 release。
 - CI 与 Release 都跑在 **`macos-26`** runner 上：工程部署目标是 macOS 26，

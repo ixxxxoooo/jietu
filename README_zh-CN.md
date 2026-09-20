@@ -63,12 +63,11 @@
 
 从 [Releases](https://github.com/ixxxxoooo/jietu/releases/latest) 下载最新 `.dmg`，打开后将 `Jietu.app` 拖入 `/Applications`。
 
-> **首次打开提示**：本应用使用自签名证书（无 Developer ID / 公证），macOS Gatekeeper 会拦截首次启动。放行方式：
+> **首次打开提示**：本应用使用自签名证书（无 Developer ID / 公证），macOS Gatekeeper 会拦截首次启动。打开前请在终端执行：
 >
-> 1. 把 **Jietu.app** 拖进 `/Applications`。
-> 2. 在 DMG 里 **右键** 点击 **`Fix Gatekeeper.app`** → **打开** → 再点 **打开**  
->    （普通双击会被系统拦截——从网上下载的可执行文件都这样，属正常现象）。
-> 3. 或在终端执行：`xattr -dr com.apple.quarantine /Applications/Jietu.app`
+> ```
+> xattr -dr com.apple.quarantine /Applications/Jietu.app
+> ```
 > 4. 或右键 **Jietu.app** → **打开** → **打开**。
 
 ### 授权

@@ -10,7 +10,6 @@
 # 输出：dist/Jietu-<版本>.dmg，里面是
 #   Jietu.app            主程序
 #   Applications         软链，拖进去就是安装
-#   Fix Gatekeeper.app   解除隔离的小工具（首次打开被 Gatekeeper 拦时用）
 #   .background/         窗口背景图：安装说明直接画在图上
 #
 # 窗口版式（背景图 + 图标位置）由 dmg-background.swift 出图、
@@ -31,9 +30,8 @@ REPO_URL="github.com/ixxxxoooo/jietu"
 # 内容区尺寸 = 背景图的设计稿尺寸；槽位坐标是图标中心（设计稿左上角为原点）。
 DMG_W=660
 DMG_H=420
-SLOT_APP="200,170"
-SLOT_APPLICATIONS="460,170"
-SLOT_HELPER="200,310"
+SLOT_APP="200,210"
+SLOT_APPLICATIONS="460,210"
 ICON_SIZE=100
 TEXT_SIZE=12
 # Finder 窗口的 bounds 含标题栏，想要内容区高 DMG_H 就得多给这一截。
@@ -194,78 +192,8 @@ ln -s /Applications "$STAGE/Applications"
 
 # 预先清除主 App 上可能残留的隔离属性。构建产物通常不带，但用户曾手动
 # 拷贝过、或 Xcode 偶尔从网络缓存恢复时可能沾上；装进 DMG 前清干净，
-# 这样用户从 DMG 拖出来时自身不带隔离（只有 DMG 外壳可能有，由 Fix Gatekeeper 处理）。
+# 这样用户从 DMG 拖出来时自身不带隔离（DMG 外壳的隔离由用户用命令行移除）。
 xattr -dr com.apple.quarantine "$STAGE/$APP_NAME.app" 2>/dev/null || true
-
-# 解除隔离的小工具：从网上下载的 DMG 里，任何可执行文件（.command / .app）第一次
-# 都会被 Gatekeeper 拦截——这正是「解除隔离」工具自己也打不开的原因。
-# 正确用法是：右键 → 打开（与打开自签名 Jietu.app 同一套流程），说明就画在背景图上。
-#
-# 先尝试无提权移除（用户自己拖入的 App 隔离属性通常不需要 root），
-# 失败了再用 `with administrator privileges` 提权重试（弹系统密码框）。
-HELPER_SCRIPT="$(mktemp -t jietu-fix-gatekeeper).applescript"
-cat > "$HELPER_SCRIPT" <<'OSA'
--- 移除 /Applications/Jietu.app 的隔离属性。
--- 首次从下载的 DMG 打开时：请右键 → 打开（双击会被 Gatekeeper 拦）。
--- @author ygw
-on run
-	set appPath to "/Applications/Jietu.app"
-	try
-		do shell script "test -d " & quoted form of appPath
-	on error
-		display dialog "请先把 Jietu.app 拖到「应用程序」文件夹，再运行本工具。" & return & return & "Please drag Jietu.app into Applications first." buttons {"OK"} default button 1 with title "Jietu" with icon caution
-		return
-	end try
-
-	-- 先尝试无提权移除
-	set needsAdmin to false
-	try
-		do shell script "xattr -dr com.apple.quarantine " & quoted form of appPath
-	on error
-		set needsAdmin to true
-	end try
-
-	-- 无提权失败则提权重试（弹系统密码框）
-	if needsAdmin then
-		try
-			do shell script "xattr -dr com.apple.quarantine " & quoted form of appPath with administrator privileges
-		on error errMsg
-			display dialog "失败 / Failed：" & return & errMsg buttons {"OK"} default button 1 with title "Jietu" with icon stop
-			return
-		end try
-	end if
-
-	-- 验证隔离属性确实已移除
-	try
-		set qResult to do shell script "xattr " & quoted form of appPath & " 2>/dev/null | grep -c quarantine || true"
-		if qResult is not "0" then
-			display dialog "隔离属性未能完全移除，请手动执行：" & return & "xattr -dr com.apple.quarantine " & appPath buttons {"OK"} default button 1 with title "Jietu" with icon caution
-			return
-		end if
-	end try
-
-	display dialog "已移除隔离属性，现在可以正常打开 Jietu。" & return & return & "Quarantine removed. You can open Jietu normally now." buttons {"OK"} default button 1 with title "Jietu"
-end run
-OSA
-
-HELPER_APP="$STAGE/Fix Gatekeeper.app"
-osacompile -o "$HELPER_APP" "$HELPER_SCRIPT"
-rm -f "$HELPER_SCRIPT"
-
-# 换成自己画的图标：osacompile 会白送一套通用图标资源（Assets.car 409KB + applet.icns 55KB，
-# 占这个小工具七成体积），图形还是通用的「卷轴＋印章」，放 DMG 里既不说明用途也不好看。
-# 自绘的那枚只有 47KB（琥珀方块 + 盾牌勾，与品牌蓝的 Jietu.app 明显区分）。
-HELPER_ICONSET="$TMP/helper.iconset"
-swift Scripts/helper-icon.swift --out "$HELPER_ICONSET" || { echo "图标渲染失败"; exit 1; }
-rm -f "$HELPER_APP/Contents/Resources/Assets.car"
-iconutil -c icns "$HELPER_ICONSET" -o "$HELPER_APP/Contents/Resources/applet.icns" \
-    || { echo "图标打包失败"; exit 1; }
-
-# 与主 App 同一自签名身份，用户对证书信任后体验更一致。
-codesign --force --sign "Jietu" --timestamp=none "$HELPER_APP" 2>/dev/null \
-	|| codesign --force --sign - "$HELPER_APP"
-[ -d "$HELPER_APP" ] || { echo "未能生成 Fix Gatekeeper.app"; exit 1; }
-[ ! -e "$HELPER_APP/Contents/Resources/Assets.car" ] || { echo "通用图标资源没删掉"; exit 1; }
 
 # 窗口背景图：安装说明（原来那份 00-请先读我.txt）画在上面。
 echo "    渲染窗口背景图"
@@ -276,7 +204,6 @@ swift Scripts/dmg-background.swift \
     --bleed "${BLEED_X},${BLEED_Y}" \
     --app "$SLOT_APP" \
     --applications "$SLOT_APPLICATIONS" \
-    --helper "$SLOT_HELPER" \
     --name "$APP_NAME" \
     --version "$VERSION" \
     --repo "$REPO_URL" \
@@ -324,7 +251,7 @@ if [ "$FINDER_OK" -eq 1 ]; then
         if osascript Scripts/dmg-layout.applescript \
             "$(basename "$MNT")" "$VOLNAME" \
             "$DMG_W" "$DMG_H" "$TITLEBAR" "$ICON_SIZE" "$TEXT_SIZE" \
-            ${SLOT_APP//,/ } ${SLOT_APPLICATIONS//,/ } ${SLOT_HELPER//,/ } \
+            ${SLOT_APP//,/ } ${SLOT_APPLICATIONS//,/ } \
             > "$LAYOUT_LOG" 2>&1 && [ -f "$MNT/.DS_Store" ]; then
             LAYOUT_OK=1
             break
@@ -387,6 +314,5 @@ echo "==> 6/6 OK  $(pwd)/$DMG"
 echo "    大小   $(du -h "$DMG" | cut -f1)"
 echo "    sha256 $(shasum -a 256 "$DMG" | cut -d' ' -f1)"
 echo
-echo "注：自签名证书未受系统信任，别人下载后首次打开需右键「打开」，"
-echo "    或用 DMG 里的「Fix Gatekeeper.app」（右键打开）自动移除隔离属性，"
-echo "    或手动执行 xattr -dr com.apple.quarantine /Applications/$APP_NAME.app"
+echo "注：自签名证书未受系统信任，别人下载后首次打开前需在终端执行："
+echo "    xattr -dr com.apple.quarantine /Applications/$APP_NAME.app"

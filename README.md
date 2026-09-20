@@ -63,12 +63,11 @@
 
 Download the latest `.dmg` from [Releases](https://github.com/ixxxxoooo/jietu/releases/latest), open it, and drag `Jietu.app` to `/Applications`.
 
-> **First launch note:** The app is self-signed (no Developer ID / notarization). macOS Gatekeeper will block the first launch. To bypass:
+> **First launch note:** The app is self-signed (no Developer ID / notarization). macOS Gatekeeper will block the first launch. Before opening, run in Terminal:
 >
-> 1. Drag **Jietu.app** into `/Applications`.
-> 2. In the DMG, **right-click** **`Fix Gatekeeper.app`** → **Open** → **Open** again  
->    (a plain double-click will be blocked — that is expected for any downloaded executable).
-> 3. Or run: `xattr -dr com.apple.quarantine /Applications/Jietu.app`
+> ```
+> xattr -dr com.apple.quarantine /Applications/Jietu.app
+> ```
 > 4. Or right-click **Jietu.app** → **Open** → **Open**.
 
 ### Grant Permissions

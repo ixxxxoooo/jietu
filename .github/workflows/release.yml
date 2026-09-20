@@ -64,10 +64,10 @@ jobs:
 
             1. Download `${{ steps.checksum.outputs.dmg_name }}` below.
             2. Open the DMG and drag **Jietu.app** onto the **Applications** folder.
-            3. First launch: **right-click → Open → Open** (the app is self-signed, so a
-               plain double-click is blocked). Or run the bundled **Fix Gatekeeper.app**
-               the same way, or clear the flag yourself:
-               `xattr -dr com.apple.quarantine /Applications/Jietu.app`
+            3. Before first launch, remove the quarantine flag in Terminal:
+               ```
+               xattr -dr com.apple.quarantine /Applications/Jietu.app
+               ```
 
             ### Permissions
 
