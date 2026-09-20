@@ -202,6 +202,10 @@ extension AppDelegate {
                 recordHistory(image)
             }
             didSave(to: url)
+            // 「另存为」是用户主动操作，通知让他知道文件落在了哪。
+            if settings.showSaveNotification {
+                notifier.notifySaved(fileURL: url)
+            }
             return true
         } catch {
             logger.error("save failed: \(error.localizedDescription)")
@@ -240,15 +244,15 @@ extension AppDelegate {
         }
     }
 
-    /// 落盘后的统一收尾：记入最近截图 + 系统通知。
+    /// 落盘后的统一收尾：记入最近截图。
+    ///
+    /// 不在这里发通知：自动保存（`save`）是后台静默行为，用户不需要额外提醒；
+    /// 「另存为」（`saveAs` / `saveVideoAs`）由各自的调用点决定是否通知。
     func didSave(to url: URL) {
         // 历史那条记上「用户的文件在哪」：打开 / 在访达中显示都该落到它上面。
         HistoryStore.shared.attachSavedFile(url, to: HistoryStore.shared.latestID)
         settings.recordCapture(url)
         logger.notice("saved capture to \(url.path, privacy: .public)")
-        if settings.showSaveNotification {
-            notifier.notifySaved(fileURL: url)
-        }
     }
 
     /// 打开历史某一项进入标注（居中原地编辑）。
