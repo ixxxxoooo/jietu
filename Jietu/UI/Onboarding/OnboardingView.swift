@@ -239,15 +239,6 @@ struct OnboardingView: View {
             HStack(spacing: Theme.Spacing.md) {
                 caption(permissionCaption)
                 Spacer(minLength: 0)
-                // 辅助功能是可选权限：动作不占行内的状态位，跟它排在同一条次要动作线上
-                // （设置页也是这个分工：状态归状态、动作另起一行）。
-                if !model.isAccessibilityGranted {
-                    Button(L10n.onboardingAuthorizeAccessibility) {
-                        model.requestAccessibilityAccess()
-                    }
-                    .buttonStyle(.link)
-                    .font(.caption)
-                }
                 Button(L10n.permRecheck) { model.refresh() }
                     .buttonStyle(.link)
                     .font(.caption)
@@ -341,8 +332,12 @@ struct OnboardingView: View {
         switch step {
         case 0: return L10n.onboardingContinue
         case 1:
-            if model.isGranted { return model.needsRelaunch ? L10n.permRestartJietu : L10n.onboardingContinue }
-            return L10n.onboardingAuthorize
+            if !model.isGranted { return L10n.onboardingAuthorize }
+            if model.needsRelaunch { return L10n.permRestartJietu }
+            // 屏幕录制齐了、辅助功能还没授权：这一格就是它的「去授权」。
+            // 位置和屏幕录制那颗完全一致（右下角主按钮），不放行内、也不挤在「重新检测」旁边。
+            if !model.isAccessibilityGranted { return L10n.onboardingAuthorizeAccessibility }
+            return L10n.onboardingContinue
         case 2: return L10n.onboardingContinue
         default: return L10n.onboardingStart
         }
@@ -354,6 +349,8 @@ struct OnboardingView: View {
             model.requestAccess()
         case 1 where model.needsRelaunch:
             ScreenCapturePermission.relaunchApp()
+        case 1 where !model.isAccessibilityGranted:
+            model.requestAccessibilityAccess()
         case Self.lastStep:
             onClose()
         default:
