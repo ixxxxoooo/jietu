@@ -28,6 +28,38 @@ struct RecordingSettingsPane: View {
             }
 
             Section {
+                Picker(selection: $settings.gifResolution) {
+                    ForEach(GifResolution.allCases) { resolution in
+                        Text(resolution.title).tag(resolution)
+                    }
+                } label: {
+                    Text(L10n.recordingGifResolution)
+                    Text(L10n.recordingGifResolutionDesc)
+                }
+
+                Picker(selection: $settings.gifFrameRate) {
+                    Text("10 fps").tag(10)
+                    Text("15 fps").tag(15)
+                    Text("24 fps").tag(24)
+                    Text("30 fps").tag(30)
+                } label: {
+                    Text(L10n.recordingGifFrameRate)
+                    Text(L10n.recordingGifFrameRateDesc)
+                }
+
+                Picker(selection: $settings.gifQuality) {
+                    ForEach(GifQuality.allCases) { quality in
+                        Text(quality.title).tag(quality)
+                    }
+                } label: {
+                    Text(L10n.recordingGifQuality)
+                    Text(L10n.recordingGifQualityDesc)
+                }
+            } header: {
+                SettingsSectionHeader(title: L10n.recordingSectionGif)
+            }
+
+            Section {
                 LabeledContent {
                     Button(L10n.captureRevealInFinder) {
                         NSWorkspace.shared.activateFileViewerSelecting([settings.saveDirectory])

@@ -176,6 +176,26 @@ enum L10n {
     static var recordingSaveLocation: String { s("recording.save_location") }
     static var recordingSectionOutput: String { s("recording.section_output") }
     static var recordingOutputFooter: String { s("recording.output_footer") }
+    static var recordingSectionGif: String { s("recording.section_gif") }
+    static var recordingGifResolution: String { s("recording.gif_resolution") }
+    static var recordingGifResolutionDesc: String { s("recording.gif_resolution_desc") }
+    static var recordingGifFrameRate: String { s("recording.gif_frame_rate") }
+    static var recordingGifFrameRateDesc: String { s("recording.gif_frame_rate_desc") }
+    static var recordingGifQuality: String { s("recording.gif_quality") }
+    static var recordingGifQualityDesc: String { s("recording.gif_quality_desc") }
+    static var recordingGifAccessoryTitle: String { s("recording.gif_accessory_title") }
+
+    static var gifResolutionRetina1x: String { s("gif_resolution.retina_1x") }
+    static var gifResolutionOriginal: String { s("gif_resolution.original") }
+    static var gifResolutionScale75: String { s("gif_resolution.scale_75") }
+    static var gifResolutionScale33: String { s("gif_resolution.scale_33") }
+    static var gifResolutionWidth960: String { s("gif_resolution.width_960") }
+    static var gifResolutionWidth640: String { s("gif_resolution.width_640") }
+    static var gifResolutionWidth480: String { s("gif_resolution.width_480") }
+
+    static var gifQualityHigh: String { s("gif_quality.high") }
+    static var gifQualityMedium: String { s("gif_quality.medium") }
+    static var gifQualityLow: String { s("gif_quality.low") }
 
     // MARK: - 标注设置
 

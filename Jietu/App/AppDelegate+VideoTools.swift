@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import UniformTypeIdentifiers
 
 /// AppDelegate — 成片的「再加工」入口：导出 GIF。
@@ -22,6 +23,12 @@ extension AppDelegate {
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.gif]
         panel.nameFieldStringValue = "\(url.deletingPathExtension().lastPathComponent).gif"
+
+        let accessory = GifExportAccessoryView(settings: settings)
+        let hostingView = NSHostingView(rootView: accessory)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 340, height: 110)
+        panel.accessoryView = hostingView
+
         guard panel.runModal() == .OK, let destination = panel.url else { return }
         // 选到源文件自己：拒绝（GIF 覆盖掉 mp4 就糟了）。
         guard destination.standardizedFileURL != url.standardizedFileURL else { return }
@@ -33,9 +40,15 @@ extension AppDelegate {
             try? FileManager.default.removeItem(at: destination)
         }
 
+        let config = GifExporter.Configuration(
+            resolution: settings.gifResolution,
+            fps: settings.gifFrameRate,
+            quality: settings.gifQuality
+        )
+
         Task { @MainActor in
             do {
-                try await GifExporter.export(from: url, to: destination) { fraction in
+                try await GifExporter.export(from: url, to: destination, configuration: config) { fraction in
                     Task { @MainActor in hud.update(fraction: fraction) }
                 }
                 hud.close()

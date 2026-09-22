@@ -8,6 +8,9 @@ final class SettingsStore {
         static let recordMicrophone = "recording.microphone"
         static let recordMicrophoneDeviceUID = "recording.microphoneDeviceUID"
         static let recordFrameRate = "recording.frameRate"
+        static let gifResolution = "recording.gifResolution"
+        static let gifFrameRate = "recording.gifFrameRate"
+        static let gifQuality = "recording.gifQuality"
         /// 多热键映射（动作 rawValue → 组合键）。
         static let hotkeys = "hotkeys.map"
         /// 旧版本只存区域截图一个热键，启动时迁移到 `hotkeys`。
@@ -152,6 +155,21 @@ final class SettingsStore {
         didSet { defaults.set(recordFrameRate, forKey: Key.recordFrameRate) }
     }
 
+    /// GIF 导出尺寸/分辨率。默认 50%（视网膜屏 1x 推荐）。
+    var gifResolution: GifResolution {
+        didSet { defaults.set(gifResolution.rawValue, forKey: Key.gifResolution) }
+    }
+
+    /// GIF 导出帧率（10 / 15 / 24 / 30）。默认 15 fps。
+    var gifFrameRate: Int {
+        didSet { defaults.set(gifFrameRate, forKey: Key.gifFrameRate) }
+    }
+
+    /// GIF 导出画质偏好。默认 high。
+    var gifQuality: GifQuality {
+        didSet { defaults.set(gifQuality.rawValue, forKey: Key.gifQuality) }
+    }
+
     var saveFormat: SaveFormat {
         didSet { defaults.set(saveFormat.rawValue, forKey: Key.saveFormat) }
     }
@@ -250,6 +268,11 @@ final class SettingsStore {
         self.recordMicrophoneDeviceUID =
             defaults.string(forKey: Key.recordMicrophoneDeviceUID)
         self.recordFrameRate = defaults.object(forKey: Key.recordFrameRate) as? Int ?? 30
+        self.gifResolution =
+            (defaults.string(forKey: Key.gifResolution).flatMap(GifResolution.init(rawValue:))) ?? .retina1x
+        self.gifFrameRate = defaults.object(forKey: Key.gifFrameRate) as? Int ?? 15
+        self.gifQuality =
+            (defaults.string(forKey: Key.gifQuality).flatMap(GifQuality.init(rawValue:))) ?? .high
         self.recentCapturePaths = defaults.stringArray(forKey: Key.recentCapturePaths) ?? []
         self.saveFormat =
             (defaults.string(forKey: Key.saveFormat).flatMap(SaveFormat.init(rawValue:))) ?? .png

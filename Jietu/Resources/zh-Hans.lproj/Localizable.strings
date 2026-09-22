@@ -163,6 +163,26 @@
 "recording.save_location" = "保存位置";
 "recording.section_output" = "输出";
 "recording.output_footer" = "录屏保存为 mp4（H.264），与截图共用上面的位置与命名模板。";
+"recording.section_gif" = "GIF 导出";
+"recording.gif_resolution" = "动图尺寸";
+"recording.gif_resolution_desc" = "决定动图画面分辨率与清晰度；视网膜屏推荐 50%（还原 1x 逻辑像素，文字锐利且体积小）。";
+"recording.gif_frame_rate" = "动图帧率";
+"recording.gif_frame_rate_desc" = "较高帧率动效更平滑，但文件体积会成倍增加；推荐 15 fps。";
+"recording.gif_quality" = "动图画质";
+"recording.gif_quality_desc" = "高画质保留完整色彩与细节；平衡模式轻度阶调优化，可显著减小体积。";
+"recording.gif_accessory_title" = "GIF 导出参数";
+
+"gif_resolution.retina_1x" = "50%（视网膜 1x · 推荐）";
+"gif_resolution.original" = "100%（原始尺寸）";
+"gif_resolution.scale_75" = "75%（高清缩放）";
+"gif_resolution.scale_33" = "33%（轻量缩放）";
+"gif_resolution.width_960" = "960 像素宽";
+"gif_resolution.width_640" = "640 像素宽";
+"gif_resolution.width_480" = "480 像素宽";
+
+"gif_quality.high" = "高画质（完整色彩 · 最清晰）";
+"gif_quality.medium" = "平衡（推荐 · 优化体积）";
+"gif_quality.low" = "压缩优先（体积小 · 适合分享）";
 
 // MARK: - 标注设置
 

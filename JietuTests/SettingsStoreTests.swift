@@ -224,4 +224,24 @@ struct SettingsStoreTests {
         store.clearRecentCaptures()
         #expect(store.recentCaptureURLs.isEmpty)
     }
+
+    @Test("GIF 导出设置：默认值与持久化")
+    func gifSettingsDefaultsAndPersist() {
+        let (defaults, suite) = TestUserDefaults.make()
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let store = SettingsStore(defaults: defaults)
+        #expect(store.gifResolution == .retina1x)
+        #expect(store.gifFrameRate == 15)
+        #expect(store.gifQuality == .high)
+
+        store.gifResolution = .scale75
+        store.gifFrameRate = 24
+        store.gifQuality = .medium
+
+        let reloaded = SettingsStore(defaults: defaults)
+        #expect(reloaded.gifResolution == .scale75)
+        #expect(reloaded.gifFrameRate == 24)
+        #expect(reloaded.gifQuality == .medium)
+    }
 }

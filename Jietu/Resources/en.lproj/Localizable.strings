@@ -163,6 +163,26 @@
 "recording.save_location" = "Save Location";
 "recording.section_output" = "Output";
 "recording.output_footer" = "Recordings are saved as mp4 (H.264), sharing the same location and naming template as captures.";
+"recording.section_gif" = "GIF Export";
+"recording.gif_resolution" = "GIF Dimensions";
+"recording.gif_resolution_desc" = "Controls exported GIF resolution and sharpness. 50% is recommended for Retina displays (1x logical pixels, crisp text and compact size).";
+"recording.gif_frame_rate" = "GIF Frame Rate";
+"recording.gif_frame_rate_desc" = "Higher frame rates are smoother but increase file size. 15 fps is recommended.";
+"recording.gif_quality" = "GIF Quality";
+"recording.gif_quality_desc" = "High quality preserves full color palette and fine details. Balanced optimizes tone levels to reduce file size.";
+"recording.gif_accessory_title" = "GIF Options";
+
+"gif_resolution.retina_1x" = "50% (Retina 1x · Recommended)";
+"gif_resolution.original" = "100% (Original Size)";
+"gif_resolution.scale_75" = "75% (High Definition)";
+"gif_resolution.scale_33" = "33% (Compact)";
+"gif_resolution.width_960" = "960 px width";
+"gif_resolution.width_640" = "640 px width";
+"gif_resolution.width_480" = "480 px width";
+
+"gif_quality.high" = "High Quality (Full palette, sharpest)";
+"gif_quality.medium" = "Balanced (Recommended, smaller file)";
+"gif_quality.low" = "Compact (Optimized for sharing)";
 
 // MARK: - Annotation Settings
 

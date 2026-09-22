@@ -55,4 +55,38 @@ struct GifExporterTests {
         let degenerate = GifExporter.outputSize(sourceWidth: 0, sourceHeight: 0, targetWidth: 480)
         #expect(degenerate.width >= 2 && degenerate.height >= 2)
     }
+
+    @Test("GifResolution 尺寸计算：视网膜 1x、原始尺寸与宽度上限")
+    func gifResolutionCalculation() {
+        // Retina 2x 屏幕 (2880×1800) -> 视网膜 1x (50%) 还原为 1440×900
+        let retina = GifResolution.retina1x.calculateSize(sourceWidth: 2880, sourceHeight: 1800)
+        #expect(retina.width == 1440)
+        #expect(retina.height == 900)
+
+        // 100% 原始尺寸保持原样 (1920×1080)
+        let orig = GifResolution.original.calculateSize(sourceWidth: 1920, sourceHeight: 1080)
+        #expect(orig.width == 1920)
+        #expect(orig.height == 1080)
+
+        // 75% 高清 (1600×1200) -> 1200×900
+        let scale75 = GifResolution.scale75.calculateSize(sourceWidth: 1600, sourceHeight: 1200)
+        #expect(scale75.width == 1200)
+        #expect(scale75.height == 900)
+
+        // 限制宽度 960：当源宽度大于 960 时等比缩小
+        let width960 = GifResolution.width960.calculateSize(sourceWidth: 1920, sourceHeight: 1080)
+        #expect(width960.width == 960)
+        #expect(width960.height == 540)
+
+        // 限制宽度 960：当源宽度小于 960 时不放大
+        let small960 = GifResolution.width960.calculateSize(sourceWidth: 600, sourceHeight: 400)
+        #expect(small960.width == 600)
+        #expect(small960.height == 400)
+    }
+
+    @Test("15fps 与 30fps 帧间隔计算")
+    func frameDelayHighRates() {
+        #expect(GifExporter.frameDelay(for: 15) == 0.07)
+        #expect(GifExporter.frameDelay(for: 30) == 0.03)
+    }
 }
