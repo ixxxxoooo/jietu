@@ -12,6 +12,9 @@ struct HUDSlider: View {
     var trackHeight: CGFloat = 14
     /// 竖排（主工具栏停到左右侧、二级菜单也竖着排时）：轨道立起来，往上拖 = 调大。
     var isVertical: Bool = false
+    var onEditingChanged: ((Bool) -> Void)? = nil
+
+    @State private var isDragging: Bool = false
 
     private let thumbWidth: CGFloat = 32
     private let thumbHeight: CGFloat = 18
@@ -44,7 +47,15 @@ struct HUDSlider: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { gesture in
+                    if !isDragging {
+                        isDragging = true
+                        onEditingChanged?(true)
+                    }
                     updateValue(atTouchY: gesture.location.y)
+                }
+                .onEnded { _ in
+                    isDragging = false
+                    onEditingChanged?(false)
                 }
         )
     }
@@ -93,7 +104,15 @@ struct HUDSlider: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { gesture in
+                    if !isDragging {
+                        isDragging = true
+                        onEditingChanged?(true)
+                    }
                     updateValue(at: gesture.location.x)
+                }
+                .onEnded { _ in
+                    isDragging = false
+                    onEditingChanged?(false)
                 }
         )
     }

@@ -311,4 +311,50 @@ struct InlineToolbarModelTests {
         let ratio = selection.width / selection.height
         #expect(abs(ratio - 1000.0 / 800.0) < 0.01, "缩放应等比，不拉伸")
     }
+
+    @Test("模糊标注：支持 8 个缩放控制点")
+    func blurAnnotationHasResizeHandles() {
+        let canvas = InlineEditScaffold.makeCanvas(canvas: CGSize(width: 800, height: 600))
+        let blurAnnotation = Annotation(
+            kind: .blur(CGRect(x: 100, y: 100, width: 200, height: 150), radius: 15),
+            color: .red
+        )
+        let handles = canvas.inlineHandles(for: blurAnnotation)
+        #expect(handles.count == 9, "未旋转的模糊标注应具有 8 个缩放控制点 + 1 个旋转控制点，实际 \(handles.count)")
+        let resizeHandles = handles.filter { $0.0 != ShapeHandle.rotate }
+        #expect(resizeHandles.count == 8, "应有 8 个缩放控制点")
+    }
+
+    @Test("模糊标注：工具栏模型属性变动触发回调并更新选中标注")
+    func blurRadiusChangeUpdatesSelectedAnnotation() {
+        let model = InlineToolbarModel()
+        var radiusFired: CGFloat?
+        model.onBlurRadiusChange = { radiusFired = $0 }
+
+        model.blurRadius = 25
+        #expect(radiusFired == 25, "修改 blurRadius 应当触发 onBlurRadiusChange")
+    }
+
+    @Test("标注选中时反向同步工具栏")
+    func syncToolbarToAnnotationMatchesKind() {
+        let canvas = InlineEditScaffold.makeCanvas(canvas: CGSize(width: 800, height: 600))
+        let model = InlineToolbarModel()
+        canvas.toolbarModel = model
+
+        let blur = Annotation(kind: .blur(CGRect(x: 50, y: 50, width: 100, height: 80), radius: 28), color: .black)
+        canvas.syncToolbarToAnnotation(blur)
+        #expect(model.tool == .blur)
+        #expect(model.blurRadius == 28)
+
+        let pixelate = Annotation(kind: .pixelate(CGRect(x: 10, y: 10, width: 50, height: 50), block: 18), color: .black)
+        canvas.syncToolbarToAnnotation(pixelate)
+        #expect(model.tool == .pixelate)
+        #expect(model.mosaicBlock == 18)
+
+        let rect = Annotation(kind: .rectangle(CGRect(x: 0, y: 0, width: 40, height: 40)), color: .blue, lineWidth: 5)
+        canvas.syncToolbarToAnnotation(rect)
+        #expect(model.tool == .rectangle)
+        #expect(model.color == .blue)
+        #expect(model.lineWidth == 5)
+    }
 }

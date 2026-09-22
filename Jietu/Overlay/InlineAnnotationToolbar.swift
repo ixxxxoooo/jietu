@@ -8,19 +8,69 @@ import SwiftUI
 @Observable
 final class InlineToolbarModel {
     var tool: AnnotationTool? = nil
-    var color: RGBAColor = .red
-    var lineWidth: CGFloat = 7
+    var color: RGBAColor = .red {
+        didSet {
+            guard color != oldValue else { return }
+            onColorChange?(color)
+        }
+    }
+    var lineWidth: CGFloat = 7 {
+        didSet {
+            guard lineWidth != oldValue else { return }
+            onLineWidthChange?(lineWidth)
+        }
+    }
     /// 荧光笔**自己**的颜色与笔尖粗细（参考 capcap：独立色槽，默认黄）。
-    var highlightColor: RGBAColor = .yellow
-    var highlightLineWidth: CGFloat = 6
-    var fontSize: CGFloat = 20
+    var highlightColor: RGBAColor = .yellow {
+        didSet {
+            guard highlightColor != oldValue else { return }
+            onColorChange?(highlightColor)
+        }
+    }
+    var highlightLineWidth: CGFloat = 6 {
+        didSet {
+            guard highlightLineWidth != oldValue else { return }
+            onLineWidthChange?(highlightLineWidth)
+        }
+    }
+    var fontSize: CGFloat = 20 {
+        didSet {
+            guard fontSize != oldValue else { return }
+            onFontSizeChange?(fontSize)
+        }
+    }
     var eraserSize: CGFloat = 28
-    var mosaicBlock: CGFloat = 12
-    var blurRadius: CGFloat = 12
-    var arrowStyle: ArrowStyle = .tapered
-    var shapeFillMode: ShapeFillMode = .none
+    var mosaicBlock: CGFloat = 12 {
+        didSet {
+            guard mosaicBlock != oldValue else { return }
+            onMosaicBlockChange?(mosaicBlock)
+        }
+    }
+    var blurRadius: CGFloat = 12 {
+        didSet {
+            guard blurRadius != oldValue else { return }
+            onBlurRadiusChange?(blurRadius)
+        }
+    }
+    var arrowStyle: ArrowStyle = .tapered {
+        didSet {
+            guard arrowStyle != oldValue else { return }
+            onArrowStyleChange?(arrowStyle)
+        }
+    }
+    var shapeFillMode: ShapeFillMode = .none {
+        didSet {
+            guard shapeFillMode != oldValue else { return }
+            onShapeFillModeChange?(shapeFillMode)
+        }
+    }
     /// 矩形的角样式（方角 / 圆角）。
-    var rectCornerStyle: RectCornerStyle = .square
+    var rectCornerStyle: RectCornerStyle = .square {
+        didSet {
+            guard rectCornerStyle != oldValue else { return }
+            onRectCornerStyleChange?(rectCornerStyle)
+        }
+    }
     var textHasStroke: Bool = false
     var textHasCallout: Bool = false
     var canUndo = false
@@ -49,6 +99,16 @@ final class InlineToolbarModel {
     var onRecord: (() -> Void)?
     var onConfirm: (() -> Void)?
     var onCancel: (() -> Void)?
+    /// 滑块开始拖动时触发（用于在改动前压入一次 undo）。
+    var onSliderEditStart: (() -> Void)?
+    var onBlurRadiusChange: ((CGFloat) -> Void)?
+    var onMosaicBlockChange: ((CGFloat) -> Void)?
+    var onLineWidthChange: ((CGFloat) -> Void)?
+    var onColorChange: ((RGBAColor) -> Void)?
+    var onShapeFillModeChange: ((ShapeFillMode) -> Void)?
+    var onRectCornerStyleChange: ((RectCornerStyle) -> Void)?
+    var onArrowStyleChange: ((ArrowStyle) -> Void)?
+    var onFontSizeChange: ((CGFloat) -> Void)?
     /// 用户点了文字二级菜单里的「描边 / 标注」——只在**真的点了**的时候报，并说明点的是哪一项。
     ///
     /// 这样画布只把这一项刷到选中的那条文字上：别的工具栏变化（换工具、调颜色）不去动它，
@@ -312,7 +372,13 @@ struct InlineOptionsToolbar: View {
 
     private var shapeOptions: some View {
         optionGroup {
-            HUDSlider(value: $model.lineWidth, range: 1...24, step: 1, isVertical: model.isVerticalLayout)
+            HUDSlider(
+                value: $model.lineWidth,
+                range: 1...24,
+                step: 1,
+                isVertical: model.isVerticalLayout,
+                onEditingChanged: { if $0 { model.onSliderEditStart?() } }
+            )
             vSeparator
             ColorSwatchesView(selectedColor: $model.color, isVertical: model.isVerticalLayout)
             vSeparator
@@ -331,7 +397,13 @@ struct InlineOptionsToolbar: View {
 
     private var arrowOptions: some View {
         optionGroup {
-            HUDSlider(value: $model.lineWidth, range: 1...24, step: 1, isVertical: model.isVerticalLayout)
+            HUDSlider(
+                value: $model.lineWidth,
+                range: 1...24,
+                step: 1,
+                isVertical: model.isVerticalLayout,
+                onEditingChanged: { if $0 { model.onSliderEditStart?() } }
+            )
             vSeparator
             ColorSwatchesView(selectedColor: $model.color, isVertical: model.isVerticalLayout)
             vSeparator
@@ -341,7 +413,13 @@ struct InlineOptionsToolbar: View {
 
     private var lineOptions: some View {
         optionGroup {
-            HUDSlider(value: $model.lineWidth, range: 1...24, step: 1, isVertical: model.isVerticalLayout)
+            HUDSlider(
+                value: $model.lineWidth,
+                range: 1...24,
+                step: 1,
+                isVertical: model.isVerticalLayout,
+                onEditingChanged: { if $0 { model.onSliderEditStart?() } }
+            )
             vSeparator
             ColorSwatchesView(selectedColor: $model.color, isVertical: model.isVerticalLayout)
         }
@@ -354,7 +432,8 @@ struct InlineOptionsToolbar: View {
                 value: $model.highlightLineWidth,
                 range: Annotation.highlightWidthRange,
                 step: 1,
-                isVertical: model.isVerticalLayout
+                isVertical: model.isVerticalLayout,
+                onEditingChanged: { if $0 { model.onSliderEditStart?() } }
             )
             vSeparator
             ColorSwatchesView(selectedColor: $model.highlightColor, isVertical: model.isVerticalLayout)
@@ -363,7 +442,13 @@ struct InlineOptionsToolbar: View {
 
     private var textOptions: some View {
         optionGroup {
-            HUDSlider(value: $model.fontSize, range: 12...72, step: 1, isVertical: model.isVerticalLayout)
+            HUDSlider(
+                value: $model.fontSize,
+                range: 12...72,
+                step: 1,
+                isVertical: model.isVerticalLayout,
+                onEditingChanged: { if $0 { model.onSliderEditStart?() } }
+            )
             vSeparator
             ColorSwatchesView(selectedColor: $model.color, isVertical: model.isVerticalLayout)
             vSeparator
@@ -380,7 +465,13 @@ struct InlineOptionsToolbar: View {
 
     private var counterOptions: some View {
         optionGroup {
-            HUDSlider(value: $model.lineWidth, range: 2...16, step: 1, isVertical: model.isVerticalLayout)
+            HUDSlider(
+                value: $model.lineWidth,
+                range: 2...16,
+                step: 1,
+                isVertical: model.isVerticalLayout,
+                onEditingChanged: { if $0 { model.onSliderEditStart?() } }
+            )
             vSeparator
             ColorSwatchesView(selectedColor: $model.color, isVertical: model.isVerticalLayout)
         }
@@ -393,7 +484,8 @@ struct InlineOptionsToolbar: View {
             value: model.tool == .pixelate ? $model.mosaicBlock : $model.blurRadius,
             range: 4...40,
             step: 1,
-            isVertical: model.isVerticalLayout
+            isVertical: model.isVerticalLayout,
+            onEditingChanged: { if $0 { model.onSliderEditStart?() } }
         )
         .help(model.tool == .pixelate ? L10n.styleMosaicGranularity : L10n.styleBlurRadius)
     }

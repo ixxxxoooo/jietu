@@ -158,6 +158,7 @@ final class OverlayCanvasView: NSView {
     var redoStack: [Snapshot] = []
     var eraserStrokes: [EraserStroke] = []
     var selectedID: UUID?
+    var isSyncingToolbarToSelection = false
     var hoveredAnnotationID: UUID?
     var erasing = false
     var lastErasePoint: CGPoint?

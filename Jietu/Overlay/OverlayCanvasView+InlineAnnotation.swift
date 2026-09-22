@@ -510,12 +510,70 @@ extension OverlayCanvasView {
         annotations[index] = transform(annotations[index])
     }
 
+    /// 选中标注时把工具栏反向同步成该标注的当前工具与参数。
+    func syncToolbarToAnnotation(_ annotation: Annotation) {
+        guard let model = toolbarModel else { return }
+        isSyncingToolbarToSelection = true
+        defer { isSyncingToolbarToSelection = false }
+
+        switch annotation.kind {
+        case .blur(_, let radius):
+            model.tool = .blur
+            model.blurRadius = radius
+        case .pixelate(_, let block):
+            model.tool = .pixelate
+            model.mosaicBlock = block
+        case .rectangle:
+            model.tool = .rectangle
+            model.color = annotation.color
+            model.lineWidth = annotation.lineWidth
+            model.shapeFillMode = annotation.shapeFillMode
+            model.rectCornerStyle = annotation.rectCornerStyle
+        case .ellipse:
+            model.tool = .ellipse
+            model.color = annotation.color
+            model.lineWidth = annotation.lineWidth
+            model.shapeFillMode = annotation.shapeFillMode
+        case .arrow:
+            model.tool = .arrow
+            model.color = annotation.color
+            model.lineWidth = annotation.lineWidth
+            model.arrowStyle = annotation.arrowStyle
+        case .line:
+            model.tool = .line
+            model.color = annotation.color
+            model.lineWidth = annotation.lineWidth
+        case .pen:
+            model.tool = .pen
+            model.color = annotation.color
+            model.lineWidth = annotation.lineWidth
+        case .highlight:
+            model.tool = .highlight
+            model.highlightColor = annotation.color
+            model.highlightLineWidth = annotation.lineWidth
+        case .spotlight:
+            model.tool = .spotlight
+        case .text(_, _, let fontSize):
+            model.tool = .text
+            model.color = annotation.color
+            model.fontSize = fontSize
+            model.textHasStroke = annotation.textHasStroke
+            model.textHasCallout = annotation.textHasCallout
+        case .counter, .callout:
+            model.tool = .counter
+            model.color = annotation.color
+            model.lineWidth = annotation.lineWidth
+        case .eraser:
+            break
+        }
+    }
+
     /// 选中态的控制点（crop 像素坐标）。
     func inlineHandles(for annotation: Annotation) -> [(ShapeHandle, CGPoint)] {
         var handles: [(ShapeHandle, CGPoint)] = []
         if abs(annotation.rotation) < 0.001 {
             switch annotation.kind {
-            case .rectangle, .ellipse, .spotlight, .highlight, .pixelate, .pen, .text:
+            case .rectangle, .ellipse, .spotlight, .highlight, .pixelate, .pen, .text, .blur:
                 handles.append(contentsOf: ShapeGeometry.resizeHandles(for: annotation))
             default:
                 break
@@ -649,6 +707,108 @@ extension OverlayCanvasView {
         model.onRecord = { [weak self] in
             guard let self, let selection = self.selection else { return }
             self.onRecordRegionPicked?(selection)
+        }
+        model.onSliderEditStart = { [weak self] in
+            guard let self, self.selectedID != nil else { return }
+            self.pushUndo()
+        }
+        model.onBlurRadiusChange = { [weak self] radius in
+            guard let self, !self.isSyncingToolbarToSelection,
+                let selectedID = self.selectedID,
+                let index = self.annotations.firstIndex(where: { $0.id == selectedID }),
+                case .blur(let rect, let oldRadius) = self.annotations[index].kind,
+                abs(oldRadius - radius) > 0.01
+            else { return }
+            self.annotations[index] = self.annotations[index].withBlurRadius(radius)
+            self.updateAnnotationLayer()
+        }
+        model.onMosaicBlockChange = { [weak self] block in
+            guard let self, !self.isSyncingToolbarToSelection,
+                let selectedID = self.selectedID,
+                let index = self.annotations.firstIndex(where: { $0.id == selectedID }),
+                case .pixelate(let rect, let oldBlock) = self.annotations[index].kind,
+                abs(oldBlock - block) > 0.01
+            else { return }
+            self.annotations[index] = self.annotations[index].withPixelateBlock(block)
+            self.updateAnnotationLayer()
+        }
+        model.onColorChange = { [weak self] color in
+            guard let self, !self.isSyncingToolbarToSelection,
+                let selectedID = self.selectedID,
+                let index = self.annotations.firstIndex(where: { $0.id == selectedID })
+            else { return }
+            switch self.annotations[index].kind {
+            case .blur, .pixelate, .spotlight, .eraser: return
+            default: break
+            }
+            guard self.annotations[index].color != color else { return }
+            self.pushUndo()
+            self.annotations[index] = self.annotations[index].withColor(color)
+            self.updateAnnotationLayer()
+            self.updateInlineSelectionLayers()
+        }
+        model.onLineWidthChange = { [weak self] width in
+            guard let self, !self.isSyncingToolbarToSelection,
+                let selectedID = self.selectedID,
+                let index = self.annotations.firstIndex(where: { $0.id == selectedID })
+            else { return }
+            switch self.annotations[index].kind {
+            case .blur, .pixelate, .spotlight, .eraser, .text: return
+            default: break
+            }
+            guard abs(self.annotations[index].lineWidth - width) > 0.01 else { return }
+            self.annotations[index] = self.annotations[index].withLineWidth(width)
+            self.updateAnnotationLayer()
+            self.updateInlineSelectionLayers()
+        }
+        model.onShapeFillModeChange = { [weak self] mode in
+            guard let self, !self.isSyncingToolbarToSelection,
+                let selectedID = self.selectedID,
+                let index = self.annotations.firstIndex(where: { $0.id == selectedID })
+            else { return }
+            switch self.annotations[index].kind {
+            case .rectangle, .ellipse:
+                guard self.annotations[index].shapeFillMode != mode else { return }
+                self.pushUndo()
+                self.annotations[index] = self.annotations[index].withShapeFillMode(mode)
+                self.updateAnnotationLayer()
+                self.updateInlineSelectionLayers()
+            default: break
+            }
+        }
+        model.onRectCornerStyleChange = { [weak self] style in
+            guard let self, !self.isSyncingToolbarToSelection,
+                let selectedID = self.selectedID,
+                let index = self.annotations.firstIndex(where: { $0.id == selectedID }),
+                case .rectangle = self.annotations[index].kind,
+                self.annotations[index].rectCornerStyle != style
+            else { return }
+            self.pushUndo()
+            self.annotations[index] = self.annotations[index].withRectCornerStyle(style)
+            self.updateAnnotationLayer()
+            self.updateInlineSelectionLayers()
+        }
+        model.onArrowStyleChange = { [weak self] style in
+            guard let self, !self.isSyncingToolbarToSelection,
+                let selectedID = self.selectedID,
+                let index = self.annotations.firstIndex(where: { $0.id == selectedID }),
+                case .arrow = self.annotations[index].kind,
+                self.annotations[index].arrowStyle != style
+            else { return }
+            self.pushUndo()
+            self.annotations[index] = self.annotations[index].withArrowStyle(style)
+            self.updateAnnotationLayer()
+            self.updateInlineSelectionLayers()
+        }
+        model.onFontSizeChange = { [weak self] size in
+            guard let self, !self.isSyncingToolbarToSelection,
+                let selectedID = self.selectedID,
+                let index = self.annotations.firstIndex(where: { $0.id == selectedID }),
+                case .text = self.annotations[index].kind
+            else { return }
+            self.annotations[index] = self.annotations[index].withFontSize(size)
+            self.updateAnnotationLayer()
+            self.updateInlineSelectionLayers()
         }
         toolbarModel = model
 
@@ -1180,6 +1340,7 @@ extension OverlayCanvasView {
             let handle = inlineHitHandle(target, at: crop)
         {
             selectedID = target.id
+            syncToolbarToAnnotation(target)
             pushUndo()
             switch handle {
             case .rotate:
@@ -1197,6 +1358,7 @@ extension OverlayCanvasView {
         // 2) 命中已有标注 → 选中并移动（非自由涂抹工具下）
         if tool != .pen, tool != .highlight, let hit = inlineAnnotation(at: crop) {
             selectedID = hit.id
+            syncToolbarToAnnotation(hit)
             if clickCount >= 2, case .text = hit.kind {
                 beginInlineText(at: textOrigin(of: hit), editing: hit)
                 inlineEditDrag = .none
@@ -1309,6 +1471,7 @@ extension OverlayCanvasView {
                 pushUndo()
                 annotations.append(draft)
                 selectedID = draft.id
+                syncToolbarToAnnotation(draft)
                 if case .counter = draft.kind { inlineCounterValue += 1 }
             }
             annotationDraft = nil
