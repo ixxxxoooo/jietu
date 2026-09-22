@@ -35,13 +35,18 @@ extension Annotation {
                 maxY = max(maxY, control.y)
             }
             return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-        case .line(let from, let to):
-            return CGRect(
-                x: min(from.x, to.x),
-                y: min(from.y, to.y),
-                width: abs(to.x - from.x),
-                height: abs(to.y - from.y)
-            )
+        case .line(let from, let to, let control):
+            var minX = min(from.x, to.x)
+            var minY = min(from.y, to.y)
+            var maxX = max(from.x, to.x)
+            var maxY = max(from.y, to.y)
+            if let control {
+                minX = min(minX, control.x)
+                minY = min(minY, control.y)
+                maxX = max(maxX, control.x)
+                maxY = max(maxY, control.y)
+            }
+            return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
         case .pen(let points), .highlight(let points):
             guard let first = points.first else { return .zero }
             var minX = first.x
@@ -183,7 +188,11 @@ extension Annotation {
             // 外侧的翼点不到。这里再拿一个以箭尖为心的圆近似整个头，半径取头宽的一半。
             let headHalf = min(max(11, lineWidth * 3.75), hypot(to.x - from.x, to.y - from.y))
             return Annotation.distance(local, to) <= max(tolerance, headHalf)
-        case .line(let from, let to):
+        case .line(let from, let to, let control):
+            if let control {
+                return Annotation.distanceToCurve(local, from: from, to: to, control: control)
+                    <= max(tolerance, lineWidth)
+            }
             return Annotation.distanceToSegment(local, from, to) <= max(tolerance, lineWidth)
         case .pen(let points):
             return Annotation.distanceToPolyline(local, points: points) <= max(tolerance, lineWidth)
@@ -283,12 +292,14 @@ extension Annotation {
             default:
                 break
             }
-        case .line(let from, let to):
+        case .line(let from, let to, let control):
             switch handle {
             case .lineStart:
-                copy.kind = .line(from: local, to: to)
+                copy.kind = .line(from: local, to: to, control: control)
             case .lineEnd:
-                copy.kind = .line(from: from, to: local)
+                copy.kind = .line(from: from, to: local, control: control)
+            case .lineControl:
+                copy.kind = .line(from: from, to: to, control: local)
             default:
                 break
             }
@@ -451,8 +462,8 @@ extension Annotation {
             copy.kind = .blur(sr(rect), radius: max(1, radius * factor))
         case .arrow(let from, let to, let control):
             copy.kind = .arrow(from: sp(from), to: sp(to), control: control.map(sp))
-        case .line(let from, let to):
-            copy.kind = .line(from: sp(from), to: sp(to))
+        case .line(let from, let to, let control):
+            copy.kind = .line(from: sp(from), to: sp(to), control: control.map(sp))
         case .pen(let points): copy.kind = .pen(points: points.map(sp))
         case .text(let origin, let string, let size):
             copy.kind = .text(origin: sp(origin), string: string, fontSize: size * factor)
@@ -504,7 +515,8 @@ extension Annotation {
         case .blur(let rect, let radius): return .blur(moveRect(rect), radius: radius)
         case .arrow(let from, let to, let control):
             return .arrow(from: move(from), to: move(to), control: control.map(move))
-        case .line(let from, let to): return .line(from: move(from), to: move(to))
+        case .line(let from, let to, let control):
+            return .line(from: move(from), to: move(to), control: control.map(move))
         case .pen(let points): return .pen(points: points.map(move))
         case .text(let origin, let string, let fontSize):
             return .text(origin: move(origin), string: string, fontSize: fontSize)
@@ -694,7 +706,7 @@ enum ShapeHandle: Equatable {
     case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
     case rotate
     case arrowStart, arrowEnd, arrowControl
-    case lineStart, lineEnd
+    case lineStart, lineEnd, lineControl
     case counterLeader
 }
 

@@ -82,8 +82,8 @@ struct Annotation: Identifiable, Equatable {
         case rectangle(CGRect)
         case ellipse(CGRect)
         case arrow(from: CGPoint, to: CGPoint, control: CGPoint?)
-        /// 直线（不带箭头）。
-        case line(from: CGPoint, to: CGPoint)
+        /// 直线或曲线（不带箭头）。`control` 为可选的二次贝塞尔曲率控制点。
+        case line(from: CGPoint, to: CGPoint, control: CGPoint?)
         case pen(points: [CGPoint])
         /// 荧光笔笔迹：沿 `points` 涂一条半透明粗笔迹（笔宽见 `highlightBrushWidth`）。
         case highlight(points: [CGPoint])
@@ -139,3 +139,9 @@ struct Annotation: Identifiable, Equatable {
     }
 }
 
+extension Annotation.Kind {
+    /// 兼容无控制点的纯直线调用。
+    static func line(from: CGPoint, to: CGPoint) -> Annotation.Kind {
+        .line(from: from, to: to, control: nil)
+    }
+}

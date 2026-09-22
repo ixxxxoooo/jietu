@@ -364,7 +364,7 @@ struct InlineToolbarModelTests {
         #expect(model.lineWidth == 7)
     }
 
-    @Test("直线标注：支持两端控制点且不显示多余旋转手柄")
+    @Test("直线标注：支持两端与中间弧度控制点且不显示多余旋转手柄")
     func lineAnnotationHasEndpointHandles() {
         let canvas = InlineEditScaffold.makeCanvas(canvas: CGSize(width: 800, height: 600))
         let from = CGPoint(x: 100, y: 100)
@@ -374,15 +374,23 @@ struct InlineToolbarModelTests {
         #expect(!line.supportsRotation, "直线自身由两端点确定朝向，不应有独立旋转手柄")
 
         let handles = canvas.inlineHandles(for: line)
-        #expect(handles.count == 2, "直线应具有且仅具有起点与终点 2 个控制点")
+        #expect(handles.count == 3, "直线应具有起点、终点和中间弧度控制点共 3 个手柄")
 
         let startHandle = handles.first { $0.0 == .lineStart }
         let endHandle = handles.first { $0.0 == .lineEnd }
+        let controlHandle = handles.first { $0.0 == .lineControl }
         #expect(startHandle?.1 == from, "起点控制点坐标应严格对应 from")
         #expect(endHandle?.1 == to, "终点控制点坐标应严格对应 to")
+        #expect(controlHandle?.1 == CGPoint(x: 200, y: 175), "初始直线中间手柄应位于两端中点")
 
         #expect(canvas.inlineHitHandle(line, at: from) == .lineStart)
         #expect(canvas.inlineHitHandle(line, at: to) == .lineEnd)
+        #expect(canvas.inlineHitHandle(line, at: CGPoint(x: 200, y: 175)) == .lineControl)
+
+        let curved = line.withEndpoint(.lineControl, to: CGPoint(x: 150, y: 100))
+        let curvedHandles = canvas.inlineHandles(for: curved)
+        let curvedControl = curvedHandles.first { $0.0 == .lineControl }
+        #expect(curvedControl?.1 == CGPoint(x: 150, y: 100), "弯曲后中间控制点应跟踪 control 坐标")
     }
 }
 

@@ -421,7 +421,7 @@ extension OverlayCanvasView {
             return rect.width >= 1.5 || rect.height >= 1.5
         case .arrow(let from, let to, _):
             return hypot(to.x - from.x, to.y - from.y) >= 2
-        case .line(let from, let to):
+        case .line(let from, let to, _):
             return hypot(to.x - from.x, to.y - from.y) >= 2
         case .pen(let points), .highlight(let points):
             return points.count >= 2
@@ -586,9 +586,13 @@ extension OverlayCanvasView {
             handles.append(
                 (.arrowControl, control ?? CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2))
             )
-        case .line(let from, let to):
+        case .line(let from, let to, let control):
             handles.append((.lineStart, annotation.toWorld(from)))
             handles.append((.lineEnd, annotation.toWorld(to)))
+            let defaultMid = CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2)
+            handles.append(
+                (.lineControl, annotation.toWorld(control ?? defaultMid))
+            )
         case .counter(let center, _, let leader):
             handles.append(
                 (.counterLeader, leader ?? CGPoint(x: center.x + 48, y: center.y - 48))
@@ -1309,7 +1313,7 @@ extension OverlayCanvasView {
             return rect.width >= 3 && rect.height >= 3
         case .arrow(let from, let to, _):
             return hypot(to.x - from.x, to.y - from.y) >= 3
-        case .line(let from, let to):
+        case .line(let from, let to, _):
             return hypot(to.x - from.x, to.y - from.y) >= 3
         case .counter, .callout, .pen, .highlight, .text, .eraser:
             return true
@@ -1354,7 +1358,7 @@ extension OverlayCanvasView {
             case .rotate:
                 let angle = atan2(crop.y - target.center.y, crop.x - target.center.x)
                 inlineEditDrag = .rotating(id: target.id, startAngle: angle, original: target)
-            case .arrowStart, .arrowEnd, .arrowControl, .lineStart, .lineEnd, .counterLeader:
+            case .arrowStart, .arrowEnd, .arrowControl, .lineStart, .lineEnd, .lineControl, .counterLeader:
                 inlineEditDrag = .endpoint(id: target.id, handle: handle, original: target)
             default:
                 inlineEditDrag = .resizing(id: target.id, handle: handle, original: target)

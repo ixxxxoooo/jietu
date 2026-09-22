@@ -252,11 +252,19 @@ struct AnnotationGeometryTests {
         #expect(!line.contains(CGPoint(x: 50, y: 95)))
 
         let moved = line.withEndpoint(.lineEnd, to: CGPoint(x: 0, y: 100))
-        guard case .line(_, let to) = moved.kind else {
+        guard case .line(_, let to, _) = moved.kind else {
             Issue.record("kind 不再是 line")
             return
         }
         #expect(to == CGPoint(x: 0, y: 100))
+
+        let curved = line.withEndpoint(.lineControl, to: CGPoint(x: 50, y: -20))
+        guard case .line(_, _, let control) = curved.kind else {
+            Issue.record("kind 不再是 line")
+            return
+        }
+        #expect(control == CGPoint(x: 50, y: -20))
+        #expect(curved.localBounds == CGRect(x: 0, y: -20, width: 100, height: 120))
     }
 
     @Test("模糊：跟随矩形缩放，参数独立")

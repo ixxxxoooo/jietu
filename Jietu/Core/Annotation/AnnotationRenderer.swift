@@ -174,9 +174,16 @@ enum AnnotationRenderer {
                     imageHeight: imageHeight
                 )
 
-            case .line(let from, let to):
-                context.move(to: contextPoint(from, imageHeight: imageHeight))
-                context.addLine(to: contextPoint(to, imageHeight: imageHeight))
+            case .line(let from, let to, let control):
+                let start = contextPoint(from, imageHeight: imageHeight)
+                let end = contextPoint(to, imageHeight: imageHeight)
+                context.move(to: start)
+                if let control {
+                    let cp = contextPoint(control, imageHeight: imageHeight)
+                    context.addQuadCurve(to: end, control: cp)
+                } else {
+                    context.addLine(to: end)
+                }
                 context.strokePath()
 
             case .pen(let points):

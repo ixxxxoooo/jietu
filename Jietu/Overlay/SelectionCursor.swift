@@ -21,7 +21,7 @@ enum SelectionCursor {
         case .bottomLeft: return cursor(for: SelectionHandle.bottomLeft)
         case .left: return cursor(for: SelectionHandle.left)
         case .rotate: return NSCursor.arrow
-        case .arrowStart, .arrowEnd, .arrowControl, .lineStart, .lineEnd, .counterLeader:
+        case .arrowStart, .arrowEnd, .arrowControl, .lineStart, .lineEnd, .lineControl, .counterLeader:
             return NSCursor.crosshair
         }
     }
