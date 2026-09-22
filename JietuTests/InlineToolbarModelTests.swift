@@ -356,5 +356,33 @@ struct InlineToolbarModelTests {
         #expect(model.tool == .rectangle)
         #expect(model.color == .blue)
         #expect(model.lineWidth == 5)
+
+        let line = Annotation(kind: .line(from: CGPoint(x: 10, y: 10), to: CGPoint(x: 100, y: 80)), color: .yellow, lineWidth: 7)
+        canvas.syncToolbarToAnnotation(line)
+        #expect(model.tool == .line)
+        #expect(model.color == .yellow)
+        #expect(model.lineWidth == 7)
+    }
+
+    @Test("直线标注：支持两端控制点且不显示多余旋转手柄")
+    func lineAnnotationHasEndpointHandles() {
+        let canvas = InlineEditScaffold.makeCanvas(canvas: CGSize(width: 800, height: 600))
+        let from = CGPoint(x: 100, y: 100)
+        let to = CGPoint(x: 300, y: 250)
+        let line = Annotation(kind: .line(from: from, to: to), color: .green, lineWidth: 4)
+
+        #expect(!line.supportsRotation, "直线自身由两端点确定朝向，不应有独立旋转手柄")
+
+        let handles = canvas.inlineHandles(for: line)
+        #expect(handles.count == 2, "直线应具有且仅具有起点与终点 2 个控制点")
+
+        let startHandle = handles.first { $0.0 == .lineStart }
+        let endHandle = handles.first { $0.0 == .lineEnd }
+        #expect(startHandle?.1 == from, "起点控制点坐标应严格对应 from")
+        #expect(endHandle?.1 == to, "终点控制点坐标应严格对应 to")
+
+        #expect(canvas.inlineHitHandle(line, at: from) == .lineStart)
+        #expect(canvas.inlineHitHandle(line, at: to) == .lineEnd)
     }
 }
+

@@ -130,9 +130,14 @@ extension Annotation {
 
     /// 是否支持旋转。聚光灯是**整幅**压暗的窗口，转一个角度没有意义
     /// （压暗层只认它那个矩形），所以不给旋转手柄。
+    /// 直线由两个端点直接确定朝向与长度，拖动端点即可旋转拉伸，不显示独立的旋转手柄。
     var supportsRotation: Bool {
-        if case .spotlight = kind { return false }
-        return true
+        switch kind {
+        case .spotlight, .line:
+            return false
+        default:
+            return true
+        }
     }
 
     /// 命中测试。`tolerance` 为点选容差（像素）。

@@ -586,6 +586,9 @@ extension OverlayCanvasView {
             handles.append(
                 (.arrowControl, control ?? CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2))
             )
+        case .line(let from, let to):
+            handles.append((.lineStart, annotation.toWorld(from)))
+            handles.append((.lineEnd, annotation.toWorld(to)))
         case .counter(let center, _, let leader):
             handles.append(
                 (.counterLeader, leader ?? CGPoint(x: center.x + 48, y: center.y - 48))
@@ -614,12 +617,17 @@ extension OverlayCanvasView {
             return
         }
 
-        let corners = target.rotatedCorners().map { viewPoint($0) }
-        let border = CGMutablePath()
-        border.addLines(between: corners)
-        border.closeSubpath()
-        inlineSelectionBorderLayer.path = border
-        inlineSelectionBorderLayer.isHidden = false
+        if case .line = target.kind {
+            inlineSelectionBorderLayer.isHidden = true
+            inlineSelectionBorderLayer.path = nil
+        } else {
+            let corners = target.rotatedCorners().map { viewPoint($0) }
+            let border = CGMutablePath()
+            border.addLines(between: corners)
+            border.closeSubpath()
+            inlineSelectionBorderLayer.path = border
+            inlineSelectionBorderLayer.isHidden = false
+        }
 
         let path = CGMutablePath()
         let radius = Self.inlineHandleRadius
@@ -1346,7 +1354,7 @@ extension OverlayCanvasView {
             case .rotate:
                 let angle = atan2(crop.y - target.center.y, crop.x - target.center.x)
                 inlineEditDrag = .rotating(id: target.id, startAngle: angle, original: target)
-            case .arrowStart, .arrowEnd, .arrowControl, .counterLeader:
+            case .arrowStart, .arrowEnd, .arrowControl, .lineStart, .lineEnd, .counterLeader:
                 inlineEditDrag = .endpoint(id: target.id, handle: handle, original: target)
             default:
                 inlineEditDrag = .resizing(id: target.id, handle: handle, original: target)
