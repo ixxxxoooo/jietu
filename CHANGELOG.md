@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.0.4] — 2026-09-23
 
 ### Added
 - **Area capture now ships with ⌃⌘A as its default global hotkey**; the other actions still start unset, and clearing this one in Settings keeps it cleared instead of being filled back in
@@ -25,6 +25,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Fixed
 - `AppBundleDragSourceView.hitTest(_:)` compared a point given in the **superview's** coordinate space against its own bounds, moving the card's drag hot zone whenever SwiftUI placed it away from its superview's origin
 - The drag panel no longer re-snaps and re-orders itself while a drag is in progress — it used to be lifted back above the System Settings window every 0.4 s, fighting the pass-through that lets the drop land there
+- The screenshot path no longer asks ScreenCaptureKit for **off-screen windows**: that made the daemon enumerate and serialize every window and measured 1.1–1.3 s per hotkey press before the overlay could appear. Screenshot and region capture only need displays and applications, so they now request on-screen windows, leaving the full list to window capture
+- Selecting an annotation no longer switches the toolbar to that annotation's drawing tool, so picking **Select** and clicking an annotation keeps Select active for the next click
+- The text tool now types over an existing annotation instead of letting it swallow the click, and a blank click that merely ends an edit no longer spawns a fresh empty field (which made the box look like it had shrunk)
+- Annotations can be moved by dragging the **selection box**: any tool can grab the box border (a move cursor appears), and Select can grab anywhere inside it; text control points resize the font again instead of only moving the annotation
 
 ## [0.0.3] — 2026-09-20
 
@@ -66,7 +70,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Live Text (OCR), Translation, Pin, Color picker
 - Global hotkeys, theme support, recent history
 
-[Unreleased]: https://github.com/ixxxxoooo/jietu/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/ixxxxoooo/jietu/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/ixxxxoooo/jietu/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/ixxxxoooo/jietu/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/ixxxxoooo/jietu/releases/tag/v0.0.2
 [0.0.1]: https://github.com/ixxxxoooo/jietu/releases/tag/v0.0.1
