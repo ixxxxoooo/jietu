@@ -441,6 +441,44 @@ struct InlineToolbarModelTests {
         #expect(canvas.textField == nil, "刚结束编辑的空白点击只收尾，不该再冒出一个空框")
     }
 
+    @Test("文本工具：点已有文字改字，拖动则移动")
+    func textToolClicksToEditAndDragsToMove() {
+        func makeCanvasWithText() -> OverlayCanvasView {
+            let region = CGRect(x: 200, y: 20, width: 600, height: 760)
+            let canvas = InlineEditScaffold.makeInlineRegionCanvas(region: region)
+            _ = canvas.debugSelectTool(.text)
+            canvas.annotations = [
+                Annotation(
+                    kind: .text(origin: CGPoint(x: 100, y: 100), string: "hi", fontSize: 40),
+                    color: .red
+                )
+            ]
+            return canvas
+        }
+
+        // 文字框内一点：crop(120,120) → view(260,720)。
+        let inside = CGPoint(x: 260, y: 720)
+
+        let click = makeCanvasWithText()
+        click.inlineMouseDown(inside, clickCount: 1)
+        click.inlineMouseUp(inside)
+        #expect(click.textField != nil, "没拖动过就应该进入改字")
+
+        let drag = makeCanvasWithText()
+        drag.inlineMouseDown(inside, clickCount: 1)
+        drag.inlineMouseDragged(CGPoint(x: 300, y: 700)) // crop(200,160)：平移 (80, 40)
+        drag.inlineMouseUp(CGPoint(x: 300, y: 700))
+        #expect(drag.textField == nil, "拖动过就不该进入改字")
+        guard let moved = drag.annotations.first else {
+            Issue.record("文字标注不该丢失")
+            return
+        }
+        #expect(
+            drag.textOrigin(of: moved) == CGPoint(x: 180, y: 140),
+            "拖动应把文字整体平移 (80, 40)"
+        )
+    }
+
     @Test("直线标注：支持两端与中间弧度控制点且不显示多余旋转手柄")
     func lineAnnotationHasEndpointHandles() {
         let canvas = InlineEditScaffold.makeCanvas(canvas: CGSize(width: 800, height: 600))

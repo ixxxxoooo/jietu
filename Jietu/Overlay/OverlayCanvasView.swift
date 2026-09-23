@@ -158,6 +158,11 @@ final class OverlayCanvasView: NSView {
     var redoStack: [Snapshot] = []
     var eraserStrokes: [EraserStroke] = []
     var selectedID: UUID?
+    /// 文本工具下「点一下改字、拖一下挪位置」：按下时先记下待改字的文字对象，
+    /// 松手时若这一手势没拖动过，才真正进入改字；拖动过就当移动，不改字。
+    var pendingTextEditID: UUID?
+    /// 本次手势是否真的拖动过（用来区分点击与拖动）。
+    var inlineDragMoved = false
     var isSyncingToolbarToSelection = false
     var hoveredAnnotationID: UUID?
     var erasing = false

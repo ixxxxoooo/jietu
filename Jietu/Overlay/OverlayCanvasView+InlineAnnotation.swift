@@ -1348,6 +1348,8 @@ extension OverlayCanvasView {
         commitPendingInlineText()
         let crop = annotationPoint(from: point)
         let tool = toolbarModel?.tool
+        pendingTextEditID = nil
+        inlineDragMoved = false
 
         // 橡皮：画笔式擦除（按绘制顺序擦除并恢复底图）。
         if tool == .eraser {
@@ -1371,9 +1373,10 @@ extension OverlayCanvasView {
         // 不能让「命中已有标注」把点击吃掉——否则想给模糊块补一句说明就永远点不出输入框。
         if tool == .text {
             if let hit = inlineAnnotation(at: crop), case .text = hit.kind {
+                // 点一下改字、拖一下挪位置：先按「移动」起手，松手时没拖动过才转成改字。
                 selectedID = hit.id
-                beginInlineText(at: textOrigin(of: hit), editing: hit)
-                inlineEditDrag = .none
+                pendingTextEditID = hit.id
+                inlineEditDrag = .moving(id: hit.id, start: crop, original: hit)
                 updateInlineSelectionLayers()
                 return
             }
@@ -1503,16 +1506,20 @@ extension OverlayCanvasView {
         case .none:
             break
         case .moving(let id, let start, let original):
+            inlineDragMoved = true
             let delta = CGSize(width: crop.x - start.x, height: crop.y - start.y)
             updateAnnotation(id) { _ in original.translated(by: delta) }
         case .resizing(let id, let handle, let original):
+            inlineDragMoved = true
             updateAnnotation(id) { _ in
                 original.resized(handle: handle, to: crop, lockAspect: false)
             }
         case .rotating(let id, let startAngle, let original):
+            inlineDragMoved = true
             let angle = atan2(crop.y - original.center.y, crop.x - original.center.x)
             updateAnnotation(id) { _ in original.rotated(by: angle - startAngle) }
         case .endpoint(let id, let handle, let original):
+            inlineDragMoved = true
             updateAnnotation(id) { _ in original.withEndpoint(handle, to: crop) }
         }
         updateAnnotationLayer()
@@ -1543,6 +1550,18 @@ extension OverlayCanvasView {
             }
             annotationDraft = nil
             updateAnnotationLayer()
+            updateInlineSelectionLayers()
+            return
+        }
+
+        // 文本工具：点一下（没拖动过）就进入改字；拖动过就当作移动，不改字。
+        if let editID = pendingTextEditID {
+            pendingTextEditID = nil
+            inlineEditDrag = .none
+            if !inlineDragMoved, let annotation = annotations.first(where: { $0.id == editID }) {
+                selectedID = editID
+                beginInlineText(at: textOrigin(of: annotation), editing: annotation)
+            }
             updateInlineSelectionLayers()
             return
         }
