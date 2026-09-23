@@ -399,6 +399,48 @@ struct InlineToolbarModelTests {
         #expect(canvas.textField != nil, "文本工具即便点在模糊标注上，也应进入文字输入")
     }
 
+    @Test("选择工具：拖动已选中标注的编辑框内部即可移动")
+    func draggingSelectedAnnotationBoxMovesIt() {
+        let region = CGRect(x: 200, y: 20, width: 600, height: 760)
+        let canvas = InlineEditScaffold.makeInlineRegionCanvas(region: region)
+        #expect(canvas.debugSelectTool(.select))
+
+        // 未填充矩形：内部不算命中图形本身，过去在框内拖不动。
+        let rect = Annotation(
+            kind: .rectangle(CGRect(x: 100, y: 100, width: 300, height: 200)),
+            color: .blue, lineWidth: 4
+        )
+        canvas.annotations = [rect]
+        canvas.selectedID = rect.id
+
+        // view(325,680)→crop(250,200)；view(385,720)→crop(370,120)，即整体平移 (120, -80)。
+        canvas.inlineMouseDown(CGPoint(x: 325, y: 680), clickCount: 1)
+        canvas.inlineMouseDragged(CGPoint(x: 385, y: 720))
+
+        guard let moved = canvas.annotations.first else {
+            Issue.record("标注不该丢失")
+            return
+        }
+        #expect(moved.center == CGPoint(x: 370, y: 120), "框内拖动应把标注整体平移 (120, -80)")
+    }
+
+    @Test("文本工具：结束文字编辑的空白点击不再冒出新输入框")
+    func textBlankClickAfterEditingDoesNotSpawnNewField() {
+        let region = CGRect(x: 200, y: 20, width: 600, height: 760)
+        let canvas = InlineEditScaffold.makeInlineRegionCanvas(region: region)
+        #expect(canvas.debugSelectTool(.text))
+
+        let start = CGPoint(x: region.midX, y: region.midY)
+        canvas.inlineMouseDown(start, clickCount: 1)
+        canvas.inlineMouseUp(start)
+        #expect(canvas.textField != nil, "第一次点空白应能开始输入文字")
+
+        let another = CGPoint(x: region.midX + 120, y: region.midY + 80)
+        canvas.inlineMouseDown(another, clickCount: 1)
+        canvas.inlineMouseUp(another)
+        #expect(canvas.textField == nil, "刚结束编辑的空白点击只收尾，不该再冒出一个空框")
+    }
+
     @Test("直线标注：支持两端与中间弧度控制点且不显示多余旋转手柄")
     func lineAnnotationHasEndpointHandles() {
         let canvas = InlineEditScaffold.makeCanvas(canvas: CGSize(width: 800, height: 600))

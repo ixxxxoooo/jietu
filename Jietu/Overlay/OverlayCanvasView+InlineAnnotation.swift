@@ -678,6 +678,16 @@ extension OverlayCanvasView {
         return annotations.last { $0.contains(cropPoint, tolerance: tolerance) }
     }
 
+    /// 已选中对象的**编辑框**（带控制点的包围盒）是否包含某点（crop 像素坐标）。
+    ///
+    /// 编辑框画的就是 `rotatedCorners()` 那圈，所以先按对象自身的旋转把点转进本地坐标
+    /// 再比 `localBounds`——旋转过的对象也能正确命中。`inlineAnnotation` 只认图形本身，
+    /// 未填充的矩形 / 椭圆内部命中不到，靠这个才能"框内任意处都能拖"。
+    func inlineBoxContains(_ annotation: Annotation, _ cropPoint: CGPoint) -> Bool {
+        let local = annotation.toLocal(cropPoint)
+        return annotation.localBounds.insetBy(dx: -6, dy: -6).contains(local)
+    }
+
     func textOrigin(of annotation: Annotation) -> CGPoint {
         if case .text(let origin, _, _) = annotation.kind { return origin }
         return annotation.center
@@ -1331,7 +1341,10 @@ extension OverlayCanvasView {
 
     /// 统一的原地鼠标处理：先命中已有对象（任意工具下都可编辑），空白处才新建。
     func inlineMouseDown(_ point: CGPoint, clickCount: Int) {
-        // 点别处一律先把正在编辑的文字落地。
+        // 点别处一律先把正在编辑的文字落地。先记下「点之前是否正在输入」：
+        // 文本工具下这一次空白点击只负责**结束**编辑，不再顺手冒出一个新的空输入框
+        // （否则旧框提交、原地又出现一个 24px 的小空框，看着就像文本框"缩"了）。
+        let wasEditingText = textField != nil
         commitPendingInlineText()
         let crop = annotationPoint(from: point)
         let tool = toolbarModel?.tool
@@ -1364,6 +1377,8 @@ extension OverlayCanvasView {
                 updateInlineSelectionLayers()
                 return
             }
+            // 刚结束一次文字编辑：这一下只是收尾，不再新建空框。
+            if wasEditingText { return }
             guard let selection, selection.contains(point) else { return }
             inlineStart = crop
             inlineDragging = true
@@ -1395,7 +1410,19 @@ extension OverlayCanvasView {
             return
         }
 
-        // 2) 命中已有标注 → 选中并移动（非自由涂抹工具下）
+        // 2) 点中「已选中对象的编辑框」内部 → 直接拖动整个对象。
+        //    未填充的矩形 / 椭圆内部不属于图形本身，靠 `inlineAnnotation` 命中不到；
+        //    编辑框既然已经画出来了，框内任意处都该能抓着走。只在选择态（选择工具 /
+        //    未选工具）生效——绘制工具下仍以「画新图形」优先，否则画重叠图形会误拖已有对象。
+        let isSelectionMode = tool == .select || tool == nil
+        if isSelectionMode, let selected = selectedAnnotation, inlineBoxContains(selected, crop) {
+            pushUndo()
+            inlineEditDrag = .moving(id: selected.id, start: crop, original: selected)
+            updateInlineSelectionLayers()
+            return
+        }
+
+        // 3) 命中已有标注 → 选中并移动（非自由涂抹工具下）
         if tool != .pen, tool != .highlight, let hit = inlineAnnotation(at: crop) {
             selectedID = hit.id
             syncToolbarToAnnotation(hit, updateTool: false)
@@ -1411,7 +1438,7 @@ extension OverlayCanvasView {
             return
         }
 
-        // 3) 空白：清空选中；若当前未选工具则支持双击完成 / 拖动选框；若选了绘制工具则开始新标注
+        // 4) 空白：清空选中；若当前未选工具则支持双击完成 / 拖动选框；若选了绘制工具则开始新标注
         selectedID = nil
         inlineEditDrag = .none
         updateInlineSelectionLayers()
