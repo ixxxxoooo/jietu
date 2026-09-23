@@ -59,12 +59,14 @@ final class CaptureEngine {
     ///
     /// 用 `SCContentFilter(desktopIndependentWindow:)` 直接按窗口抓，
     /// 不需要弹遮罩，也不会把遮挡它的窗口拍进去。
+    ///
+    /// 只有这里需要**完整**窗口清单（含别的 Space 里的窗口），所以显式要离屏窗口。
     func captureWindow(_ window: WindowInfo) async throws -> CGImage {
         guard ScreenCapturePermission.isGranted else {
             throw CaptureError.permissionDenied
         }
 
-        let content = try await shareableContent()
+        let content = try await shareableContent(onScreenWindowsOnly: false)
         guard let scWindow = content.windows.first(where: { $0.windowID == window.windowID }) else {
             throw CaptureError.windowNotCapturable(window.windowID)
         }
@@ -179,12 +181,20 @@ final class CaptureEngine {
         return try await capturer.capture()
     }
 
-    private func shareableContent() async throws -> SCShareableContent {
+    /// 取一次 SCShareableContent。
+    ///
+    /// `onScreenWindowsOnly` 默认 `true`：截图 / 取区域只要 `displays` 与
+    /// `applications`，压根不碰 `windows`。而索要**离屏窗口**会让 daemon 把所有
+    /// 进程的所有窗口枚举一遍再序列化回来——实测一次往返 1.1~1.3s，正好是
+    /// 「按快捷键半天才出遮罩」的来源；只看屏幕上的窗口则回到几十毫秒。
+    /// 只有 `captureWindow` 需要离屏窗口（要能在别的 Space 里定位目标窗口）。
+    private func shareableContent(
+        onScreenWindowsOnly: Bool = true
+    ) async throws -> SCShareableContent {
         do {
-            // onScreenWindowsOnly: false —— 否则全屏空间里的窗口拿不到。
             return try await SCShareableContent.excludingDesktopWindows(
                 false,
-                onScreenWindowsOnly: false
+                onScreenWindowsOnly: onScreenWindowsOnly
             )
         } catch {
             logger.error("SCShareableContent failed: \(error.localizedDescription)")

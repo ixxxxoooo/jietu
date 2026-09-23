@@ -33,8 +33,9 @@ final class ScreenPixelProbe {
 
     /// 为某块屏建探针（`displayID` 与 `NSScreen.jietu_displayID` 同一套口径）。
     init(displayID: CGDirectDisplayID, scale: CGFloat) async throws {
+        // 只要 displays + applications，别去要离屏窗口——那会把 daemon 往返拖到 1s+。
         let content = try await SCShareableContent.excludingDesktopWindows(
-            false, onScreenWindowsOnly: false
+            false, onScreenWindowsOnly: true
         )
         guard let display = content.displays.first(where: { $0.displayID == displayID })
             ?? content.displays.first
