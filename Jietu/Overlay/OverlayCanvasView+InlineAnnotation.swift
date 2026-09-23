@@ -662,7 +662,9 @@ extension OverlayCanvasView {
     static let inlineHandleRadius: CGFloat = 4.5
 
     func inlineHitHandle(_ annotation: Annotation, at cropPoint: CGPoint) -> ShapeHandle? {
-        let tolerance = 11 * snapshot.effectiveScale
+        // 文字框往往很小，通用容差会整个伸进框内、把「点文字改字」抢成缩放，故收紧一半。
+        var tolerance = 11 * snapshot.effectiveScale
+        if case .text = annotation.kind { tolerance = max(6, tolerance / 2) }
         var best: (ShapeHandle, CGFloat)?
         for (handle, point) in inlineHandles(for: annotation) {
             let distance = Annotation.distance(cropPoint, point)
@@ -686,6 +688,18 @@ extension OverlayCanvasView {
     func inlineBoxContains(_ annotation: Annotation, _ cropPoint: CGPoint) -> Bool {
         let local = annotation.toLocal(cropPoint)
         return annotation.localBounds.insetBy(dx: -6, dy: -6).contains(local)
+    }
+
+    /// 点是否落在「选中框的边」上（控制点由 `inlineHitHandle` 单独负责，别抢它的活）。
+    ///
+    /// 用来在框边显示小手光标：提示这里按着能拖动整个对象。内部空白不算边，
+    /// 所以文字框内部照旧给 I 形光标（点进去改字）。
+    func inlineBoxBorderContains(_ annotation: Annotation, _ cropPoint: CGPoint) -> Bool {
+        let box = annotation.localBounds
+        guard box.width > 0, box.height > 0 else { return false }
+        let local = annotation.toLocal(cropPoint)
+        let tolerance = max(6, 8 * snapshot.effectiveScale)
+        return Annotation.distanceToRectBorder(local, rect: box) <= tolerance
     }
 
     func textOrigin(of annotation: Annotation) -> CGPoint {
@@ -1369,28 +1383,6 @@ extension OverlayCanvasView {
             return
         }
 
-        // 文本工具：点已有文字直接改字；点别处（哪怕压着一条别的标注）都在这儿新建文字。
-        // 不能让「命中已有标注」把点击吃掉——否则想给模糊块补一句说明就永远点不出输入框。
-        if tool == .text {
-            if let hit = inlineAnnotation(at: crop), case .text = hit.kind {
-                // 点一下改字、拖一下挪位置：先按「移动」起手，松手时没拖动过才转成改字。
-                selectedID = hit.id
-                pendingTextEditID = hit.id
-                inlineEditDrag = .moving(id: hit.id, start: crop, original: hit)
-                updateInlineSelectionLayers()
-                return
-            }
-            // 刚结束一次文字编辑：这一下只是收尾，不再新建空框。
-            if wasEditingText { return }
-            guard let selection, selection.contains(point) else { return }
-            inlineStart = crop
-            inlineDragging = true
-            annotationDraft = nil
-            updateAnnotationLayer()
-            updateInlineSelectionLayers()
-            return
-        }
-
         // 1) 选中对象 + 命中控制点 → 缩放 / 旋转 / 端点（非自由涂抹工具下）
         let activeTarget = selectedAnnotation ?? (hoveredAnnotationID.flatMap { id in annotations.first { $0.id == id } })
         if tool != .pen, tool != .highlight,
@@ -1409,6 +1401,28 @@ extension OverlayCanvasView {
             default:
                 inlineEditDrag = .resizing(id: target.id, handle: handle, original: target)
             }
+            updateInlineSelectionLayers()
+            return
+        }
+
+        // 文本工具：点已有文字改字（点一下）/ 挪位置（拖一下）；点别处（哪怕压着一条别的
+        // 标注）都在这儿新建文字。放在控制点判定之后，编辑点才拖得动大小。
+        if tool == .text {
+            if let hit = inlineAnnotation(at: crop), case .text = hit.kind {
+                // 点一下改字、拖一下挪位置：先按「移动」起手，松手时没拖动过才转成改字。
+                selectedID = hit.id
+                pendingTextEditID = hit.id
+                inlineEditDrag = .moving(id: hit.id, start: crop, original: hit)
+                updateInlineSelectionLayers()
+                return
+            }
+            // 刚结束一次文字编辑：这一下只是收尾，不再新建空框。
+            if wasEditingText { return }
+            guard let selection, selection.contains(point) else { return }
+            inlineStart = crop
+            inlineDragging = true
+            annotationDraft = nil
+            updateAnnotationLayer()
             updateInlineSelectionLayers()
             return
         }

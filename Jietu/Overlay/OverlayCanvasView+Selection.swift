@@ -70,6 +70,11 @@ extension OverlayCanvasView {
                 SelectionCursor.cursor(forShapeHandle: handle).set()
                 return
             }
+            // 选中框的「边」（不在控制点上）→ 小手，提示这里按着能拖动整个对象挪位置。
+            if let selected = selectedAnnotation, inlineBoxBorderContains(selected, crop) {
+                NSCursor.openHand.set()
+                return
+            }
             // 文本工具：选区内点哪儿都能打字（含压在别的标注上的位置），给 I 形光标；
             // 选区外不能输入，仍是箭头。
             if toolbarModel?.tool == .text, let selection, selection.contains(point) {

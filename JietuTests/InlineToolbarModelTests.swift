@@ -479,6 +479,49 @@ struct InlineToolbarModelTests {
         )
     }
 
+    @Test("文本工具：拖动文字编辑点改变字号")
+    func textToolResizesViaHandle() {
+        let region = CGRect(x: 200, y: 20, width: 600, height: 760)
+        let canvas = InlineEditScaffold.makeInlineRegionCanvas(region: region)
+        #expect(canvas.debugSelectTool(.text))
+
+        let text = Annotation(
+            kind: .text(origin: CGPoint(x: 200, y: 200), string: "hello", fontSize: 40),
+            color: .red
+        )
+        canvas.annotations = [text]
+        canvas.selectedID = text.id
+
+        guard let handle = canvas.inlineHandles(for: text).first(where: { $0.0 == .bottomRight })
+        else {
+            Issue.record("文字框应有右下角缩放点")
+            return
+        }
+        let start = canvas.viewPoint(fromAnnotation: handle.1)
+        // 往右下方拖远（view 坐标 y 向下为负）。
+        let end = CGPoint(x: start.x + 80, y: start.y - 60)
+        canvas.inlineMouseDown(start, clickCount: 1)
+        canvas.inlineMouseDragged(end)
+        canvas.inlineMouseUp(end)
+
+        guard case .text(_, _, let newFontSize)? = canvas.annotations.first?.kind else {
+            Issue.record("文字标注丢失")
+            return
+        }
+        #expect(newFontSize > 40, "拖编辑点应放大字号，实际 \(newFontSize)")
+    }
+
+    @Test("选中框的边：用于小手提示，内部不算边")
+    func selectionBoxBorderDetection() {
+        let canvas = InlineEditScaffold.makeCanvas(canvas: CGSize(width: 800, height: 600))
+        let rect = Annotation(
+            kind: .rectangle(CGRect(x: 100, y: 100, width: 200, height: 100)), color: .blue
+        )
+        #expect(canvas.inlineBoxBorderContains(rect, CGPoint(x: 100, y: 150)), "左边中点算边")
+        #expect(!canvas.inlineBoxBorderContains(rect, CGPoint(x: 200, y: 150)), "正中间不算边")
+        #expect(canvas.inlineBoxContains(rect, CGPoint(x: 200, y: 150)), "中间在框内")
+    }
+
     @Test("直线标注：支持两端与中间弧度控制点且不显示多余旋转手柄")
     func lineAnnotationHasEndpointHandles() {
         let canvas = InlineEditScaffold.makeCanvas(canvas: CGSize(width: 800, height: 600))
