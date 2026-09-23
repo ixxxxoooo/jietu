@@ -364,6 +364,41 @@ struct InlineToolbarModelTests {
         #expect(model.lineWidth == 7)
     }
 
+    @Test("选中已有标注：同步参数但不切换当前工具")
+    func syncToolbarToAnnotationKeepsToolWhenRequested() {
+        let canvas = InlineEditScaffold.makeCanvas(canvas: CGSize(width: 800, height: 600))
+        let model = InlineToolbarModel()
+        canvas.toolbarModel = model
+        model.tool = .select
+
+        let blur = Annotation(
+            kind: .blur(CGRect(x: 50, y: 50, width: 100, height: 80), radius: 28), color: .black
+        )
+        canvas.syncToolbarToAnnotation(blur, updateTool: false)
+        #expect(model.tool == .select, "选中已有标注不该把「选择」工具自动换掉")
+        #expect(model.blurRadius == 28, "参数仍要同步到工具栏")
+    }
+
+    @Test("文本工具：点在已有标注上也能弹出输入框")
+    func textToolTypesOverExistingAnnotation() {
+        let region = CGRect(x: 200, y: 20, width: 600, height: 760)
+        let canvas = InlineEditScaffold.makeInlineRegionCanvas(region: region)
+        #expect(canvas.debugSelectTool(.text))
+
+        // 一条盖住整个选区的模糊标注：点上去原本会被「命中已有标注」吃掉，出不来输入框。
+        canvas.annotations = [
+            Annotation(
+                kind: .blur(CGRect(x: 0, y: 0, width: 1200, height: 1520), radius: 20),
+                color: .black
+            )
+        ]
+
+        let point = CGPoint(x: region.midX, y: region.midY)
+        canvas.inlineMouseDown(point, clickCount: 1)
+        canvas.inlineMouseUp(point)
+        #expect(canvas.textField != nil, "文本工具即便点在模糊标注上，也应进入文字输入")
+    }
+
     @Test("直线标注：支持两端与中间弧度控制点且不显示多余旋转手柄")
     func lineAnnotationHasEndpointHandles() {
         let canvas = InlineEditScaffold.makeCanvas(canvas: CGSize(width: 800, height: 600))

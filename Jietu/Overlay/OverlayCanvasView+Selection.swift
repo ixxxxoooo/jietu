@@ -70,16 +70,10 @@ extension OverlayCanvasView {
                 SelectionCursor.cursor(forShapeHandle: handle).set()
                 return
             }
-            if let tool = toolbarModel?.tool {
-                if tool == .text {
-                    if inlineAnnotation(at: crop) != nil {
-                        NSCursor.arrow.set()
-                    } else {
-                        NSCursor.iBeam.set()
-                    }
-                } else {
-                    NSCursor.arrow.set()
-                }
+            // 文本工具：选区内点哪儿都能打字（含压在别的标注上的位置），给 I 形光标；
+            // 选区外不能输入，仍是箭头。
+            if toolbarModel?.tool == .text, let selection, selection.contains(point) {
+                NSCursor.iBeam.set()
             } else {
                 NSCursor.arrow.set()
             }

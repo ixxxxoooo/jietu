@@ -510,57 +510,66 @@ extension OverlayCanvasView {
         annotations[index] = transform(annotations[index])
     }
 
-    /// 选中标注时把工具栏反向同步成该标注的当前工具与参数。
-    func syncToolbarToAnnotation(_ annotation: Annotation) {
+    /// 选中标注时把工具栏反向同步成该标注的当前参数。
+    ///
+    /// - Parameter updateTool: 是否连当前工具一起切换。**选中已有标注时传 `false`**：
+    ///   用户明明选着「选择」工具去点标注，不该被自动换成那条标注的绘制工具——那样
+    ///   "选择"就没了，下一次点击又会变成画新图形。只有刚画完一条新标注（工具本就是它）
+    ///   才用默认的 `true` 顺带对齐一次。
+    func syncToolbarToAnnotation(_ annotation: Annotation, updateTool: Bool = true) {
         guard let model = toolbarModel else { return }
         isSyncingToolbarToSelection = true
         defer { isSyncingToolbarToSelection = false }
 
+        func select(_ tool: AnnotationTool) {
+            if updateTool { model.tool = tool }
+        }
+
         switch annotation.kind {
         case .blur(_, let radius):
-            model.tool = .blur
+            select(.blur)
             model.blurRadius = radius
         case .pixelate(_, let block):
-            model.tool = .pixelate
+            select(.pixelate)
             model.mosaicBlock = block
         case .rectangle:
-            model.tool = .rectangle
+            select(.rectangle)
             model.color = annotation.color
             model.lineWidth = annotation.lineWidth
             model.shapeFillMode = annotation.shapeFillMode
             model.rectCornerStyle = annotation.rectCornerStyle
         case .ellipse:
-            model.tool = .ellipse
+            select(.ellipse)
             model.color = annotation.color
             model.lineWidth = annotation.lineWidth
             model.shapeFillMode = annotation.shapeFillMode
         case .arrow:
-            model.tool = .arrow
+            select(.arrow)
             model.color = annotation.color
             model.lineWidth = annotation.lineWidth
             model.arrowStyle = annotation.arrowStyle
         case .line:
-            model.tool = .line
+            select(.line)
             model.color = annotation.color
             model.lineWidth = annotation.lineWidth
         case .pen:
-            model.tool = .pen
+            select(.pen)
             model.color = annotation.color
             model.lineWidth = annotation.lineWidth
         case .highlight:
-            model.tool = .highlight
+            select(.highlight)
             model.highlightColor = annotation.color
             model.highlightLineWidth = annotation.lineWidth
         case .spotlight:
-            model.tool = .spotlight
+            select(.spotlight)
         case .text(_, _, let fontSize):
-            model.tool = .text
+            select(.text)
             model.color = annotation.color
             model.fontSize = fontSize
             model.textHasStroke = annotation.textHasStroke
             model.textHasCallout = annotation.textHasCallout
         case .counter, .callout:
-            model.tool = .counter
+            select(.counter)
             model.color = annotation.color
             model.lineWidth = annotation.lineWidth
         case .eraser:
@@ -1345,6 +1354,25 @@ extension OverlayCanvasView {
             return
         }
 
+        // 文本工具：点已有文字直接改字；点别处（哪怕压着一条别的标注）都在这儿新建文字。
+        // 不能让「命中已有标注」把点击吃掉——否则想给模糊块补一句说明就永远点不出输入框。
+        if tool == .text {
+            if let hit = inlineAnnotation(at: crop), case .text = hit.kind {
+                selectedID = hit.id
+                beginInlineText(at: textOrigin(of: hit), editing: hit)
+                inlineEditDrag = .none
+                updateInlineSelectionLayers()
+                return
+            }
+            guard let selection, selection.contains(point) else { return }
+            inlineStart = crop
+            inlineDragging = true
+            annotationDraft = nil
+            updateAnnotationLayer()
+            updateInlineSelectionLayers()
+            return
+        }
+
         // 1) 选中对象 + 命中控制点 → 缩放 / 旋转 / 端点（非自由涂抹工具下）
         let activeTarget = selectedAnnotation ?? (hoveredAnnotationID.flatMap { id in annotations.first { $0.id == id } })
         if tool != .pen, tool != .highlight,
@@ -1352,7 +1380,7 @@ extension OverlayCanvasView {
             let handle = inlineHitHandle(target, at: crop)
         {
             selectedID = target.id
-            syncToolbarToAnnotation(target)
+            syncToolbarToAnnotation(target, updateTool: false)
             pushUndo()
             switch handle {
             case .rotate:
@@ -1370,7 +1398,7 @@ extension OverlayCanvasView {
         // 2) 命中已有标注 → 选中并移动（非自由涂抹工具下）
         if tool != .pen, tool != .highlight, let hit = inlineAnnotation(at: crop) {
             selectedID = hit.id
-            syncToolbarToAnnotation(hit)
+            syncToolbarToAnnotation(hit, updateTool: false)
             if clickCount >= 2, case .text = hit.kind {
                 beginInlineText(at: textOrigin(of: hit), editing: hit)
                 inlineEditDrag = .none
