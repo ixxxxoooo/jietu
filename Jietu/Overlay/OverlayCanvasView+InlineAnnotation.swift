@@ -1427,12 +1427,16 @@ extension OverlayCanvasView {
             return
         }
 
-        // 2) 点中「已选中对象的编辑框」内部 → 直接拖动整个对象。
-        //    未填充的矩形 / 椭圆内部不属于图形本身，靠 `inlineAnnotation` 命中不到；
-        //    编辑框既然已经画出来了，框内任意处都该能抓着走。只在选择态（选择工具 /
-        //    未选工具）生效——绘制工具下仍以「画新图形」优先，否则画重叠图形会误拖已有对象。
+        // 2) 点中「已选中对象的编辑框」→ 拖动整个对象。
+        //    · 选择态（选择工具 / 未选工具）：框内任意处都能拖——未填充的矩形 / 椭圆内部
+        //      本来也不算命中图形本身，没有这条就永远拖不动；
+        //    · 绘制工具下：抓框**边**（有小手提示）也能拖走，框内部仍留给「画新图形」，
+        //      否则想画一个叠在已有图形上的新图形时会误拖前一个。
         let isSelectionMode = tool == .select || tool == nil
-        if isSelectionMode, let selected = selectedAnnotation, inlineBoxContains(selected, crop) {
+        if let selected = selectedAnnotation,
+            (isSelectionMode && inlineBoxContains(selected, crop))
+                || inlineBoxBorderContains(selected, crop)
+        {
             pushUndo()
             inlineEditDrag = .moving(id: selected.id, start: crop, original: selected)
             updateInlineSelectionLayers()

@@ -71,7 +71,13 @@ extension OverlayCanvasView {
                 return
             }
             // 选中框的「边」（不在控制点上）→ 小手，提示这里按着能拖动整个对象挪位置。
-            if let selected = selectedAnnotation, inlineBoxBorderContains(selected, crop) {
+            // 选择态下框内任意处都能拖，也给小手。
+            let tool = toolbarModel?.tool
+            let isSelectionMode = tool == .select || tool == nil
+            if let selected = selectedAnnotation,
+                (isSelectionMode && inlineBoxContains(selected, crop))
+                    || inlineBoxBorderContains(selected, crop)
+            {
                 NSCursor.openHand.set()
                 return
             }

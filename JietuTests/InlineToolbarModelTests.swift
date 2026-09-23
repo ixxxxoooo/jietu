@@ -522,6 +522,33 @@ struct InlineToolbarModelTests {
         #expect(canvas.inlineBoxContains(rect, CGPoint(x: 200, y: 150)), "中间在框内")
     }
 
+    @Test("绘制工具下抓选中框的边也能拖动移动")
+    func drawingToolDragsSelectionBoxBorder() {
+        let region = CGRect(x: 200, y: 20, width: 600, height: 760)
+        let canvas = InlineEditScaffold.makeInlineRegionCanvas(region: region)
+        #expect(canvas.debugSelectTool(.rectangle))
+
+        let rect = Annotation(
+            kind: .rectangle(CGRect(x: 100, y: 100, width: 300, height: 200)),
+            color: .blue, lineWidth: 4
+        )
+        canvas.annotations = [rect]
+        canvas.selectedID = rect.id
+
+        // 上边上一点（避开控制点）：crop(180,100)→view(290,730)；
+        // 拖到 view(350,690)→crop(300,180)，即整体平移 (120, 80)。
+        canvas.inlineMouseDown(CGPoint(x: 290, y: 730), clickCount: 1)
+        canvas.inlineMouseDragged(CGPoint(x: 350, y: 690))
+        canvas.inlineMouseUp(CGPoint(x: 350, y: 690))
+
+        guard let moved = canvas.annotations.first else {
+            Issue.record("标注不该丢失")
+            return
+        }
+        #expect(canvas.annotations.count == 1, "抓框边拖动是移动，不该画出新矩形")
+        #expect(moved.center == CGPoint(x: 370, y: 280), "抓框边拖动应整体平移 (120, 80)")
+    }
+
     @Test("直线标注：支持两端与中间弧度控制点且不显示多余旋转手柄")
     func lineAnnotationHasEndpointHandles() {
         let canvas = InlineEditScaffold.makeCanvas(canvas: CGSize(width: 800, height: 600))
