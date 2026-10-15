@@ -1,6 +1,6 @@
 # 测试覆盖对照表
 
-> 截至 2026-09-20，345 个 `@Test`，38 个 `@Suite`。
+> 截至 2026-10-15，385 个测试，44 个 `@Suite`（以 `xcodebuild test` 的汇总行为准）。
 >
 > 「selftest」列标注了 `AppDelegate+SelfTest.swift` 中的 DEBUG 自检命令覆盖情况。
 > selftest 在真实窗口环境里跑，能覆盖单元测试难以触达的 UI 层。
@@ -16,6 +16,13 @@
 | `AppDelegate+Delivery.swift` | — | ✅ 落盘/剪贴板/通知 |
 | `AppDelegate+SelfTest.swift` | — | （自身即自检） |
 | `JietuApp.swift` | — | — |
+
+## Core（根目录）
+
+| 源文件 | 单元测试 | selftest |
+|--------|----------|----------|
+| `AppIdentity.swift` | `AppIdentityTests` | — |
+| `L10n.swift` | `SettingsPanesConsistencyTests` (间接) | — |
 
 ## Core/Annotation
 
@@ -48,7 +55,7 @@
 
 | 源文件 | 单元测试 | selftest |
 |--------|----------|----------|
-| `CaptureSelfTest.swift` | — | （自身即自检） |
+| `CaptureSelfTest.swift` 及其 `+QuickAccess` / `+Pin` / `+ScrollStitch` / `+ScrollSession` / `+Recording` / `+Inline` / `+Overlay` / `+Pixels` / `+Loupe` / `+Capture` 扩展 | — | （自身即自检） |
 | `InteractionMetrics.swift` | — | — |
 
 ## Core/History
@@ -122,6 +129,7 @@
 | 源文件 | 单元测试 | selftest |
 |--------|----------|----------|
 | `AppAppearance.swift` | — | — |
+| `AppLanguage.swift` | `AppLanguageTests` | — |
 | `LaunchAtLogin.swift` | — | — |
 | `SettingsStore.swift` | `SettingsStoreTests`, `SettingsPanesConsistencyTests` | — |
 | `SettingsTypes.swift` | `SettingsPanesConsistencyTests` | — |
@@ -138,6 +146,13 @@
 | `OverlayCanvasView.swift` | `OverlayCanvasCropTests`, `OverlayCanvasZoomTests` | ✅ 遮罩画布 |
 | `OverlayCanvasView+Actions.swift` | `OverlayCanvasZoomTests` | ✅ |
 | `OverlayCanvasView+InlineAnnotation.swift` | `InlineToolbarModelTests` | ✅ |
+| `OverlayCanvasView+InlineCrop.swift` | `OverlayCanvasCropTests` | ✅ |
+| `OverlayCanvasView+InlineGeometry.swift` | `InlineToolbarModelTests` | ✅ |
+| `OverlayCanvasView+InlineMouse.swift` | `InlineToolbarModelTests`, `InlineTextFieldTests` | ✅ 就地画框 |
+| `OverlayCanvasView+InlineObjects.swift` | `InlineToolbarModelTests` | ✅ |
+| `OverlayCanvasView+InlineText.swift` | `InlineTextFieldTests` | ✅ |
+| `OverlayCanvasView+InlineToolbar.swift` | `InlineToolbarModelTests`, `ToolbarPlacementTests` | ✅ 工具栏 |
+| `OverlayCanvasView+InlineToolbarLayout.swift` | `ToolbarPlacementTests` | ✅ 工具栏 |
 | `OverlayCanvasView+Loupe.swift` | — | ✅ 放大镜 |
 | `OverlayCanvasView+Rendering.swift` | — | ✅ |
 | `OverlayCanvasView+Selection.swift` | `SelectionGeometryTests` (间接) | ✅ 选区 |
@@ -183,6 +198,7 @@
 | `ShapeFillModePicker.swift` | — | — |
 | `StyleIconPicker.swift` | — | — |
 | `Theme.swift` | — | — |
+| `ToastPanel.swift` | `ToastPanelTests` | — |
 | `Tooltip.swift` | `TooltipTests` | — |
 | `VisualEffectView.swift` | — | — |
 | `WindowChrome.swift` | — | — |
@@ -191,6 +207,8 @@
 
 | 源文件 | 单元测试 | selftest |
 |--------|----------|----------|
+| `HistoryCardView.swift` | `HistoryCardTests` | — |
+| `HistoryTypes.swift` | `HistoryTypesTests`, `HistoryCardTests` | — |
 | `HistoryView.swift` | `HistoryCardTests` | — |
 
 ## UI/MenuBar
@@ -240,6 +258,7 @@
 | `AnnotationSettingsPane.swift` | — | — |
 | `CaptureSettingsPane.swift` | — | — |
 | `GeneralSettingsPane.swift` | — | — |
+| `GifExportAccessoryView.swift` | `GifExportAccessoryViewTests` | — |
 | `HotkeyRecorderView.swift` | — | — |
 | `HotkeysSettingsPane.swift` | — | — |
 | `PermissionSettingsPane.swift` | — | — |
@@ -259,6 +278,12 @@
 |--------|----------|----------|
 | `SystemTranslationPresenter.swift` | — | — |
 
+## 工程级一致性
+
+| 检查项 | 单元测试 |
+|--------|----------|
+| 版本号 / CHANGELOG / App 报告的版本一致（CI 的 `Scripts/check-release.sh` 同一套规则） | `ReleaseConsistencyTests` |
+
 ## TestSupport（测试辅助）
 
 | 文件 | 用途 |
@@ -275,6 +300,7 @@
 以下模块尚无单元测试且无 selftest 覆盖，需要在后续迭代中关注：
 
 - `Core/Diagnostics/InteractionMetrics.swift` — 交互指标
+- `Core/Logging/Log.swift` — 日志分类（无逻辑）
 - `Core/Settings/AppAppearance.swift` — 外观切换
 - `Core/Settings/LaunchAtLogin.swift` — 开机启动
 - `UI/Settings/*` — SwiftUI 设置面板（视图层，通常由 snapshot test 覆盖）
