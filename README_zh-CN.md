@@ -5,26 +5,26 @@
 </p>
 
 <p align="center">
-  <img src="docs/icon.png" width="128" alt="Jietu 图标">
+  <img src="docs/icon.png" width="128" alt="Lucent 图标">
 </p>
 
-<h1 align="center">Jietu 截图</h1>
+<h1 align="center">Lucent · 澄影</h1>
 
 <p align="center">
-  <b>原生 macOS 截图与录屏工具</b><br>
+  <b>原生 macOS 截图与录屏工具，全面采用 Liquid Glass</b><br>
   截图、标注、钉图、录屏——数据全部留在本机。
 </p>
 
 <p align="center">
   <a href="https://github.com/ixxxxoooo/jietu/releases/latest"><img src="https://img.shields.io/github/v/release/ixxxxoooo/jietu?style=flat-square" alt="Release"></a>
   <a href="https://github.com/ixxxxoooo/jietu/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ixxxxoooo/jietu/ci.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
-  <img src="https://img.shields.io/badge/platform-macOS%2026%2B-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/platform-macOS%2027%2B-blue?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/Swift-6-orange?style=flat-square" alt="Swift 6">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ixxxxoooo/jietu?style=flat-square" alt="License"></a>
 </p>
 
 <p align="center">
-  <sub><i>Jietu</i> 是「截图」的拼音，读作 jié tú。</sub>
+  <sub><i>Lucent</i>：澄澈、透亮。中文名 <b>澄影</b>，取「澄澈留影」之意。项目原名 <i>Jietu</i>。</sub>
 </p>
 
 ---
@@ -58,6 +58,7 @@
 - 📌 **钉图** — 拖拽缩放、滚轮缩放、双击关闭
 - 🎨 **取色器** — 放大镜取色，直接复制色号
 - ⌨️ **全局热键** — 8 个可自定义动作（区域截图默认 ⌃⌘A，其余默认不绑定）
+- 🪟 **Liquid Glass** — 工具栏、浮层、提示与设置页统一使用 macOS 27 原生玻璃材质
 - 🌙 **主题** — 跟随系统 / 浅色 / 深色
 - 🌍 **多语言** — 中文与英文（跟随系统，或在设置里手动切换）
 
@@ -65,38 +66,38 @@
 
 ### 下载 DMG
 
-从 [Releases](https://github.com/ixxxxoooo/jietu/releases/latest) 下载最新 `.dmg`，打开后将 `Jietu.app` 拖入 `/Applications`。
+从 [Releases](https://github.com/ixxxxoooo/jietu/releases/latest) 下载最新 `.dmg`，打开后将 `Lucent.app` 拖入 `/Applications`。
 
 > **首次打开提示**：本应用使用自签名证书（无 Developer ID / 公证），macOS Gatekeeper 会拦截首次启动。打开前请在终端执行下面这行——DMG 里的 **`安装说明.txt`** 里也有一份，可以直接复制：
 >
 > ```
-> xattr -dr com.apple.quarantine /Applications/Jietu.app
+> xattr -dr com.apple.quarantine /Applications/Lucent.app
 > ```
 >
-> 或者：右键 **Jietu.app** → **打开** → **打开**。
+> 或者：右键 **Lucent.app** → **打开** → **打开**。
 
 ### 授权
 
-1. **屏幕录制**（必需）— **系统设置 › 隐私与安全性 › 录屏与系统录音**，把 Jietu 拖进去（或点 **+** 选中它）并打开开关，然后 **重启应用**（macOS 要求重启后才生效）。如果列表里**已经有 Jietu 却仍显示未授权**，那一行是升级前留下的旧记录：选中它按 **−** 删掉，重新加一次，再重启应用。
-2. **辅助功能**（可选）— 仅用于滚动长图的自动滚动。前往 **系统设置 › 隐私与安全性 › 辅助功能** 添加 Jietu，无需重启。
+1. **屏幕录制**（必需）— **系统设置 › 隐私与安全性 › 录屏与系统录音**，把 Lucent 拖进去（或点 **+** 选中它）并打开开关，然后 **重启应用**（macOS 要求重启后才生效）。如果列表里**已经有 Lucent 却仍显示未授权**，那一行是升级前留下的旧记录：选中它按 **−** 删掉，重新加一次，再重启应用。
+2. **辅助功能**（可选）— 仅用于滚动长图的自动滚动。前往 **系统设置 › 隐私与安全性 › 辅助功能** 添加 Lucent，无需重启。
 3. **通知**（可选）— 允许横幅，保存到磁盘后才会弹出系统通知。
 
 ## 🛠 从源码构建
 
 ### 环境要求
 
-- macOS 26+（Tahoe）
-- Xcode 26+ / Swift 6
+- macOS 27+
+- Xcode 27+ / Swift 6.4
 
 ### 构建
 
 ```bash
-# Debug 构建（Jietu Dev.app — 独立 bundle ID，不干扰正式版）
+# Debug 构建（Lucent Dev.app — 独立 bundle ID，不干扰正式版）
 xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
   -destination 'platform=macOS' -derivedDataPath .build build
 
 # 运行
-open ".build/Build/Products/Debug/Jietu Dev.app"
+open ".build/Build/Products/Debug/Lucent Dev.app"
 ```
 
 ### 测试
@@ -112,13 +113,13 @@ xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
 
 ```bash
 bash Scripts/build-dmg.sh
-# 产物：dist/Jietu-<版本>.dmg
+# 产物：dist/Lucent-<版本>.dmg
 ```
 
 ## 🏗 架构
 
 ```
-Jietu/
+Jietu/            源码根目录（Xcode target / Swift 模块沿用原代号）
   App/            应用入口与 AppDelegate（流程编排）
   Core/
     Annotation/   标注模型、几何、命中测试、渲染器

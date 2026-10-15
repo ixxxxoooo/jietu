@@ -13,7 +13,7 @@
 // 用法：
 //   swift Scripts/dmg-background.swift --out <目录> --size 660x420 \
 //       --app 200,185 --applications 460,185 --command 200,320 \
-//       --name Jietu --version 0.0.2 --repo github.com/ixxxxoooo/jietu
+//       --name Lucent --version 0.0.2 --repo github.com/ixxxxoooo/jietu
 //
 // @author ixxxxoooo
 import AppKit
@@ -31,7 +31,7 @@ struct Config {
     var applications = CGPoint(x: 460, y: 185)
     /// 安装说明那份 txt 的槽位；说明文字画在它右边。
     var command = CGPoint(x: 200, y: 320)
-    var appName = "Jietu"
+    var appName = "Lucent"
     var version = ""
     var repo = ""
 }
@@ -69,9 +69,9 @@ func parseConfig() -> Config {
     return config
 }
 
-// MARK: - 视觉令牌（取自 App 的 AccentColor #0D44E8）
+// MARK: - 视觉令牌（取自 App 的 AccentColor #3F55F7）
 
-let brand = NSColor(srgbRed: 0x0D / 255, green: 0x44 / 255, blue: 0xE8 / 255, alpha: 1)
+let brand = NSColor(srgbRed: 0x3F / 255, green: 0x55 / 255, blue: 0xF7 / 255, alpha: 1)
 let inkStrong = NSColor(srgbRed: 0x14 / 255, green: 0x16 / 255, blue: 0x1A / 255, alpha: 1)
 let inkBody = NSColor(srgbRed: 0x39 / 255, green: 0x40 / 255, blue: 0x4C / 255, alpha: 1)
 let inkSoft = NSColor(srgbRed: 0x5C / 255, green: 0x64 / 255, blue: 0x73 / 255, alpha: 1)

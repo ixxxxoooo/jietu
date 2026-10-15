@@ -10,7 +10,7 @@ extension AppDelegate {
     ///
     /// 每次都**现读**，不缓存启动时的快照——用户刚在系统设置里勾完就回来时，
     /// 缓存的旧值会让入口一直说「没权限」。不可用就打开权限引导：
-    /// 引导页里既能看到实时状态，也有「重新检测」和「重启 Jietu」两个出口。
+    /// 引导页里既能看到实时状态，也有「重新检测」和「重启 Lucent」两个出口。
     func requireScreenCapturePermission() -> Bool {
         guard !ScreenCapturePermission.isGranted else { return true }
         logger.notice("capture requested without screen recording permission")

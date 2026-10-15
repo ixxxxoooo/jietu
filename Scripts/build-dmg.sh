@@ -2,13 +2,13 @@
 #
 # 构建 Release 渠道 → 校验签名 → 排好 DMG 窗口版式 → 打成可直接分发的 DMG。
 #
-# 与 `restart-dev.sh` 的分工：那条跑 Debug（开发渠道，Jietu Dev.app），
-# 这条跑 Release（正式渠道，Jietu.app，通用二进制），产物落在 dist/。
+# 与 `restart-dev.sh` 的分工：那条跑 Debug（开发渠道，Lucent Dev.app），
+# 这条跑 Release（正式渠道，Lucent.app，通用二进制），产物落在 dist/。
 #
 # 用法：bash Scripts/build-dmg.sh
 #
-# 输出：dist/Jietu-<版本>.dmg，里面是
-#   Jietu.app                   主程序
+# 输出：dist/Lucent-<版本>.dmg，里面是
+#   Lucent.app                   主程序
 #   Applications                软链，拖进去就是安装
 #   安装说明.txt                  解隔离命令的**可复制**副本（背景图上的字选不中）
 #   .background/                窗口背景图：安装说明直接画在图上
@@ -20,7 +20,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP_NAME="Jietu"
+APP_NAME="Lucent"
 CONFIG="Release"
 DERIVED=".build"
 APP="$DERIVED/Build/Products/$CONFIG/$APP_NAME.app"
@@ -126,7 +126,7 @@ esac
 echo "==> 3/6 暂存"
 TMP="$(mktemp -d -t jietu-dmg)"
 STAGE="$TMP/stage"
-RW="$TMP/Jietu-rw"
+RW="$TMP/Lucent-rw"
 # 挂载点的最后一段就是 Finder 认的卷名，所以带上 pid 保证唯一——
 # 重名时 Finder 会认到另一个同名卷（比如已经挂着的同名 DMG）上，版式就白排了。
 MNT="$TMP/mnt-$$"
@@ -161,7 +161,7 @@ if [ "$IMAGE_TOOL" = "diskutil" ]; then
     RW_FORMAT="RAW"
     diskutil image create blank --help 2>&1 | grep -q ASIF && RW_FORMAT="ASIF"
 fi
-RW="$TMP/Jietu-rw$RW_SUFFIX"
+RW="$TMP/Lucent-rw$RW_SUFFIX"
 
 # 最终镜像用 LZMA（ULMO）而不是 zlib（UDZO）：同样内容实测 4238KB → 3489KB（小 18%），
 # 画面、版式、图标位置逐像素不变（比对过）。app 部署目标就是 macOS 26，
@@ -229,7 +229,7 @@ xattr -dr com.apple.quarantine "$STAGE/$APP_NAME.app" 2>/dev/null || true
 # Gatekeeper 拦掉——「解隔离的小工具自己也被隔离」就是这么来的（已经踩过两次）。
 # 内容保持最短：授权那套流程 App 自己的引导页会讲，这里只说「打开前做什么」。
 cat > "$STAGE/$COMMAND_FILE_NAME" <<EOF
-Jietu 首次打开前，把这行复制到「终端」回车（只需一次）：
+Lucent 首次打开前，把这行复制到「终端」回车（只需一次）：
 
 xattr -dr com.apple.quarantine /Applications/$APP_NAME.app
 

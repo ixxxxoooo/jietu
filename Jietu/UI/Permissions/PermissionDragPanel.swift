@@ -133,7 +133,7 @@ final class PermissionDragController {
         }
         currentPane = pane
         // 两个权限都**故意不**先调系统的「申请」：
-        //   · 屏幕录制：`CGRequestScreenCaptureAccess()` 会先弹一次「Jietu 想要录制此电脑的
+        //   · 屏幕录制：`CGRequestScreenCaptureAccess()` 会先弹一次「Lucent 想要录制此电脑的
         //     屏幕和音频」；
         //   · 辅助功能：`AXIsProcessTrustedWithOptions` 会先弹「想要控制这台电脑」。
         // 而我们紧接着就把系统设置打开、停在同一栏，还把 App 卡片浮在它下面——

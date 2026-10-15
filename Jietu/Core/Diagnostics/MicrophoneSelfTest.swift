@@ -8,7 +8,7 @@ import Foundation
 /// 录屏的麦克风采集走 AVAudioEngine（MicrophoneRecorder），
 /// 但启动前只需确认权限。这里只验权限。
 ///
-///   Jietu --selftest-microphone
+///   Lucent --selftest-microphone
 ///
 /// @author ixxxxoooo
 enum MicrophoneSelfTest {

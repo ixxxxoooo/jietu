@@ -105,7 +105,7 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         return await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 
-    /// 打开「系统设置 › 通知 › Jietu」这一页。
+    /// 打开「系统设置 › 通知 › Lucent」这一页。
     ///
     /// `?id=<bundle id>` 是通知面板支持的深链，直接落到本 App 的设置页，
     /// 省得用户在一长串 App 里翻。
@@ -228,7 +228,7 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - UNUserNotificationCenterDelegate
 
-    /// App 在前台时也要出横幅（Jietu 是菜单栏代理 App，截完基本算前台）。
+    /// App 在前台时也要出横幅（Lucent 是菜单栏代理 App，截完基本算前台）。
     ///
     /// 这条回调是横幅的**唯一开关**：App 在前台时系统默认只把它塞进通知中心，
     /// 不调这里、或者这里没要 `.banner`，右上角就不会弹。所以留一行日志，

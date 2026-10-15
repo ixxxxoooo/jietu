@@ -71,7 +71,7 @@ on run argv
 			set shows icon preview of viewOptions to true
 			-- 背景图放在卷内的隐藏目录里，随镜像一起分发。
 			set background picture of viewOptions to file ".background:background.png"
-			set position of item "Jietu.app" of container window to appPos
+			set position of item "Lucent.app" of container window to appPos
 			set position of item "Applications" of container window to appsPos
 			set position of item commandName of container window to commandPos
 			update without registering applications

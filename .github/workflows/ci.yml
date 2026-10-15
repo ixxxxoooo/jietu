@@ -44,7 +44,7 @@ jobs:
   build-and-test:
     name: Build & Test
     # 工程的部署目标是 macOS 26，必须跑在 macOS 26 的 runner 上：
-    # macos-15 上既没有 Xcode 26，测试宿主也起不来（deployment target 对不上）。
+    # macos-15 上既没有 Xcode 27，测试宿主也起不来（deployment target 对不上）。
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
@@ -52,7 +52,7 @@ jobs:
       - name: Select Xcode
         run: |
           set -euo pipefail
-          XCODE="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+          XCODE="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)"
           [ -n "$XCODE" ] || XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
           echo "Using ${XCODE}"
           sudo xcode-select -s "$XCODE"

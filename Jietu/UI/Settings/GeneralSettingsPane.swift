@@ -4,7 +4,7 @@ import SwiftUI
 
 struct GeneralSettingsPane: View {
     @Bindable var settings: SettingsStore
-    /// 系统那一侧是不是把 Jietu 的通知关掉了。
+    /// 系统那一侧是不是把 Lucent 的通知关掉了。
     ///
     /// 我们这边的开关说了不算：系统设置 › 通知 里没允许，保存后就是一条都不出，
     /// 而且**完全无声**——用户只会觉得「勾了没用」。所以这里读一次真状态并直说。

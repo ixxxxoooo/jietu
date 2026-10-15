@@ -16,7 +16,7 @@ struct AppBundleDragCardTests {
         container: NSView, card: AppBundleDragSourceView
     ) {
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 240))
-        let card = AppBundleDragSourceView(url: URL(fileURLWithPath: "/Applications/Jietu.app"))
+        let card = AppBundleDragSourceView(url: URL(fileURLWithPath: "/Applications/Lucent.app"))
         // 故意给一个非零起点：SwiftUI 的容器里卡片就落在这样的位置上。
         card.frame = NSRect(x: offset.x, y: offset.y, width: 300, height: 56)
         container.addSubview(card)
@@ -51,7 +51,7 @@ struct AppBundleDragCardTests {
     /// 还没进父视图（布局前）时报「没命中」，而不是拿窗口坐标当 bounds 比。
     @Test("没有父视图时不命中")
     func hitTestWithoutSuperview() {
-        let card = AppBundleDragSourceView(url: URL(fileURLWithPath: "/Applications/Jietu.app"))
+        let card = AppBundleDragSourceView(url: URL(fileURLWithPath: "/Applications/Lucent.app"))
         card.frame = NSRect(x: 0, y: 0, width: 300, height: 56)
         #expect(card.hitTest(NSPoint(x: 10, y: 10)) == nil)
     }

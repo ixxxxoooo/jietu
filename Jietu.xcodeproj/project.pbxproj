@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		AA4444444444444444444444 /* Jietu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Jietu.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA4444444444444444444444 /* Lucent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lucent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA4444444444444444444445 /* Config */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Config; sourceTree = "<group>"; };
 		AB100000000000000000000B /* JietuTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JietuTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -66,7 +66,7 @@
 		AA3333333333333333333333 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AA4444444444444444444444 /* Jietu.app */,
+				AA4444444444444444444444 /* Lucent.app */,
 				AB100000000000000000000B /* JietuTests.xctest */,
 			);
 			name = Products;
@@ -92,7 +92,7 @@
 			);
 			name = Jietu;
 			productName = Jietu;
-			productReference = AA4444444444444444444444 /* Jietu.app */;
+			productReference = AA4444444444444444444444 /* Lucent.app */;
 			productType = "com.apple.product-type.application";
 		};
 		AB1000000000000000000002 /* JietuTests */ = {
@@ -338,10 +338,10 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.0.5;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ixxxxoooo.jietu.dev;
 				PRODUCT_MODULE_NAME = Jietu;
-				PRODUCT_NAME = "Jietu Dev";
+				PRODUCT_NAME = "Lucent Dev";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -368,9 +368,10 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.0.5;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ixxxxoooo.jietu;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_MODULE_NAME = Jietu;
+				PRODUCT_NAME = Lucent;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -396,7 +397,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
-				MARKETING_VERSION = 0.0.5;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ixxxxoooo.jietu.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -404,7 +405,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Jietu Dev.app/Contents/MacOS/Jietu Dev";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Lucent Dev.app/Contents/MacOS/Lucent Dev";
 			};
 			name = Debug;
 		};
@@ -425,7 +426,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
-				MARKETING_VERSION = 0.0.5;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ixxxxoooo.jietu.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -433,7 +434,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Jietu.app/Contents/MacOS/Jietu";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Lucent.app/Contents/MacOS/Lucent";
 			};
 			name = Release;
 		};

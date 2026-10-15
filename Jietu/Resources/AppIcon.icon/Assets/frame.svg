@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="ink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset="1" stop-color="#E4ECFF" stop-opacity="0.92"/>
+    </linearGradient>
+  </defs>
+  <!-- 取景框：四枚圆角角标，线宽 60，圆头 -->
+  <g fill="none" stroke="url(#ink)" stroke-width="60" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M236 396 V306 a70 70 0 0 1 70 -70 H396"/>
+    <path d="M628 236 H718 a70 70 0 0 1 70 70 V396"/>
+    <path d="M788 628 V718 a70 70 0 0 1 -70 70 H628"/>
+    <path d="M396 788 H306 a70 70 0 0 1 -70 -70 V628"/>
+  </g>
+</svg>

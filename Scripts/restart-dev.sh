@@ -10,10 +10,10 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
-APP=".build/Build/Products/Debug/Jietu Dev.app"
-BIN="$APP/Contents/MacOS/Jietu Dev"
-MATCH="Build/Products/Debug/Jietu Dev.app"
-PATTERN="MacOS/Jietu Dev"
+APP=".build/Build/Products/Debug/Lucent Dev.app"
+BIN="$APP/Contents/MacOS/Lucent Dev"
+MATCH="Build/Products/Debug/Lucent Dev.app"
+PATTERN="MacOS/Lucent Dev"
 
 echo "==> 1/3 构建"
 if ! xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
@@ -27,10 +27,10 @@ fi
 
 echo "==> 2/3 重启"
 # 清理可能同时在跑的正式版（避免全局快捷键与全屏遮罩冲突）
-RELEASE_PID="$(pgrep -f "/Applications/Jietu.app/Contents/MacOS/Jietu" | head -1 || true)"
+RELEASE_PID="$(pgrep -f "/Applications/Lucent.app/Contents/MacOS/Lucent" | head -1 || true)"
 if [ -n "$RELEASE_PID" ]; then
-    echo "发现运行中的正式版 Jietu (PID: $RELEASE_PID)，自动退出以避免快捷键与遮罩冲突"
-    pkill -f "/Applications/Jietu.app/Contents/MacOS/Jietu" >/dev/null 2>&1 || true
+    echo "发现运行中的正式版 Lucent (PID: $RELEASE_PID)，自动退出以避免快捷键与遮罩冲突"
+    pkill -f "/Applications/Lucent.app/Contents/MacOS/Lucent" >/dev/null 2>&1 || true
 fi
 pkill -f "$MATCH" >/dev/null 2>&1
 sleep 1

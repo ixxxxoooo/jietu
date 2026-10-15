@@ -22,7 +22,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Jietu version
+      label: Lucent version
       description: Settings › About (or the DMG file name).
       placeholder: "0.0.5"
     validations:

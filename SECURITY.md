@@ -10,7 +10,7 @@ Only the latest release receives security fixes. Please update before reporting.
 
 Report privately through GitHub's **[Report a vulnerability](https://github.com/ixxxxoooo/jietu/security/advisories/new)** form (repository *Security* tab → *Report a vulnerability*). Include:
 
-- the Jietu version and macOS version,
+- the Lucent version and macOS version,
 - a description of the issue and its impact,
 - steps or a proof of concept to reproduce it.
 
@@ -18,7 +18,7 @@ You can expect an acknowledgement within 7 days. We will keep you informed while
 
 ## Scope and privacy model
 
-Jietu works entirely on your Mac: screenshots, recordings, OCR and history are processed and stored locally, and the app does not upload data. Things we consider in scope:
+Lucent works entirely on your Mac: screenshots, recordings, OCR and history are processed and stored locally, and the app does not upload data. Things we consider in scope:
 
 - reading or writing files outside the folders the user configured (save folder, history directory),
 - leaking captured content to other processes or the network,

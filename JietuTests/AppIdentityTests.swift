@@ -19,11 +19,11 @@ struct AppIdentityTests {
     }
 
     #if DEBUG
-    @Test("Debug 构建是独立的 dev 渠道：Jietu Dev / com.ixxxxoooo.jietu.dev")
+    @Test("Debug 构建是独立的 dev 渠道：Lucent Dev / com.ixxxxoooo.jietu.dev")
     func debugBuildIsDevChannel() {
         #expect(AppIdentity.isDevChannel)
         #expect(AppIdentity.bundleIdentifier == "com.ixxxxoooo.jietu.dev")
-        #expect(AppIdentity.displayName == "Jietu Dev")
+        #expect(AppIdentity.displayName == "Lucent Dev")
     }
     #endif
 }

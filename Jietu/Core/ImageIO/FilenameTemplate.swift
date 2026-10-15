@@ -2,12 +2,15 @@ import Foundation
 
 /// 截图文件名模板：把 `{date}` / `{time}` / `{datetime}` / `{counter}` 展开成实际文件名。
 ///
-/// 默认模板 `Jietu {date} at {time}` 与历史版本的文件名完全一致，
-/// 所以老用户的「最近截图」时间解析不会受影响。
+/// 默认模板 `Lucent {date} at {time}`。改名前的历史文件名以 `Jietu ` 开头，
+/// 解析时两种前缀都认，所以老用户的「最近截图」时间解析不会受影响。
 ///
 /// @author ixxxxoooo
 enum FilenameTemplate {
-    static let defaultTemplate = "Jietu {date} at {time}"
+    static let defaultTemplate = "Lucent {date} at {time}"
+
+    /// 文件名里可被识别为「截图时刻」的前缀（含改名前的历史前缀）。
+    private static let recognizedPrefixes = ["Lucent ", "Jietu "]
 
     static let placeholders = ["{date}", "{time}", "{datetime}", "{counter}"]
     static var placeholderHint: String { L10n.filenamePlaceholderHint }
@@ -67,11 +70,13 @@ enum FilenameTemplate {
             .joined(separator: "-")
     }
 
-    /// 从文件名（`Jietu yyyy-MM-dd at HH.mm.ss`）解析截图时刻，失败则用文件创建时间。
+    /// 从文件名（`Lucent yyyy-MM-dd at HH.mm.ss`，或历史的 `Jietu …`）解析截图时刻，失败则用文件创建时间。
     static func captureDate(of url: URL) -> Date {
         let name = url.lastPathComponent
-        if name.hasPrefix("Jietu "), let separator = name.range(of: " at ") {
-            let datePart = String(name[name.index(name.startIndex, offsetBy: 6)..<separator.lowerBound])
+        if let prefix = recognizedPrefixes.first(where: { name.hasPrefix($0) }),
+            let separator = name.range(of: " at ")
+        {
+            let datePart = String(name[name.index(name.startIndex, offsetBy: prefix.count)..<separator.lowerBound])
             let timePart = String(name[separator.upperBound...].prefix(8))
             if let date = dateTimeFormatter.date(from: "\(datePart) \(timePart)") {
                 return date

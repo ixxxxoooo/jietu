@@ -1,22 +1,22 @@
-# Contributing to Jietu
+# Contributing to Lucent
 
-Thanks for your interest in Jietu! Bug reports, fixes, translations and small features are all welcome. Please read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) first, and see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the code is organized.
+Thanks for your interest in Lucent! Bug reports, fixes, translations and small features are all welcome. Please read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) first, and see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the code is organized.
 
 ## Before you start
 
-- **Bugs**: open an issue with the bug template (macOS version, Jietu version, permission state, steps).
+- **Bugs**: open an issue with the bug template (macOS version, Lucent version, permission state, steps).
 - **Features**: open an issue first for anything larger than a small tweak, so we can agree on the approach before you invest time.
 - **Security problems**: do not open a public issue — see [SECURITY.md](SECURITY.md).
 
 ## Development setup
 
-Requirements: macOS 26+, Xcode 26+ (Swift 6). There are no package dependencies.
+Requirements: macOS 27+, Xcode 27+ (Swift 6.4). There are no package dependencies.
 
 ```bash
 git clone https://github.com/ixxxxoooo/jietu.git
 cd jietu
 
-# Build the Debug channel ("Jietu Dev.app", separate bundle ID from the release app)
+# Build the Debug channel ("Lucent Dev.app", separate bundle ID from the release app)
 xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
   -destination 'platform=macOS' -derivedDataPath .build build
 
@@ -30,7 +30,7 @@ Keep the project's default signing settings. Screen Recording is granted per cod
 
 ### Permissions
 
-The Debug app shows up as **Jietu Dev** in *System Settings › Privacy & Security › Screen & System Audio Recording*. Use the menu-bar item "Drag to authorize Screen Recording…" if it is not listed. Accessibility is optional and only needed for auto-scroll.
+The Debug app shows up as **Lucent Dev** in *System Settings › Privacy & Security › Screen & System Audio Recording*. Use the menu-bar item "Drag to authorize Screen Recording…" if it is not listed. Accessibility is optional and only needed for auto-scroll.
 
 ## Tests
 
@@ -62,7 +62,7 @@ xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
   - the build succeeds and **all tests pass**;
   - new strings exist in both languages;
   - `CHANGELOG.md` has an entry under the unreleased/next version for user-visible changes.
-- CI (`Build & Test` on macOS 26) must be green before review.
+- CI (`Build & Test` on macOS 27) must be green before review.
 
 ## Releasing (maintainers)
 

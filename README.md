@@ -5,26 +5,26 @@
 </p>
 
 <p align="center">
-  <img src="docs/icon.png" width="128" alt="Jietu icon">
+  <img src="docs/icon.png" width="128" alt="Lucent icon">
 </p>
 
-<h1 align="center">Jietu</h1>
+<h1 align="center">Lucent</h1>
 
 <p align="center">
-  <b>A native macOS screenshot & screen recording tool</b><br>
+  <b>A native macOS screenshot & screen recording tool, dressed in Liquid Glass</b><br>
   Capture, annotate, pin, record — everything stays on your Mac.
 </p>
 
 <p align="center">
   <a href="https://github.com/ixxxxoooo/jietu/releases/latest"><img src="https://img.shields.io/github/v/release/ixxxxoooo/jietu?style=flat-square" alt="Release"></a>
   <a href="https://github.com/ixxxxoooo/jietu/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/ixxxxoooo/jietu/ci.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
-  <img src="https://img.shields.io/badge/platform-macOS%2026%2B-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/platform-macOS%2027%2B-blue?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/Swift-6-orange?style=flat-square" alt="Swift 6">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ixxxxoooo/jietu?style=flat-square" alt="License"></a>
 </p>
 
 <p align="center">
-  <sub><i>Jietu</i> is pinyin for 截图 (“screenshot”) — roughly “jyeh-too”.</sub>
+  <sub><i>Lucent</i> — clear, luminous, see-through. Chinese name: <b>澄影</b> (“clear image”). The project was formerly called <i>Jietu</i>.</sub>
 </p>
 
 ---
@@ -58,6 +58,7 @@
 - 📌 **Pin to screen** — drag-resize, scroll-zoom, double-click to dismiss
 - 🎨 **Color picker** — magnifier + hex copy
 - ⌨️ **Global hotkeys** — 8 customizable actions (area capture is ⌃⌘A by default; the rest start unbound)
+- 🪟 **Liquid Glass** — toolbars, panels, tooltips and settings use the native macOS 27 glass material
 - 🌙 **Theme** — system / light / dark
 - 🌍 **i18n** — English & Simplified Chinese (system language or manual in Settings)
 
@@ -65,38 +66,38 @@
 
 ### Download DMG
 
-Download the latest `.dmg` from [Releases](https://github.com/ixxxxoooo/jietu/releases/latest), open it, and drag `Jietu.app` to `/Applications`.
+Download the latest `.dmg` from [Releases](https://github.com/ixxxxoooo/jietu/releases/latest), open it, and drag `Lucent.app` to `/Applications`.
 
 > **First launch note:** The app is self-signed (no Developer ID / notarization), so macOS Gatekeeper blocks the first launch. Before opening, run this in Terminal — the DMG also ships **`安装说明.txt`** with the same line, ready to copy:
 >
 > ```
-> xattr -dr com.apple.quarantine /Applications/Jietu.app
+> xattr -dr com.apple.quarantine /Applications/Lucent.app
 > ```
 >
-> Alternatively: right-click **Jietu.app** → **Open** → **Open**.
+> Alternatively: right-click **Lucent.app** → **Open** → **Open**.
 
 ### Grant Permissions
 
-1. **Screen Recording** (required) — **System Settings › Privacy & Security › Screen & System Audio Recording**, then drag Jietu in (or click **+**) and turn it on, then **restart the app** (macOS requires a relaunch after granting). If Jietu is **already listed but the app still reports “not granted”**, that row is left over from an earlier build: select it, remove it with **−**, add it again, then restart.
-2. **Accessibility** (optional) — only needed for auto-scroll in Scrolling Capture. Go to **System Settings › Privacy & Security › Accessibility** and add Jietu. No restart required.
+1. **Screen Recording** (required) — **System Settings › Privacy & Security › Screen & System Audio Recording**, then drag Lucent in (or click **+**) and turn it on, then **restart the app** (macOS requires a relaunch after granting). If Lucent is **already listed but the app still reports “not granted”**, that row is left over from an earlier build: select it, remove it with **−**, add it again, then restart.
+2. **Accessibility** (optional) — only needed for auto-scroll in Scrolling Capture. Go to **System Settings › Privacy & Security › Accessibility** and add Lucent. No restart required.
 3. **Notifications** (optional) — allow banners so “saved” feedback appears after writing to disk.
 
 ## 🛠 Build from Source
 
 ### Requirements
 
-- macOS 26+ (Tahoe)
-- Xcode 26+ / Swift 6
+- macOS 27+
+- Xcode 27+ / Swift 6.4
 
 ### Build
 
 ```bash
-# Debug build (Jietu Dev.app — separate bundle ID, won't interfere with release)
+# Debug build (Lucent Dev.app — separate bundle ID, won't interfere with release)
 xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
   -destination 'platform=macOS' -derivedDataPath .build build
 
 # Run
-open ".build/Build/Products/Debug/Jietu Dev.app"
+open ".build/Build/Products/Debug/Lucent Dev.app"
 ```
 
 ### Test
@@ -112,13 +113,13 @@ Real-window checks that unit tests cannot reach (overlay, recording, scrolling) 
 
 ```bash
 bash Scripts/build-dmg.sh
-# Output: dist/Jietu-<version>.dmg
+# Output: dist/Lucent-<version>.dmg
 ```
 
 ## 🏗 Architecture
 
 ```
-Jietu/
+Jietu/            Source root (the Xcode target / Swift module keeps its original codename)
   App/            App lifecycle & AppDelegate orchestration
   Core/
     Annotation/   Annotation model, geometry, hit-testing, renderer

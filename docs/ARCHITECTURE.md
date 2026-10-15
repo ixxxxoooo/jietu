@@ -1,6 +1,6 @@
 # Architecture
 
-Jietu is a menu-bar (`LSUIElement`) macOS app written in Swift 6 with AppKit and SwiftUI. It targets macOS 26+ and has **no third-party dependencies** — everything is built on system frameworks (ScreenCaptureKit, Vision, AVFoundation, Carbon hot keys, Translation).
+Lucent (formerly *Jietu*; the Xcode target, Swift module and source root keep the original codename) is a menu-bar (`LSUIElement`) macOS app written in Swift 6 with AppKit and SwiftUI. It targets macOS 27+ and has **no third-party dependencies** — everything is built on system frameworks (ScreenCaptureKit, Vision, AVFoundation, Carbon hot keys, Translation).
 
 This document explains how the code is organized and why. For build and contribution steps see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
@@ -22,7 +22,7 @@ Large types are split into a main file (lifecycle and assembly) plus `+Feature` 
 ## Capture pipeline
 
 1. A hotkey (Carbon `RegisterEventHotKey`, no Accessibility permission needed) or a menu item starts a capture.
-2. `CaptureEngine` freezes **every display** with ScreenCaptureKit into a `DisplaySnapshot` (pixels + scale + geometry). Only displays and applications are requested; the on-screen window list is read separately (`WindowHitTester`) because enumerating off-screen windows costs ~1 s.
+2. `CaptureEngine` freezes **every display** — concurrently, one task per display — with ScreenCaptureKit into a `DisplaySnapshot` (pixels + scale + geometry). Only displays and applications are requested; the on-screen window list is read separately (`WindowHitTester`) because enumerating off-screen windows costs ~1 s.
 3. `OverlayCoordinator` puts one borderless overlay window (`OverlayWindowController` → `OverlayCanvasView`) on each display. The user drags a region, or clicks a snapped window.
 4. In the default **inline editing** mode the overlay stays up and shows `InlineAnnotationToolbar` under the selection. All editing (new capture, Quick Access card, pinned image, history item) goes through this one editor.
 5. On confirm, `AnnotationRenderer` bakes the annotations into the cropped image and `AppDelegate+Delivery` hands the result to the clipboard, disk (`CaptureOutput`), Quick Access card, history (`HistoryStore`) and notifications.
@@ -39,7 +39,7 @@ Annotations are objects (`Annotation` + `AnnotationKind`), not pixels, so they s
 
 ## Recording
 
-`RecordingEngine` drives an `SCStream` and writes frames to an `AVAssetWriter` (`RecordingWriter`) on one serial queue, which also owns the timeline. Pausing drops frames and shifts later timestamps, so the paused span never appears in the file. System audio comes from the stream; the microphone is captured independently (`MicrophoneRecorder`) and written to a separate track. Finished recordings land in the history directory first; saving elsewhere is a copy. `GifExporter` and `VideoTrimmer` post-process finished videos.
+`RecordingEngine` drives an `SCStream` and writes frames through `RecordingWriter`, which uses the macOS 27 AVFoundation receiver model (`AVAssetWriter.inputPixelBufferReceiver` / `inputReceiver`, strongly typed `CMReadySampleBuffer`) instead of `requestMediaDataWhenReady` + `isReadyForMoreMediaData`; the timeline and pause state live behind `Synchronization.Mutex`. Pausing drops frames and shifts later timestamps, so the paused span never appears in the file. System audio comes from the stream; the microphone is captured independently (`MicrophoneRecorder`) and written to a separate track. Finished recordings land in the history directory first; saving elsewhere is a copy. `GifExporter` (reads frames through `AVAssetReader.outputProvider`) and `VideoTrimmer` post-process finished videos.
 
 ## Persistence
 
@@ -57,9 +57,9 @@ Annotations are objects (`Annotation` + `AnnotationKind`), not pixels, so they s
 
 | | Debug | Release |
 |---|---|---|
-| Product | `Jietu Dev` | `Jietu` |
+| Product | `Lucent Dev` | `Lucent` |
 | Bundle ID | `com.ixxxxoooo.jietu.dev` | `com.ixxxxoooo.jietu` |
-| Output | `.build/Build/Products/Debug/Jietu Dev.app` | `…/Release/Jietu.app` |
+| Output | `.build/Build/Products/Debug/Lucent Dev.app` | `…/Release/Lucent.app` |
 
 The channels are independent: separate TCC grants, preferences and login items. Debug builds must keep `ENABLE_DEBUG_DYLIB = NO`, otherwise the main executable is a tiny shell and TCC cannot resolve a stable identity.
 
@@ -73,12 +73,12 @@ Each channel runs a single instance (`AppDelegate.handOffToExistingInstance()`);
 
 ## UI design system
 
-Five rules from `UI/DesignSystem/`:
+Rules from `UI/DesignSystem/` (Liquid Glass, macOS 27):
 
-1. Surfaces are frosted material with an ink scrim — no solid grey backgrounds.
-2. One alpha ramp of ink (white on dark, black on light); secondary text, separators and control fills all come from it.
-3. Floating bars are transparent layers above the content, not window chrome.
-4. Edges dissolve with gradient masks instead of hard clipping.
-5. Glass (`glassEffect`) is only for floating controls, never for the main surface.
+1. **Floating surfaces are native Liquid Glass.** SwiftUI uses `.glassEffect(_:in:)` (wrapped by `.floatingSurface()`); AppKit uses `NSGlassEffectView` (wrapped by `NSGlassEffectView.floatingSurface(cornerRadius:content:)`). There is no hand-made frosted material or ink scrim any more.
+2. **No glass on glass.** A glass panel hosts content, never another glass layer; controls inside a panel use plain fills from the ink ramp.
+3. One alpha ramp of ink (white on dark, black on light); secondary text, separators and control fills all come from it.
+4. Floating bars are transparent layers above the content, not window chrome.
+5. Glass is for floating controls and panels; the settings window uses the native split view and unified toolbar, and lets the system draw its material.
 
 All tokens live in `Theme.swift`.

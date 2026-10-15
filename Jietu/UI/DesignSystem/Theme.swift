@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Jietu 的设计令牌，风格对齐 `~/tinycast` 的 `Tinycast/DesignSystem/Theme.swift`。
+/// Lucent 的设计令牌，风格对齐 `~/tinycast` 的 `Tinycast/DesignSystem/Theme.swift`。
 ///
 /// 承重规则（详见 `.specstory/history/docs/20260916_UI设计规范.md`）：
 /// 1. 表面 = 磨砂 + 墨色 scrim；
@@ -56,9 +56,9 @@ enum Theme {
         static let glassFrost = adaptive(
             dark: .srgbInk(1, alpha: 0.05), light: .srgbInk(1, alpha: 0.25))
 
-        // MARK: Jietu 功能色（不属于 ramp）
+        // MARK: Lucent 功能色（不属于 ramp）
 
-        /// 统一强调色：取自 `Assets.xcassets/AccentColor`（= 品牌蓝 #0D44E8）。
+        /// 统一强调色：取自 `Assets.xcassets/AccentColor`（= 品牌蓝 #3F55F7）。
         ///
         /// 图标、开关打开态、分段 / 单选 / 焦点态都从这一处取色——参考项目里图标配色
         /// 也只从单一 token 取（`menuSymbol` / `accentColor`），**不逐分区换色**。
@@ -67,7 +67,7 @@ enum Theme {
         /// 图标统一颜色（侧边栏、设置行、工具条都取它）。
         static let icon = accent
 
-        /// Jietu 品牌蓝，与 `AccentColor` 资产同源。
+        /// Lucent 品牌蓝，与 `AccentColor` 资产同源。
         static let brand = accent
         /// 截图选框 / 控制点绿（功能色，不可被 ramp 替换）。
         static let selectionGreen = Color(red: 0.14, green: 0.87, blue: 0.45)
@@ -128,7 +128,7 @@ enum Theme {
     // MARK: - Size
 
     enum Size {
-        /// 设置窗口（Tinycast 900×700，Jietu 面板更少故收窄）。
+        /// 设置窗口（Tinycast 900×700，Lucent 面板更少故收窄）。
         static let settingsWindow = CGSize(width: 820, height: 600)
         /// 设置侧边栏固定列宽。
         static let settingsSidebar: CGFloat = 215

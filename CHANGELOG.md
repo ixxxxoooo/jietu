@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.0] — 2026-10-16
+
+### Changed
+- **Renamed to Lucent (澄影)** — new app name, bundle display name, DMG (`Lucent-<version>.dmg`), menu bar, notifications and documentation. The bundle identifier, code-signing identity and Screen Recording grant are unchanged, so upgrading needs no re-authorization. The default save folder stays `~/Pictures/Jietu` if it already exists (new installs use `~/Pictures/Lucent`), and older `Jietu …` screenshot names are still recognized in history.
+- **Requires macOS 27** (built with Xcode 27 / Swift 6.4, approachable concurrency enabled).
+- **Liquid Glass everywhere** — the inline annotation toolbar, Quick Access cards, pixel loupe, tooltips, toasts, recording and GIF-export panels, history and settings surfaces now use the native glass material (`glassEffect` / `NSGlassEffectView`); the hand-made frosted material and ink scrim are gone.
+- **New app icon** — a layered Icon Composer icon (violet-to-azure gradient, glass viewfinder and lens) and a matching accent color.
+- **Recording and GIF export use the macOS 27 AVFoundation receiver / provider APIs** (`AVAssetWriter` input receivers, `AVAssetReader.outputProvider`, typed sample buffers) instead of callback polling.
+- **Multi-display capture is concurrent**: every display is frozen in parallel, so selection starts sooner on multi-monitor setups.
+- Notifications use async/await `UserNotifications`.
+
+### Fixed
+- Background-thread and main-actor hazards in the text-field observers and Quick Access panel (`isolated deinit`, `MainActor.assumeIsolated`), and all Swift 6 strict-concurrency warnings in the codebase.
+
 ## [0.0.5] — 2026-10-15
 
 ### Added

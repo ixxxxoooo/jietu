@@ -64,7 +64,7 @@ final class HistoryStore {
             directory
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
                 .first?
-                .appendingPathComponent(Bundle.main.bundleIdentifier ?? "Jietu", isDirectory: true)
+                .appendingPathComponent(Bundle.main.bundleIdentifier ?? "Lucent", isDirectory: true)
                 .appendingPathComponent("History", isDirectory: true)
             ?? FileManager.default.temporaryDirectory.appendingPathComponent("JietuHistory")
         self.indexURL = self.directory.appendingPathComponent("index.json")
