@@ -21,7 +21,7 @@ jobs:
     name: Lint scripts & release metadata
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: ShellCheck
         run: shellcheck -S warning Scripts/*.sh
@@ -37,7 +37,7 @@ jobs:
     # 风格提示，不阻塞合并：违规以注解形式出现在 PR 上。
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: SwiftLint
         run: swiftlint lint --lenient --reporter github-actions-logging
 
@@ -48,7 +48,7 @@ jobs:
     # Xcode 27，测试宿主也起不来（deployment target 对不上）。
     runs-on: xcode-27
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Select Xcode
         run: |
