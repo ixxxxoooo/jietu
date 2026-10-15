@@ -58,7 +58,7 @@ enum ScreenCapturePermission {
         do {
             try task.run()
         } catch {
-            NSLog("[Jietu] relaunch failed: \(error.localizedDescription)")
+            Log.permissions.error("relaunch failed: \(error.localizedDescription)")
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             NSApp.terminate(nil)

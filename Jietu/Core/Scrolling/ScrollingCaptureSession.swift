@@ -31,7 +31,7 @@ final class ScrollingCaptureSession {
         let regionInGlobalCGPoints: CGRect
     }
 
-    private let logger = Logger(subsystem: "com.ixxxxoooo.jietu", category: "scrolling")
+    private let logger = Log.scrolling
     private let engine: CaptureEngine
     private let target: Target
 

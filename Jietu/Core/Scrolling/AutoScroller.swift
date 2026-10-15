@@ -108,7 +108,7 @@ final class AutoScroller {
                 userInfo: Unmanaged.passUnretained(self).toOpaque()
             )
         else {
-            NSLog("[Jietu] auto-scroll: event tap unavailable, user input not blocked")
+            Log.scrolling.warning("auto-scroll: event tap unavailable, user input not blocked")
             return
         }
 

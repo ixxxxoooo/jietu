@@ -18,7 +18,7 @@ enum LaunchAtLogin {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            NSLog("[Jietu] launch at login \(enabled) failed: \(error.localizedDescription)")
+            Log.settings.error("launch at login \(enabled) failed: \(error.localizedDescription)")
         }
     }
 }

@@ -54,7 +54,7 @@ enum OCRService {
                         return
                     }
                 } catch {
-                    NSLog("[Jietu] Accurate OCR failed: \(error.localizedDescription), falling back to fast mode")
+                    Log.ocr.warning("accurate OCR failed: \(error.localizedDescription), falling back to fast mode")
                 }
 
                 // 兜底：当 accurate 模式因 ANE / 模型临时加载失败时，退回 fast 模式重试
@@ -68,7 +68,7 @@ enum OCRService {
                     }
                     continuation.resume(returning: lines.joined(separator: "\n"))
                 } catch {
-                    NSLog("[Jietu] Fallback OCR failed: \(error.localizedDescription)")
+                    Log.ocr.error("fallback OCR failed: \(error.localizedDescription)")
                     continuation.resume(returning: "")
                 }
             }

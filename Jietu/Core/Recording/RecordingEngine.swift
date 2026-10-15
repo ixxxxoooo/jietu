@@ -74,7 +74,7 @@ final class RecordingEngine {
     var onFinish: ((URL) -> Void)?
     var onFail: ((Error) -> Void)?
 
-    private let logger = Logger(subsystem: "com.ixxxxoooo.jietu", category: "recording")
+    private let logger = Log.recording
     /// 写帧与时间轴都在它上面（回调也投到它上面），主线程只发指令。
     private let queue = DispatchQueue(label: "com.ixxxxoooo.jietu.recording")
 

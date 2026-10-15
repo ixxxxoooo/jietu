@@ -35,7 +35,7 @@ final class HotkeyCenter {
             &ref
         )
         guard status == noErr, let ref else {
-            NSLog("[Jietu] RegisterEventHotKey failed (status=\(status)) for \(hotkey.displayString)")
+            Log.hotkeys.error("RegisterEventHotKey failed (status=\(status)) for \(hotkey.displayString)")
             return nil
         }
 
@@ -86,7 +86,7 @@ final class HotkeyCenter {
             &eventHandler
         )
         guard status == noErr else {
-            NSLog("[Jietu] InstallEventHandler failed (status=\(status))")
+            Log.hotkeys.error("InstallEventHandler failed (status=\(status))")
             return
         }
         isHandlerInstalled = true

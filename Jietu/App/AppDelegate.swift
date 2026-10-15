@@ -3,7 +3,7 @@ import AVFoundation
 import os
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let logger = Logger(subsystem: "com.ixxxxoooo.jietu", category: "app")
+    let logger = Log.app
 
     let settings = SettingsStore()
     let hotkeys = HotkeyCenter()

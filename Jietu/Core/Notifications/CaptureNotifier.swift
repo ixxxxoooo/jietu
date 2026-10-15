@@ -8,7 +8,7 @@ import os
 /// 『保存后显示系统通知』、保存完却什么都没有」变成一件查不到原因的事故：
 /// 到底是没权限、没申请、还是投递失败，日志里一个字都没有。统一改走 os.Logger，
 /// 并把授权状态本身也打出来。
-private let notifyLog = Logger(subsystem: "com.ixxxxoooo.jietu", category: "notifications")
+private let notifyLog = Log.notifications
 
 /// 截图保存后的系统通知反馈。
 ///

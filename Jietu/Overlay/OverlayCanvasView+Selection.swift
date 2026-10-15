@@ -22,11 +22,9 @@ extension OverlayCanvasView {
         let hit = WindowHitTester.frontmost(atCGPoint: cgPoint, in: session.windows)
         #if DEBUG
         if hit?.windowID != hoveredWindow?.windowID {
-            print(
-                "[canvas \(snapshot.displayID)] hover local=\(Self.describe(point))"
-                    + " cg=\(Self.describe(cgPoint))"
-                    + " -> \(hit.map { "\($0.ownerName)/\($0.title)" } ?? "nil")"
-                    + " of \(session.windows.count) windows"
+            let hitName = hit.map { "\($0.ownerName)/\($0.title)" } ?? "nil"
+            logger.debug(
+                "canvas \(self.snapshot.displayID) hover local=\(Self.describe(point)) cg=\(Self.describe(cgPoint)) -> \(hitName) of \(self.session.windows.count) windows"
             )
         }
         #endif
