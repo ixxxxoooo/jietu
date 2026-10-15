@@ -23,6 +23,10 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ixxxxoooo/jietu?style=flat-square" alt="License"></a>
 </p>
 
+<p align="center">
+  <sub><i>Jietu</i> is pinyin for 截图 (“screenshot”) — roughly “jyeh-too”.</sub>
+</p>
+
 ---
 
 ## ✨ Features
@@ -53,7 +57,7 @@
 - 🌐 **Translation** — powered by macOS built-in Translation framework
 - 📌 **Pin to screen** — drag-resize, scroll-zoom, double-click to dismiss
 - 🎨 **Color picker** — magnifier + hex copy
-- ⌨️ **Global hotkeys** — 8 customizable actions (unbound by default)
+- ⌨️ **Global hotkeys** — 8 customizable actions (area capture is ⌃⌘A by default; the rest start unbound)
 - 🌙 **Theme** — system / light / dark
 - 🌍 **i18n** — English & Simplified Chinese (system language or manual in Settings)
 
@@ -99,8 +103,10 @@ open ".build/Build/Products/Debug/Jietu Dev.app"
 
 ```bash
 xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
-  -destination 'platform=macOS' test
+  -destination 'platform=macOS' -derivedDataPath .build test
 ```
+
+Real-window checks that unit tests cannot reach (overlay, recording, scrolling) are DEBUG-only self-tests: run the Debug binary with `--selftest-<name>` (see `Jietu/Core/Diagnostics/`).
 
 ### Package DMG (Release)
 
@@ -121,6 +127,7 @@ Jietu/
     History/      Recent history (screenshots + recordings)
     Hotkeys/      Carbon global hotkeys & editor shortcuts
     ImageIO/      Crop / encode / save / clipboard / shutter sound
+    Logging/      os.Logger categories
     Notifications/System notifications
     OCR/          Vision text recognition
     Permissions/  Screen Recording & Accessibility permission handling
@@ -140,8 +147,9 @@ Jietu/
     Settings/     Preferences window (sidebar + detail panes)
     Translation/  System Translation bridge
   Resources/      Assets, localization strings (en / zh-Hans)
-JietuTests/       Swift Testing unit tests
-Scripts/          Build & development scripts
+JietuTests/       Swift Testing unit tests (source → test matrix in COVERAGE.md)
+Scripts/          Build, DMG packaging, signing and release-check scripts
+docs/             Architecture notes
 ```
 
 ### Design Principles
@@ -150,6 +158,10 @@ Scripts/          Build & development scripts
 - **Design system**: All UI styling goes through `UI/DesignSystem/` tokens
 - **Single file ≤ ~500 lines**: Large types split into `+Extension` files
 - **One source file = one test file**: Shared scaffolding in `JietuTests/TestSupport/`
+
+## 🤝 Contributing
+
+Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). For how the code fits together, read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Release history is in [CHANGELOG.md](CHANGELOG.md); please report security issues privately as described in [SECURITY.md](SECURITY.md).
 
 ## 📄 License
 

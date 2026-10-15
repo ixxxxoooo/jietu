@@ -23,7 +23,8 @@ git add -A && git commit -m "<type>: <描述>"
 - 签名保持默认的自签名证书 `Jietu`，不要加 `CODE_SIGNING_ALLOWED=NO`，否则重签名会丢「屏幕录制」授权。
 - 提交信息沿用仓库风格：`feat:` / `fix:` / `change:` / `docs:` 等前缀。
 - 提交信息（subject 与 body）**一律用英文**，PR 标题与描述同理；仓库历史里的中文提交不追改。
-  代码注释、本文档与 `开发进度.md` 仍按原样用中文。
+  代码注释与本文档仍按原样用中文；面向外部贡献者的文档（`README` / `CONTRIBUTING` / `docs/ARCHITECTURE.md` 等）用英文，`README_zh-CN.md` 为中文版。
+- 功能结构与设计变更写进 `docs/ARCHITECTURE.md`（长期有效的说明），用户可见的变化写进 `CHANGELOG.md`；不再维护流水账式的开发日志。
 
 ## 代码组织规范（写 / 改代码前必读）
 
@@ -59,9 +60,11 @@ App/（生命周期、装配） → Overlay/（截图遮罩层） 与 UI/（常�
 - **一源码文件一测试文件**，同名对应（`InlineAnnotationToolbar` → `InlineToolbarModelTests` 等）；单测文件 ≤~700 行，超了按聚焦拆。
 - 共享脚手架（`makeDefaults` / `solidImage` / `fakeMouseEvent` 这类工厂）**只放 `JietuTests/TestSupport/`**，禁止在测试文件里重复定义；拆分大测试文件时配套更新 `COVERAGE.md` 对照表。
 
-### 已知例外
+### 日志与自检
 
-`Jietu/Core/Diagnostics/CaptureSelfTest.swift`（~3200 行）是存量遗留的自测脚本。**新代码不得模仿它的体量**；哪次改到它，就顺手按规则 1 拆掉。
+- 日志统一走 `Log.<分类>`（`Jietu/Core/Logging/Log.swift`，`os.Logger`）；App 代码里不再写 `print` / `NSLog`。
+- `Jietu/Core/Diagnostics/CaptureSelfTest.swift` 及其 `+领域` 扩展是 DEBUG 专用的命令行自检（`--selftest-*`），已按领域拆开；新增自检也按领域放进对应扩展，别再堆回主文件。
+- 改动遮罩、录屏、滚动长图相关代码后，跑对应的 `--selftest-*` 回归（需要屏幕录制授权与真实显示器）。
 
 ## 构建渠道（Debug = dev）
 
@@ -111,7 +114,10 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
      才允许 `JIETU_ALLOW_ADHOC=1` 验打包（产物不适合发给用户）。
 
   **每次 Release（打 tag 就会自动跑，不用再碰证书）**：
-  `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions 用同一张 p12 签名 → 出 DMG。
+  先改 `MARKETING_VERSION`（工程里 4 处），并在 `CHANGELOG.md` 顶部加 `## [x.y.z] — 日期`，
+  跑 `bash Scripts/check-release.sh` 确认两者一致；
+  再 `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions 先校验 tag / 版本 / CHANGELOG 并跑测试，
+  然后用同一张 p12 签名 → 出 DMG 与 `SHA256SUMS.txt`，Release 正文取自 CHANGELOG。
   本地验身份：`codesign -d -r- dist/…/Jietu.app` 应看到 `certificate leaf = H"aec7af8f…"`，
   和历史版本同一串。
 

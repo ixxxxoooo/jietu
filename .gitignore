@@ -17,6 +17,9 @@ xcuserdata/
 .mimosa/
 .v2c/
 
+# IDE / 助手本地历史（不进仓库）
+.specstory/
+
 # 打包产物
 dist/
 

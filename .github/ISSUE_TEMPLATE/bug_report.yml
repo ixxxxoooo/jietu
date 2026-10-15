@@ -1,0 +1,55 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Press the area-capture hotkey
+        2. Drag a region
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Jietu version
+      description: Settings › About (or the DMG file name).
+      placeholder: "0.0.5"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac model
+      placeholder: "macOS 26.0, MacBook Pro M3, two displays"
+    validations:
+      required: true
+  - type: dropdown
+    id: permissions
+    attributes:
+      label: Permission state
+      description: Settings › Permissions shows the live state.
+      options:
+        - Screen Recording granted, Accessibility granted
+        - Screen Recording granted, Accessibility not granted
+        - Screen Recording not granted
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: >
+        Optional. Logs are in Console.app under subsystem `com.ixxxxoooo.jietu`.
+        Please remove anything private from screenshots.

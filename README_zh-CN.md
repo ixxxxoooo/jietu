@@ -23,6 +23,10 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ixxxxoooo/jietu?style=flat-square" alt="License"></a>
 </p>
 
+<p align="center">
+  <sub><i>Jietu</i> 是「截图」的拼音，读作 jié tú。</sub>
+</p>
+
 ---
 
 ## ✨ 功能
@@ -53,7 +57,7 @@
 - 🌐 **翻译** — 调用 macOS 自带的翻译框架
 - 📌 **钉图** — 拖拽缩放、滚轮缩放、双击关闭
 - 🎨 **取色器** — 放大镜取色，直接复制色号
-- ⌨️ **全局热键** — 8 个可自定义动作（默认不绑定）
+- ⌨️ **全局热键** — 8 个可自定义动作（区域截图默认 ⌃⌘A，其余默认不绑定）
 - 🌙 **主题** — 跟随系统 / 浅色 / 深色
 - 🌍 **多语言** — 中文与英文（跟随系统，或在设置里手动切换）
 
@@ -99,8 +103,10 @@ open ".build/Build/Products/Debug/Jietu Dev.app"
 
 ```bash
 xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
-  -destination 'platform=macOS' test
+  -destination 'platform=macOS' -derivedDataPath .build test
 ```
+
+单元测试够不到的真实窗口行为（遮罩、录屏、滚动长图）由 DEBUG 专用的自检覆盖：用 Debug 二进制加 `--selftest-<名称>` 运行（见 `Jietu/Core/Diagnostics/`）。
 
 ### 打包 DMG（Release）
 
@@ -121,6 +127,7 @@ Jietu/
     History/      最近记录历史
     Hotkeys/      Carbon 全局热键、标注编辑器内快捷键
     ImageIO/      裁剪 / 编码 / 落盘 / 剪贴板 / 快门音
+    Logging/      os.Logger 日志分类
     Notifications/系统通知
     OCR/          Vision 文字识别
     Permissions/  屏幕录制、辅助功能
@@ -134,9 +141,21 @@ Jietu/
     Settings/     偏好设置
     ...           其它 UI 模块
   Resources/      资源文件、本地化字符串（en / zh-Hans）
-JietuTests/       单元测试
-Scripts/          构建与开发脚本
+JietuTests/       单元测试（源码 → 测试对照表见 COVERAGE.md）
+Scripts/          构建、DMG 打包、签名与发版检查脚本
+docs/             架构说明
 ```
+
+### 设计原则
+
+- **依赖方向**：`App/ → Overlay/ 与 UI/ → Core/`（Core 不引入界面层）
+- **设计系统**：所有界面样式都走 `UI/DesignSystem/` 里的令牌
+- **单文件 ≤ ~500 行**：大类按 `+功能域` 拆成 extension
+- **一个源文件对应一个测试文件**：共享脚手架放 `JietuTests/TestSupport/`
+
+## 🤝 参与贡献
+
+欢迎提交 Bug 报告和 Pull Request——请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 与[行为准则](CODE_OF_CONDUCT.md)；代码结构见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)；版本历史见 [CHANGELOG.md](CHANGELOG.md)；安全问题请按 [SECURITY.md](SECURITY.md) 私下报告。
 
 ## 📄 许可证
 

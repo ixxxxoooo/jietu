@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.5] — 2026-10-15
+
+### Added
+- Open-source project documents: `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue / pull-request templates, and `docs/ARCHITECTURE.md` (layers, capture pipeline, scrolling capture, recording, persistence, permissions and signing)
+- `Scripts/check-release.sh` — fails unless every `MARKETING_VERSION` agrees with the top `CHANGELOG.md` entry (and with the pushed tag, when given)
+- Unified logging through `os.Logger` (`Log.<category>`, subsystem = bundle identifier), replacing scattered `print` / `NSLog`
+- CI hardening: least-privilege workflow permissions, `.xcresult` upload on failure, ShellCheck for `Scripts/*.sh`, a non-blocking SwiftLint pass and Dependabot for GitHub Actions
+- Release pipeline: the tag is verified against the project version and changelog and the tests run before packaging; the GitHub Release body comes from this changelog and ships `SHA256SUMS.txt` next to the DMG
+
+### Changed
+- The inline editor (`OverlayCanvasView+Inline*`) and the DEBUG self-test scripts (`CaptureSelfTest+*`) were split by responsibility so no file exceeds the ~500-line guideline; behavior is unchanged
+- Development notes moved from the old progress log into `docs/ARCHITECTURE.md` and this changelog; `README` hotkey wording now matches the defaults (area capture is ⌃⌘A, the rest start unbound)
+
+### Fixed
+- Cancelling a recording while it was still starting could leave the stream running; start and cancel are now serialized
+- Stopping a recording reports the real failure instead of always claiming "no frames"
+- A recording whose video file could not be moved into history no longer leaves an orphan cover image behind
+- Loading a history entry's image falls back to the stored history file when the primary lookup fails
+- Global hotkeys unregister their Carbon event handler when the center is released, and ignore hotkey events that are not ours
+- Windows without a window number are skipped instead of being treated as window `0`
+- Overlays remember the screen they were created for, and the force-unwrapped `NSScreen.main!` fallbacks were replaced by a proper capture-failure path
+- Pinned-image callbacks no longer retain the app delegate; floating buttons come back after Live Text is turned off; closing onboarding stops its permission polling; the history card copy-feedback task runs on the main actor
+
+### Removed
+- The tracked development log (`开发进度.md`) and `.specstory/` documents; `.specstory/` is now git-ignored
+
 ## [0.0.4] — 2026-09-23
 
 ### Added
@@ -70,7 +96,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Live Text (OCR), Translation, Pin, Color picker
 - Global hotkeys, theme support, recent history
 
-[Unreleased]: https://github.com/ixxxxoooo/jietu/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/ixxxxoooo/jietu/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/ixxxxoooo/jietu/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/ixxxxoooo/jietu/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/ixxxxoooo/jietu/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/ixxxxoooo/jietu/releases/tag/v0.0.2
