@@ -81,7 +81,7 @@ jobs:
       # 失败时留下结果包，方便下载后用 Xcode 打开定位。
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: TestResults
           path: TestResults.xcresult
