@@ -112,6 +112,10 @@ final class OverlayWindowController {
     /// 自检用：吸附预览（窗口描边 + 标签）是否画着。
     var debugWindowHighlightVisible: Bool { canvas.debugWindowHighlightVisible }
 
+    /// 自检用：等价于点一下工具栏里的某个工具（nil = 取消选择）。
+    @discardableResult
+    func debugSelectTool(_ tool: AnnotationTool?) -> Bool { canvas.debugSelectTool(tool) }
+
     /// 自检用：展开就地工具栏的「滚动截图」选项 / 直接选模式。
     @discardableResult
     func debugOpenScrollOptions() -> Bool { canvas.debugOpenScrollOptions() }

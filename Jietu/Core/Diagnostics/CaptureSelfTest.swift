@@ -1434,6 +1434,9 @@ enum CaptureSelfTest {
                         .map(describe) ?? "无")
                 )
 
+                // 区域截图默认不选工具：框内拖动会平移选区。先选矩形工具，才是在框里画框。
+                coordinator.debugSelectTool(.rectangle, displayID: displayID)
+
                 // 外框 + **框内**的内框。
                 let outerStart = CGPoint(x: 520, y: 420)
                 let outerEnd = CGPoint(x: 1000, y: 760)
@@ -1747,7 +1750,7 @@ enum CaptureSelfTest {
                 var dragReport: [String] = []
                 for step in 1...4 {
                     let point = CGPoint(
-                        x: start.x + CGFloat(step) * 18, y: start.y + CGFloat(step) * 12
+                        x: start.x + CGFloat(step) * 1.2, y: start.y + CGFloat(step) * 0.8
                     )
                     postMouse(.leftMouseDragged, at: point)
                     try? await Task.sleep(for: .milliseconds(60))
@@ -1768,25 +1771,11 @@ enum CaptureSelfTest {
                 report.append("拖动中描边状态：" + dragReport.joined(separator: "，"))
                 budgets.append(("拖动中不再出现描边", stillHidden ? 0 : nil, 0))
 
-                // 4. 松手 → 选区成型（描边不该回来）；再按一次拖一点点松手（选区被丢弃）→ 描边该回来。
-                postMouse(.leftMouseUp, at: CGPoint(x: start.x + 72, y: start.y + 48))
-                try? await Task.sleep(for: .milliseconds(250))
-                let settledRect = coordinator.debugSelections
-                    .first { $0.displayID == snapshot.displayID }?.localRect
-                let settledVisible = (highlightVisible() ?? false) ? "还在（不应出现）" : "收起"
-                report.append(
-                    "松手 → 选区=\(settledRect.map(describe) ?? "无")，描边=\(settledVisible)"
-                )
-
-                // 远离刚成型的选区（贴上去会按到它的控制点，变成「调整选区」而不是「框新的」）。
-                let away = CGPoint(x: start.x - 300, y: start.y - 200)
-                postMouse(.leftMouseDown, at: away)
-                try? await Task.sleep(for: .milliseconds(40))
-                // 拖过 3pt 阈值但不到最小选区（6pt）：松手时选区被丢弃，回到「还没选区」。
-                postMouse(.leftMouseDragged, at: CGPoint(x: away.x + 4, y: away.y + 1))
-                try? await Task.sleep(for: .milliseconds(40))
-                postMouse(.leftMouseUp, at: CGPoint(x: away.x + 4, y: away.y + 1))
+                // 4. 拖过 3pt 阈值但不到最小选区（6pt）就松手：选区被丢弃，回到「还没选区」，
+                //    描边该当场回来。（非原地模式下，拖出够大的选区一松手就直接落地、遮罩收掉，
+                //    所以这里刻意只拖一点点。）
                 let backAt = CFAbsoluteTimeGetCurrent()
+                postMouse(.leftMouseUp, at: CGPoint(x: start.x + 4.8, y: start.y + 3.2))
                 let backMs = await waitUntil(backAt, timeout: 1.5) { highlightVisible() == true }
                 let clearedRect = coordinator.debugSelections
                     .first { $0.displayID == snapshot.displayID }?.localRect

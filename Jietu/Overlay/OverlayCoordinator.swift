@@ -340,6 +340,12 @@ final class OverlayCoordinator {
             .debugSetSelection(localRect)
     }
 
+    /// 自检用：等价于点一下某块屏就地工具栏里的某个工具（区域截图默认不选工具）。
+    @discardableResult
+    func debugSelectTool(_ tool: AnnotationTool?, displayID: CGDirectDisplayID) -> Bool {
+        controllers.first { $0.snapshot.displayID == displayID }?.debugSelectTool(tool) ?? false
+    }
+
     /// 自检用：给某块屏的遮罩直接送一对「按下 / 抬起」（AppKit 全局坐标，不经注入管线）。
     ///
     /// 注入管线对「同一位置的按下 → 抬起」很挑（实测抬起要等下一次移动才被投递），
