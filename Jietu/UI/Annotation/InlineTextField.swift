@@ -140,9 +140,12 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
                 object: storage,
                 queue: .main
             ) { [weak self] _ in
-                guard let self else { return }
-                self.onTextWidthChange?()
-                self.onTextChanged?(self.currentText())
+                // `queue: .main` 保证在主线程回调，但闭包是 @Sendable，这里显式声明主线程隔离。
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.onTextWidthChange?()
+                    self.onTextChanged?(self.currentText())
+                }
             }
         }
         if textChangeObserver == nil {
@@ -151,9 +154,12 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
                 object: editor,
                 queue: .main
             ) { [weak self] _ in
-                guard let self else { return }
-                self.onTextWidthChange?()
-                self.onTextChanged?(self.currentText())
+                // `queue: .main` 保证在主线程回调，但闭包是 @Sendable，这里显式声明主线程隔离。
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.onTextWidthChange?()
+                    self.onTextChanged?(self.currentText())
+                }
             }
         }
     }
@@ -169,7 +175,7 @@ final class InlineTextField: NSTextField, NSTextFieldDelegate {
         }
     }
 
-    deinit {
+    isolated deinit {
         detachEditorObservers()
     }
 

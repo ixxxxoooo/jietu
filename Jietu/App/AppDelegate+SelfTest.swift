@@ -160,9 +160,9 @@ extension AppDelegate {
             // 注册到 `cleanupBeforeExit`，由 `finish` 在退出前统一执行。
             let previousSaveDirectory = settings.saveDirectory
             let previousShowSaveNotification = settings.showSaveNotification
-            CaptureSelfTest.cleanupBeforeExit.append { [weak self] in
-                self?.settings.saveDirectory = previousSaveDirectory
-                self?.settings.showSaveNotification = previousShowSaveNotification
+            CaptureSelfTest.cleanupBeforeExit.append { [settings] in
+                settings.saveDirectory = previousSaveDirectory
+                settings.showSaveNotification = previousShowSaveNotification
                 try? FileManager.default.removeItem(at: savedDirectory)
             }
             do {
@@ -680,9 +680,9 @@ extension AppDelegate {
                 report.append("就地选区=\(CaptureSelfTest.describe(selection))")
 
                 var handoff: (mode: ScrollingCaptureSession.Mode, rect: CGRect)?
-                overlays.onScrollCapture = { [weak self] snapshot, mode, rect in
+                overlays.onScrollCapture = { snapshot, mode, rect in
                     handoff = (mode, rect)
-                    self?.startScrollingCaptureFromInline(
+                    self.startScrollingCaptureFromInline(
                         snapshot: snapshot, mode: mode, localRect: rect
                     )
                 }
@@ -787,10 +787,8 @@ extension AppDelegate {
                 }
                 try? await Task.sleep(for: .milliseconds(250))
                 let cursorNow = DisplayGeometry.flipY(NSEvent.mouseLocation)
-                let regionNow = scrollingSession.map { session -> CGRect in
-                    // 只用来打印：会话内部的选区矩形与光标是否在外面。
-                    session.debugRegion ?? .zero
-                } ?? .zero
+                // 只用来打印：会话内部的选区矩形与光标是否在外面。
+                let regionNow = scrollingSession?.debugRegion ?? .zero
                 report.append(
                     String(
                         format: "（探针）注入后光标 cg=(%.0f,%.0f)，选区 cg=(%.0f,%.0f %.0fx%.0f)，"

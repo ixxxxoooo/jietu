@@ -23,7 +23,6 @@ extension CaptureSelfTest {
                 guard let displayID = screen.jietu_displayID else {
                     throw CaptureError.noDisplays
                 }
-                let frame = screen.frame
                 let globalRect = CGRect(
                     origin: DisplayGeometry.cgPoint(fromLocal: rect.origin, screen: screen),
                     size: rect.size

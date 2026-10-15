@@ -52,7 +52,7 @@ nonisolated final class MicrophoneRecorder {
     private var tapInstalled = false
 
     /// 每拿到一块 PCM 就回调（在 AVAudioEngine 的内部线程上，非主线程）。
-    var onSampleBuffer: (@Sendable (CMSampleBuffer) -> Void)?
+    var onSampleBuffer: (@Sendable (CMReadySampleBuffer<CMSampleBuffer.DynamicContent>) -> Void)?
 
     init(deviceUID: String?) {
         self.deviceUID = deviceUID
@@ -69,18 +69,21 @@ nonisolated final class MicrophoneRecorder {
         // 如果用户选了特定设备，先切 AudioUnit 的输入源——
         // format 查询依赖设备，必须先切。
         if let deviceUID, let deviceID = AudioInputDevices.deviceID(forUID: deviceUID) {
-            guard let audioUnit = engine.inputNode.audioUnit else {
-                throw RecorderError.audioUnitUnavailable
+            // macOS 27：`audioUnit` 属性已弃用，改在 `withAudioUnit` 作用域里借用底层 AudioUnit。
+            let applied: Bool = engine.inputNode.withAudioUnit { audioUnit in
+                guard let audioUnit = copy audioUnit else { return false }
+                var id = deviceID
+                _ = AudioUnitSetProperty(
+                    audioUnit,
+                    kAudioOutputUnitProperty_CurrentDevice,
+                    kAudioUnitScope_Global,
+                    0,
+                    &id,
+                    UInt32(MemoryLayout<AudioObjectID>.size)
+                )
+                return true
             }
-            var id = deviceID
-            _ = AudioUnitSetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global,
-                0,
-                &id,
-                UInt32(MemoryLayout<AudioObjectID>.size)
-            )
+            guard applied else { throw RecorderError.audioUnitUnavailable }
         }
 
         let inputFormat = engine.inputNode.outputFormat(forBus: 0)
@@ -93,15 +96,24 @@ nonisolated final class MicrophoneRecorder {
         self.converter = converter
 
         do {
-            engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) {
-                [weak self] buffer, _ in
-                self?.handle(buffer: buffer)
-            }
+            installTap(format: inputFormat)
             tapInstalled = true
             try engine.start()
         } catch {
             stop()
             throw error
+        }
+    }
+
+    /// 安装采集 tap。
+    ///
+    /// macOS 27 给 `installTap` 加了带 `error` 出参的新版本，但当前 SDK 的 Swift 重构签名
+    /// 还不完整（`error:` 被导入成 `()`），暂时用稳定的旧入口，并把这唯一一处弃用调用收在这里，
+    /// 等 SDK 补全后只改这一个函数。
+    private func installTap(format: AVAudioFormat) {
+        engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) {
+            [weak self] buffer, _ in
+            self?.handle(buffer: buffer)
         }
     }
 
@@ -155,7 +167,10 @@ nonisolated final class MicrophoneRecorder {
         guard status != .error, conversionError == nil else { return }
 
         if let sampleBuffer = Self.makeSampleBuffer(from: converted, format: outputFormat) {
-            onSampleBuffer?(sampleBuffer)
+            // 包成 `Sendable` 的 `CMReadySampleBuffer` 再跨线程交给录制队列；
+            // 这块样本是刚创建的、此后只读，不存在并发改动。
+            nonisolated(unsafe) let unsafeBuffer = sampleBuffer
+            onSampleBuffer?(CMReadySampleBuffer(unsafeBuffer: unsafeBuffer))
         }
     }
 

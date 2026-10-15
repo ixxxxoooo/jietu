@@ -164,7 +164,7 @@ extension OverlayCanvasView {
     func cancelCrop() {
         if let initial = cropInitialState {
             apply(initial)
-        } else if let restoredBaseImage, let baseFrame = restoredImageFrame {
+        } else if restoredBaseImage != nil, let baseFrame = restoredImageFrame {
             selection = baseFrame
         }
         toolbarModel?.tool = nil

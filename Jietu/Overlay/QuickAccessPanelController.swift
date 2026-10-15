@@ -356,9 +356,11 @@ final class QuickAccessPanelController {
                 entry.panel.animator().setFrame(target, display: true)
                 entry.panel.animator().alphaValue = 0
             } completionHandler: { [weak self] in
-                entry.panel.orderOut(nil)
-                self?.layout(animated: true)
-                self?.finishIfEmpty()
+                MainActor.assumeIsolated {
+                    entry.panel.orderOut(nil)
+                    self?.layout(animated: true)
+                    self?.finishIfEmpty()
+                }
             }
         } else {
             entry.panel.orderOut(nil)

@@ -170,11 +170,13 @@ nonisolated enum GifExporter {
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
             ]
         )
-        output.alwaysCopiesSampleData = false
         guard reader.canAdd(output) else { throw Failure.reader(Failure._l("gif_error.cannot_add_track")) }
-        reader.add(output)
-        guard reader.startReading() else {
-            throw Failure.reader(reader.error?.localizedDescription ?? Failure._l("gif_error.cannot_read_file"))
+        // macOS 26+：由 reader 直接发放强类型的样本提供者，取代 `add` + `copyNextSampleBuffer()`。
+        let provider = reader.outputProvider(for: output)
+        do {
+            try reader.start()
+        } catch {
+            throw Failure.reader(reader.error?.localizedDescription ?? error.localizedDescription)
         }
 
         guard
@@ -206,20 +208,22 @@ nonisolated enum GifExporter {
         ]
         var index = 0
         var written = 0
-        while let sample = output.copyNextSampleBuffer() {
-            let seconds = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample))
+        while let sample = try await provider.next() {
+            let seconds = CMTimeGetSeconds(sample.presentationTimeStamp)
             if seconds > limit { break }
             defer { index += 1 }
-            guard index % step == 0, let pixelBuffer = CMSampleBufferGetImageBuffer(sample)
+            guard index % step == 0, case .pixelBuffer(let pixels) = sample.content
             else { continue }
             let frameWritten: Bool = autoreleasepool {
-                guard let frame = resize(
-                    pixelBuffer, to: size, quality: configuration.quality, context: context
-                ) else { return false }
-                CGImageDestinationAddImage(
-                    destinationRef, frame, frameProperties as CFDictionary
-                )
-                return true
+                pixels.withUnsafeBuffer { pixelBuffer in
+                    guard let frame = resize(
+                        pixelBuffer, to: size, quality: configuration.quality, context: context
+                    ) else { return false }
+                    CGImageDestinationAddImage(
+                        destinationRef, frame, frameProperties as CFDictionary
+                    )
+                    return true
+                }
             }
             if frameWritten {
                 written += 1

@@ -313,7 +313,7 @@ final class PinContentView: NSView {
     // MARK: - Mouse Zoom (Wheel & Pinch)
 
     override func scrollWheel(with event: NSEvent) {
-        guard let window else {
+        guard window != nil else {
             super.scrollWheel(with: event)
             return
         }
@@ -332,7 +332,7 @@ final class PinContentView: NSView {
     }
 
     override func magnify(with event: NSEvent) {
-        guard let window else {
+        guard window != nil else {
             super.magnify(with: event)
             return
         }

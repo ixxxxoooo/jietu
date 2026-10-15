@@ -102,42 +102,33 @@ enum VideoToolsSelfTest {
                 width: Int(size.width), height: Int(size.height), fps: fps
             )
         )
-        input.expectsMediaDataInRealTime = false
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-            assetWriterInput: input,
-            sourcePixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: Int(size.width),
-                kCVPixelBufferHeightKey as String: Int(size.height),
-            ]
-        )
         guard writer.canAdd(input) else {
             throw RecordingEngine.Failure.startFailed("自检视频轨加不进去")
         }
-        writer.add(input)
-        guard writer.startWriting() else {
-            throw writer.error ?? RecordingEngine.Failure.startFailed("自检 startWriting 失败")
+        // 离线写入用异步 `append`：接收器自己做背压，不再手写 isReadyForMoreMediaData 轮询。
+        let receiver = writer.inputPixelBufferReceiver(
+            for: input,
+            pixelBufferAttributes: CVPixelBufferCreationAttributes(
+                pixelFormatType: CVPixelFormatType(rawValue: kCVPixelFormatType_32BGRA),
+                size: CVImageSize(width: Int(size.width), height: Int(size.height))
+            )
+        )
+        do {
+            try writer.start()
+        } catch {
+            throw writer.error ?? error
         }
         writer.startSession(atSourceTime: .zero)
 
         let total = max(1, Int(seconds * Double(fps)))
         for index in 0..<total {
-            while !input.isReadyForMoreMediaData {
-                try await Task.sleep(nanoseconds: 2_000_000)
-            }
-            let buffer = try makePixelBuffer(index: index, total: total, size: size)
-            guard
-                adaptor.append(
-                    buffer,
-                    withPresentationTime: CMTime(
-                        value: CMTimeValue(index), timescale: CMTimeScale(fps)
-                    )
-                )
-            else {
-                throw writer.error ?? RecordingEngine.Failure.startFailed("自检写帧失败")
-            }
+            nonisolated(unsafe) let buffer = try makePixelBuffer(index: index, total: total, size: size)
+            try await receiver.append(
+                CVReadOnlyPixelBuffer(unsafeBuffer: buffer),
+                with: CMTime(value: CMTimeValue(index), timescale: CMTimeScale(fps))
+            )
         }
-        input.markAsFinished()
+        receiver.finish()
         await writer.finishWriting()
         guard writer.status == .completed else {
             throw writer.error ?? RecordingEngine.Failure.startFailed("自检 finishWriting 失败")

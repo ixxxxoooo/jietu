@@ -58,7 +58,7 @@ extension OverlayCanvasView {
             guard let self, !self.isSyncingToolbarToSelection,
                 let selectedID = self.selectedID,
                 let index = self.annotations.firstIndex(where: { $0.id == selectedID }),
-                case .blur(let rect, let oldRadius) = self.annotations[index].kind,
+                case .blur(_, let oldRadius) = self.annotations[index].kind,
                 abs(oldRadius - radius) > 0.01
             else { return }
             self.annotations[index] = self.annotations[index].withBlurRadius(radius)
@@ -68,7 +68,7 @@ extension OverlayCanvasView {
             guard let self, !self.isSyncingToolbarToSelection,
                 let selectedID = self.selectedID,
                 let index = self.annotations.firstIndex(where: { $0.id == selectedID }),
-                case .pixelate(let rect, let oldBlock) = self.annotations[index].kind,
+                case .pixelate(_, let oldBlock) = self.annotations[index].kind,
                 abs(oldBlock - block) > 0.01
             else { return }
             self.annotations[index] = self.annotations[index].withPixelateBlock(block)

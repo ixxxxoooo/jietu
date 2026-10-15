@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import Synchronization
 
 /// 写 mp4 的那只手：所有方法都在 `RecordingEngine.queue` 上调用（`@unchecked Sendable` 靠这条纪律）。
 ///
@@ -11,12 +12,14 @@ import Foundation
 nonisolated final class RecordingWriter: @unchecked Sendable {
     let url: URL
     private let writer: AVAssetWriter
-    private let videoInput: AVAssetWriterInput
-    private let adaptor: AVAssetWriterInputPixelBufferAdaptor
-    private var systemAudioInput: AVAssetWriterInput?
-    private var microphoneInput: AVAssetWriterInput?
+    // macOS 26+ 的 receiver 模型：输入由 writer 直接发放强类型的「接收器」，
+    // 取代 `isReadyForMoreMediaData` + `append` 的轮询写法（macOS 27 起旧接口已弃用）。
+    private let videoReceiver: AVAssetWriterInput.PixelBufferReceiver
+    private var systemAudioReceiver: AVAssetWriterInput.SampleBufferReceiver?
+    private var microphoneReceiver: AVAssetWriterInput.SampleBufferReceiver?
 
-    private var sessionStarted = false
+    /// 会话起点只能定一次；暂停 / 采集在不同线程上，所以用 `Mutex` 护着。
+    private let sessionStarted = Mutex(false)
     private var hasWrittenFrame = false
     private var hasWrittenSystemAudio = false
     private var hasWrittenMicrophone = false
@@ -28,22 +31,20 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
     /// 麦克风最后一块样本的结束时间。
     private var lastMicrophoneEndTime: CMTime?
 
-    /// 暂停状态用锁护着：写帧在采集队列上、暂停/恢复在主线程上，两边都要看它。
-    private let pauseLock = NSLock()
-    private var isPaused = false
-    /// 会话起点上锁。
-    private let sessionLock = NSLock()
+    /// 暂停状态：写帧在采集队列上、暂停/恢复在主线程上，两边都要看它，
+    /// 用 `Mutex`（`Synchronization`）护着，比 `NSLock` 少一次手工配对。
+    private struct PauseState {
+        var isPaused = false
+        /// 暂停累计了多久（**挂钟秒**，不是帧时间戳）。
+        var totalSeconds: Double = 0
+        var pausedAtWall: Double?
+    }
+    private let pauseState = Mutex(PauseState())
 
     /// 现在是不是暂停中（跨线程安全）。
     private var isPausedNow: Bool {
-        pauseLock.lock()
-        defer { pauseLock.unlock() }
-        return isPaused
+        pauseState.withLock { $0.isPaused }
     }
-
-    /// 暂停累计了多久（**挂钟秒**，不是帧时间戳）。
-    private var pausedTotalSeconds: Double = 0
-    private var pausedAtWall: Double?
 
     init(
         url: URL, width: Int, height: Int, fps: Int,
@@ -54,20 +55,11 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
         writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
 
         let dimensions = VideoEncodingSettings.evenDimensions(width: width, height: height)
-        videoInput = AVAssetWriterInput(
+        let videoInput = AVAssetWriterInput(
             mediaType: .video,
             outputSettings: VideoEncodingSettings.outputSettings(
                 width: dimensions.width, height: dimensions.height, fps: fps
             )
-        )
-        videoInput.expectsMediaDataInRealTime = true
-        adaptor = AVAssetWriterInputPixelBufferAdaptor(
-            assetWriterInput: videoInput,
-            sourcePixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: dimensions.width,
-                kCVPixelBufferHeightKey as String: dimensions.height,
-            ]
         )
         guard writer.canAdd(videoInput) else {
             throw RecordingEngine.Failure.startFailed({
@@ -78,7 +70,13 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
                 return r as String? ?? "writer_error.video_track"
             }())
         }
-        writer.add(videoInput)
+        videoReceiver = writer.inputPixelBufferReceiver(
+            for: videoInput,
+            pixelBufferAttributes: CVPixelBufferCreationAttributes(
+                pixelFormatType: CVPixelFormatType(rawValue: kCVPixelFormatType_32BGRA),
+                size: CVImageSize(width: dimensions.width, height: dimensions.height)
+            )
+        )
 
         // 系统声：AAC 立体声 44.1kHz
         if withSystemAudio {
@@ -86,10 +84,8 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
                 mediaType: .audio,
                 outputSettings: VideoEncodingSettings.systemAudioOutputSettings()
             )
-            input.expectsMediaDataInRealTime = true
             if writer.canAdd(input) {
-                writer.add(input)
-                systemAudioInput = input
+                systemAudioReceiver = writer.inputReceiver(for: input)
             }
         }
 
@@ -99,23 +95,15 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
                 mediaType: .audio,
                 outputSettings: VideoEncodingSettings.microphoneOutputSettings()
             )
-            input.expectsMediaDataInRealTime = true
             if writer.canAdd(input) {
-                writer.add(input)
-                microphoneInput = input
+                microphoneReceiver = writer.inputReceiver(for: input)
             }
         }
 
-        guard writer.startWriting() else {
-            throw RecordingEngine.Failure.writer(
-                writer.error ?? RecordingEngine.Failure.startFailed({
-                    let r = CFBundleCopyLocalizedString(
-                        CFBundleGetMainBundle(), "writer_error.start_writing" as CFString,
-                        "writer_error.start_writing" as CFString, "Localizable" as CFString
-                    )
-                    return r as String? ?? "writer_error.start_writing"
-                }())
-            )
+        do {
+            try writer.start()
+        } catch {
+            throw RecordingEngine.Failure.writer(writer.error ?? error)
         }
     }
 
@@ -125,47 +113,52 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
         guard !isPausedNow else { return }
         let stamp = adjusted(time)
         startSessionIfNeeded(at: stamp)
-        guard videoInput.isReadyForMoreMediaData else { return }
-        if adaptor.append(pixelBuffer, withPresentationTime: stamp) {
+        // 实时写入：接收器没准备好就丢帧（返回 false），不排队、不阻塞采集队列。
+        nonisolated(unsafe) let unsafeBuffer = pixelBuffer
+        let readOnly = CVReadOnlyPixelBuffer(unsafeBuffer: unsafeBuffer)
+        if (try? videoReceiver.appendImmediately(readOnly, with: stamp)) == true {
             hasWrittenFrame = true
         }
     }
 
     /// 系统声音（SCStream `.audio` 交付的 CMSampleBuffer）。
     func appendSystemAudio(_ sampleBuffer: CMSampleBuffer) {
-        guard !isPausedNow, sampleBuffer.numSamples > 0, let input = systemAudioInput else { return }
+        guard !isPausedNow, sampleBuffer.numSamples > 0, let receiver = systemAudioReceiver else { return }
         let stamp = adjusted(CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
         startSessionIfNeeded(at: stamp)
 
         // 填充静音间隙（避免两轨起点不对齐导致播放器偏移）
         let gapStart = lastSystemAudioEndTime ?? referenceAnchor
         if let gapStart, CMTimeCompare(gapStart, stamp) < 0 {
-            fillSilence(into: input, like: sampleBuffer, from: gapStart, to: stamp)
+            fillSilence(into: receiver, like: sampleBuffer, from: gapStart, to: stamp)
         }
 
         guard let restamped = Self.restamped(sampleBuffer, to: stamp) else { return }
-        guard input.isReadyForMoreMediaData else { return }
-        if input.append(restamped) {
+        if (try? receiver.appendImmediately(Self.ready(restamped))) == true {
             hasWrittenSystemAudio = true
             lastSystemAudioEndTime = sampleEndTime(pts: stamp, sampleBuffer: restamped)
         }
     }
 
-    /// 麦克风（MicrophoneRecorder 交付的 CMSampleBuffer）。
-    func appendMicrophone(_ sampleBuffer: CMSampleBuffer) {
-        guard !isPausedNow, sampleBuffer.numSamples > 0, let input = microphoneInput else { return }
+    /// 麦克风（MicrophoneRecorder 交付的、可跨线程传递的样本）。
+    func appendMicrophone(_ ready: CMReadySampleBuffer<CMSampleBuffer.DynamicContent>) {
+        ready.withUnsafeSampleBuffer { appendMicrophone($0) }
+    }
+
+    /// 麦克风样本（已在录制队列上）。
+    private func appendMicrophone(_ sampleBuffer: CMSampleBuffer) {
+        guard !isPausedNow, sampleBuffer.numSamples > 0, let receiver = microphoneReceiver else { return }
         let stamp = adjusted(CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
         startSessionIfNeeded(at: stamp)
 
         // 填充静音间隙
         let gapStart = lastMicrophoneEndTime ?? referenceAnchor
         if let gapStart, CMTimeCompare(gapStart, stamp) < 0 {
-            fillSilence(into: input, like: sampleBuffer, from: gapStart, to: stamp)
+            fillSilence(into: receiver, like: sampleBuffer, from: gapStart, to: stamp)
         }
 
         guard let restamped = Self.restamped(sampleBuffer, to: stamp) else { return }
-        guard input.isReadyForMoreMediaData else { return }
-        if input.append(restamped) {
+        if (try? receiver.appendImmediately(Self.ready(restamped))) == true {
             hasWrittenMicrophone = true
             lastMicrophoneEndTime = sampleEndTime(pts: stamp, sampleBuffer: restamped)
         }
@@ -173,10 +166,12 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
 
     /// 第一帧的 PTS 作为会话起点，后面都相对它（否则首帧会带一大段空白）。
     private func startSessionIfNeeded(at time: CMTime) {
-        sessionLock.lock()
-        defer { sessionLock.unlock() }
-        guard !sessionStarted else { return }
-        sessionStarted = true
+        let shouldStart = sessionStarted.withLock { started in
+            guard !started else { return false }
+            started = true
+            return true
+        }
+        guard shouldStart else { return }
         referenceAnchor = time
         writer.startSession(atSourceTime: time)
     }
@@ -184,30 +179,29 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
     // MARK: - 暂停
 
     func pause() {
-        pauseLock.lock()
-        defer { pauseLock.unlock() }
-        guard !isPaused else { return }
-        isPaused = true
-        pausedAtWall = CACurrentMediaTime()
+        pauseState.withLock { state in
+            guard !state.isPaused else { return }
+            state.isPaused = true
+            state.pausedAtWall = CACurrentMediaTime()
+        }
     }
 
     func resume() {
-        pauseLock.lock()
-        defer { pauseLock.unlock() }
-        guard isPaused else { return }
-        isPaused = false
-        if let pausedAtWall {
-            pausedTotalSeconds += CACurrentMediaTime() - pausedAtWall
+        pauseState.withLock { state in
+            guard state.isPaused else { return }
+            state.isPaused = false
+            if let pausedAtWall = state.pausedAtWall {
+                state.totalSeconds += CACurrentMediaTime() - pausedAtWall
+            }
+            state.pausedAtWall = nil
         }
-        pausedAtWall = nil
     }
 
     /// 暂停期间的 PTS 整体前移：成片里看不出暂停过（也不留空档）。
     private func adjusted(_ time: CMTime) -> CMTime {
-        pauseLock.lock()
-        defer { pauseLock.unlock() }
-        guard pausedTotalSeconds > 0 else { return time }
-        return time - CMTime(seconds: pausedTotalSeconds, preferredTimescale: 600)
+        let paused = pauseState.withLock { $0.totalSeconds }
+        guard paused > 0 else { return time }
+        return time - CMTime(seconds: paused, preferredTimescale: 600)
     }
 
     // MARK: - 收工
@@ -221,9 +215,9 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
             try? FileManager.default.removeItem(at: url)
             throw RecordingEngine.Failure.noFrames
         }
-        videoInput.markAsFinished()
-        systemAudioInput?.markAsFinished()
-        microphoneInput?.markAsFinished()
+        videoReceiver.finish()
+        systemAudioReceiver?.finish()
+        microphoneReceiver?.finish()
         await writer.finishWriting()
         if let error = writer.error {
             try? FileManager.default.removeItem(at: url)
@@ -238,6 +232,17 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
     }
 
     // MARK: - 私有
+
+    /// 把采集到的 `CMSampleBuffer` 包成 `appendImmediately` 要的强类型 `CMReadySampleBuffer`。
+    ///
+    /// `unsafeBuffer:` 要求 `sending`（调用后不能再被别处改动）；这里的缓冲区都是
+    /// 采集回调交付的只读样本，且写入全程在同一条串行队列上，不会并发改动，所以集中在这一处声明。
+    private static func ready(
+        _ buffer: CMSampleBuffer
+    ) -> CMReadySampleBuffer<CMSampleBuffer.DynamicContent> {
+        nonisolated(unsafe) let unsafeBuffer = buffer
+        return CMReadySampleBuffer(unsafeBuffer: unsafeBuffer)
+    }
 
     /// 换一个新的 PTS。
     private static func restamped(_ sampleBuffer: CMSampleBuffer, to time: CMTime) -> CMSampleBuffer? {
@@ -279,7 +284,7 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
     /// 用零值 PCM 填充 [start, end) 的间隙——保证两条音轨从同一起点开始，
     /// 播放器不会因为一轨起步晚而偏移。
     private func fillSilence(
-        into input: AVAssetWriterInput,
+        into receiver: AVAssetWriterInput.SampleBufferReceiver,
         like reference: CMSampleBuffer,
         from start: CMTime,
         to end: CMTime
@@ -300,13 +305,12 @@ nonisolated final class RecordingWriter: @unchecked Sendable {
         var remaining = Int(durationInFrames.value)
         var cursor = start
         while remaining > 0 {
-            guard input.isReadyForMoreMediaData else { return }
             let count = min(remaining, framesPerChunk)
             guard let silent = Self.makeSilence(
                 formatDescription: fmt, asbd: asbd,
                 at: cursor, frameCount: count,
                 referenceBuffer: reference
-            ), input.append(silent)
+            ), (try? receiver.appendImmediately(Self.ready(silent))) == true
             else { return }
             cursor = CMTimeAdd(
                 cursor,

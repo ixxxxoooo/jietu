@@ -1,5 +1,5 @@
 import AppKit
-import UserNotifications
+@preconcurrency import UserNotifications
 import os
 
 /// 通知这条路上的日志。
@@ -8,7 +8,7 @@ import os
 /// 『保存后显示系统通知』、保存完却什么都没有」变成一件查不到原因的事故：
 /// 到底是没权限、没申请、还是投递失败，日志里一个字都没有。统一改走 os.Logger，
 /// 并把授权状态本身也打出来。
-private let notifyLog = Log.notifications
+private nonisolated let notifyLog = Log.notifications
 
 /// 截图保存后的系统通知反馈。
 ///
@@ -44,29 +44,38 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         guard Bundle.main.bundleIdentifier != nil else { return }
         // 菜单栏 App 默认不激活，系统有时会把授权弹窗压住——先抢前台。
         NSApp.activate(ignoringOtherApps: true)
-        let center = UNUserNotificationCenter.current()
-        center.getNotificationSettings { settings in
-            notifyLog.notice(
-                "status on request: \(Self.describe(settings.authorizationStatus), privacy: .public)"
-            )
-            switch settings.authorizationStatus {
-            case .notDetermined:
-                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-                    if let error {
-                        notifyLog.error(
-                            "authorization failed: \(error.localizedDescription, privacy: .public)"
-                        )
-                        return
-                    }
-                    notifyLog.notice("authorization granted: \(granted, privacy: .public)")
-                }
-            case .denied:
-                notifyLog.notice(
-                    "authorization denied — turn it on in System Settings › Notifications"
-                )
-            default:
-                break
+        Task {
+            _ = await postingAllowed(on: UNUserNotificationCenter.current(), context: "request")
+        }
+    }
+
+    /// 当前能不能发通知；还没问过用户时先弹授权。
+    ///
+    /// 全程 `async/await`：以前的回调版本在系统后台线程里读写主线程状态（Swift 6.4 下是并发隐患）。
+    private static func postingAllowed(on center: UNUserNotificationCenter, context: String) async -> Bool {
+        let settings = await center.notificationSettings()
+        notifyLog.notice(
+            "\(context, privacy: .public) — status \(describe(settings.authorizationStatus), privacy: .public)"
+        )
+        switch settings.authorizationStatus {
+        case .notDetermined:
+            do {
+                let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+                notifyLog.notice("authorization granted: \(granted, privacy: .public)")
+                return granted
+            } catch {
+                notifyLog.error("authorization failed: \(error.localizedDescription, privacy: .public)")
+                return false
             }
+        case .denied:
+            notifyLog.notice(
+                "skipped — notifications are off for this app in System Settings › Notifications"
+            )
+            return false
+        case .authorized, .provisional, .ephemeral:
+            return true
+        @unknown default:
+            return true
         }
     }
 
@@ -165,41 +174,14 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
         guard isAvailable else { return }
         pendingAction = action
 
-        let center = UNUserNotificationCenter.current()
-        center.getNotificationSettings { [weak self] settings in
-            guard let self else { return }
-            notifyLog.notice(
-                "post \(title, privacy: .public) — status \(Self.describe(settings.authorizationStatus), privacy: .public)"
-            )
-            switch settings.authorizationStatus {
-            case .notDetermined:
-                // 还没问过：先申请，授权成功后再发这一条。
-                center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
-                    if let error {
-                        notifyLog.error(
-                            "authorization failed: \(error.localizedDescription, privacy: .public)"
-                        )
-                        return
-                    }
-                    guard granted else {
-                        notifyLog.notice("authorization refused by the user")
-                        return
-                    }
-                    self?.enqueue(title: title, body: body, attachmentURL: attachmentURL)
-                }
-            case .authorized, .provisional, .ephemeral:
-                self.enqueue(title: title, body: body, attachmentURL: attachmentURL)
-            case .denied:
-                notifyLog.notice(
-                    "skipped — notifications are off for this app in System Settings › Notifications"
-                )
-            @unknown default:
-                self.enqueue(title: title, body: body, attachmentURL: attachmentURL)
-            }
+        Task { [weak self] in
+            let center = UNUserNotificationCenter.current()
+            guard await Self.postingAllowed(on: center, context: "post \(title)") else { return }
+            await self?.enqueue(title: title, body: body, attachmentURL: attachmentURL)
         }
     }
 
-    private func enqueue(title: String, body: String, attachmentURL: URL?) {
+    private func enqueue(title: String, body: String, attachmentURL: URL?) async {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
@@ -215,12 +197,11 @@ final class CaptureNotifier: NSObject, UNUserNotificationCenterDelegate {
             content: content,
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error {
-                notifyLog.error("post failed: \(error.localizedDescription, privacy: .public)")
-            } else {
-                notifyLog.notice("posted \(request.identifier, privacy: .public)")
-            }
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+            notifyLog.notice("posted \(request.identifier, privacy: .public)")
+        } catch {
+            notifyLog.error("post failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
