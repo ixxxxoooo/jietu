@@ -47,7 +47,7 @@ BLEED_X=16
 BLEED_Y=12
 
 # ---------- 1/6 构建 ----------
-echo "==> 1/6 构建（${CONFIG}）"
+echo "==> 1/7 构建（${CONFIG}）"
 # 签名身份必须**稳定**，TCC（屏幕录制等）把授权记在 App 的代码签名身份上：
 #   · 证书「Jietu」签名 → 要求是 `identifier + certificate leaf`，重装 / 升级都认同一份授权；
 #   · ad-hoc 签名 → 要求退化成 `cdhash`（就是「这一个二进制」的指纹），
@@ -87,7 +87,7 @@ rm -f "$LOG"
 [ -d "$APP" ] || { echo "构建成功但找不到产物：$APP"; exit 1; }
 
 # ---------- 2/6 校验产物 ----------
-echo "==> 2/6 校验签名与版本"
+echo "==> 2/7 校验签名与版本"
 # 自签名证书没有 Developer ID，但签名必须自洽——否则装到别人机器上会被 TCC 拒掉。
 codesign --verify --deep --strict "$APP" || { echo "签名校验不通过：$APP"; exit 1; }
 
@@ -123,7 +123,7 @@ case "$DESIGNATED_REQ" in
 esac
 
 # ---------- 3/6 暂存 ----------
-echo "==> 3/6 暂存"
+echo "==> 3/7 暂存"
 TMP="$(mktemp -d -t jietu-dmg)"
 STAGE="$TMP/stage"
 RW="$TMP/Lucent-rw"
@@ -279,7 +279,7 @@ esac
 [ "$ART_ALPHA" = "no" ] || { echo "背景图带 alpha 通道（白占约 180KB），应为 RGB"; exit 1; }
 
 # ---------- 4/6 排版并入镜像 ----------
-echo "==> 4/6 排版"
+echo "==> 4/7 排版"
 mkdir -p "$DIST" "$MNT"
 rm -f "$DMG"
 # 先建一个可写镜像：Finder 的版式只能写进可写的卷里，写完再转成压缩镜像。
@@ -332,7 +332,7 @@ convert_image "$RW" "$DMG" "$VOLNAME" || { echo "转换压缩镜像失败"; exit
 rm -f "$RW"
 
 # ---------- 5/6 挂载复验 ----------
-echo "==> 5/6 挂载复验"
+echo "==> 5/7 挂载复验"
 mkdir -p "$VERIFY_MNT"
 attach_image "$DMG" "$VERIFY_MNT" 1 || { echo "复验挂载失败：$DMG"; exit 1; }
 VERIFY_MOUNTED=1
@@ -361,11 +361,37 @@ SHIPPED_FORMAT="$(hdiutil imageinfo "$DMG" 2>/dev/null | sed -n 's/^Format: //p'
 detach_mount "$VERIFY_MNT"
 VERIFY_MOUNTED=0
 
-# ---------- 6/6 输出 ----------
+# ---------- 6/7 在线更新包 ----------
+# App 内的「检查更新」下载的是这个 zip（不是 DMG）：
+#   - 命名约定 `Lucent-<版本>-macOS.zip` + 同名 `.sha256`，App 端按这个后缀认包；
+#   - 用 ditto --keepParent 打包（保留签名所需的扩展属性 / 符号链接，zip -r 做不到）；
+#   - 出包前复验：解压后签名自洽、版本一致、设计要求（TCC 认的身份）与原 App 完全相同——
+#     这样 App 端「新包必须满足当前 App 的设计要求」的校验在发布时就已被验证过。
+echo "==> 6/7 在线更新包"
+ZIP="$DIST/$APP_NAME-$VERSION-macOS.zip"
+rm -f "$ZIP" "$ZIP.sha256"
+ditto -c -k --keepParent "$APP" "$ZIP" || { echo "生成更新包失败"; exit 1; }
+( cd "$DIST" && shasum -a 256 "$(basename "$ZIP")" > "$(basename "$ZIP").sha256" )
+
+ZIP_CHECK="$(mktemp -d)"
+ditto -x -k "$ZIP" "$ZIP_CHECK" || { echo "更新包无法解压：$ZIP"; exit 1; }
+ZIP_APP="$ZIP_CHECK/$APP_NAME.app"
+[ -d "$ZIP_APP" ] || { echo "更新包里没有 $APP_NAME.app"; exit 1; }
+codesign --verify --deep --strict "$ZIP_APP" || { echo "更新包内签名校验不通过"; exit 1; }
+ZIP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ZIP_APP/Contents/Info.plist")"
+[ "$ZIP_VERSION" = "$VERSION" ] || { echo "更新包版本($ZIP_VERSION) 与构建($VERSION) 不一致"; exit 1; }
+ZIP_REQ="$(codesign -d -r- "$ZIP_APP" 2>&1 | sed -n 's/^designated => //p')"
+[ "$ZIP_REQ" = "$DESIGNATED_REQ" ] || { echo "更新包的设计要求与原 App 不一致：$ZIP_REQ" >&2; exit 1; }
+( cd "$DIST" && shasum -a 256 -c "$(basename "$ZIP").sha256" >/dev/null ) || { echo "更新包校验文件对不上"; exit 1; }
+rm -rf "$ZIP_CHECK"
+echo "    更新包 $ZIP ($(du -h "$ZIP" | cut -f1))"
+
+# ---------- 7/7 输出 ----------
 echo
-echo "==> 6/6 OK  $(pwd)/$DMG"
+echo "==> 7/7 OK  $(pwd)/$DMG"
 echo "    大小   $(du -h "$DMG" | cut -f1)"
 echo "    sha256 $(shasum -a 256 "$DMG" | cut -d' ' -f1)"
+echo "    更新包 $(pwd)/$ZIP"
 echo
 echo "注：自签名证书未受系统信任，别人下载后首次打开前需在终端执行下面这条"
 echo "    （镜像里的「${COMMAND_FILE_NAME}」也有一份，可直接复制）："

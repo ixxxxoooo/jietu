@@ -16,6 +16,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private static let autosaveName = "JietuSettingsWindow"
 
     private let settings: SettingsStore
+    private let updates: UpdateManager
+    /// 当前窗口的导航状态：外部（如菜单「检查更新…」）要能把窗口切到指定分区。
+    private var navigation: SettingsNavigationState?
     private var window: NSWindow?
     /// 与窗口同生命周期重建，chrome 的状态不会比它装饰的窗口活得久。
     private var chrome: SettingsToolbarController?
@@ -24,16 +27,20 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// 热键改变回调，由 AppDelegate 负责注销旧热键、注册新热键（nil 表示清除）。
     var onHotkeyChange: ((HotkeyAction, Hotkey?) -> Void)?
 
-    init(settings: SettingsStore) {
+    init(settings: SettingsStore, updates: UpdateManager) {
         self.settings = settings
+        self.updates = updates
         super.init()
     }
 
     var isVisible: Bool { window?.isVisible ?? false }
 
     /// 展示设置窗口；已存在则前置。
-    func present() {
+    ///
+    /// - Parameter section: 指定要落到的分区；nil 保持窗口当前所在分区。
+    func present(section: SettingsSection? = nil) {
         if let window {
+            if let section { navigation?.select(section) }
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
             NSApp.activate()
@@ -43,12 +50,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         previousActivationPolicy = NSApp.activationPolicy()
         NSApp.setActivationPolicy(.regular)
 
-        let navigation = SettingsNavigationState()
+        let navigation = SettingsNavigationState(section: section ?? .general)
+        self.navigation = navigation
         let split = SettingsSplitViewController(
             sidebar: SettingsSidebarView(navigation: navigation),
             detail: SettingsDetailView(
                 settings: settings,
-                navigation: navigation
+                navigation: navigation,
+                updates: updates
             ) { [weak self] action, hotkey in
                 self?.onHotkeyChange?(action, hotkey)
             }
@@ -94,6 +103,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window?.orderOut(nil)
         window = nil
         chrome = nil
+        navigation = nil
         restoreActivationPolicy()
     }
 
@@ -102,6 +112,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         window = nil
         chrome = nil
+        navigation = nil
         restoreActivationPolicy()
     }
 

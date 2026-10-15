@@ -10,6 +10,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     private let permissionItem = NSMenuItem()
     private let accessibilityPermissionItem = NSMenuItem()
+    /// 「检查更新…」：有新版本时标题直接点明版本号（见 `refresh()`）。
+    private lazy var updateItem = item(L10n.updateMenuCheck, #selector(handleCheckForUpdates), symbol: "arrow.triangle.2.circlepath")
     private let recentMenu = NSMenu()
 
     var onCaptureArea: (() -> Void)?
@@ -36,6 +38,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onAuthorizeAccessibility: (() -> Void)?
     var onOpenOnboarding: (() -> Void)?
     var onOpenSettings: (() -> Void)?
+    var onCheckForUpdates: (() -> Void)?
+    /// 菜单标题 / 是否有新版本由更新管理器提供，菜单每次弹出时拉取。
+    var updateStateProvider: (() -> (title: String, hasUpdate: Bool))?
     var onRelaunch: (() -> Void)?
     var onQuit: (() -> Void)?
 
@@ -60,6 +65,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     func refresh() {
         refreshHotkeyTitles()
+        let update = updateStateProvider?() ?? (title: L10n.updateMenuCheck, hasUpdate: false)
+        updateItem.title = update.title
+        updateItem.image = NSImage(
+            systemSymbolName: update.hasUpdate ? "arrow.down.circle.fill" : "arrow.triangle.2.circlepath",
+            accessibilityDescription: nil
+        )
         let granted = ScreenCapturePermission.isGranted
         permissionItem.title = L10n.menuScreenRecordingPermission(granted: granted)
         permissionItem.image = NSImage(
@@ -149,6 +160,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let preferences = item(L10n.menuPreferences, #selector(handleOpenSettings), symbol: "gearshape")
         preferences.keyEquivalent = ","
         menu.addItem(preferences)
+        menu.addItem(updateItem)
 
         menu.addItem(.separator())
 
@@ -427,6 +439,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func handleOpenSettings() {
         onOpenSettings?()
+    }
+
+    @objc private func handleCheckForUpdates() {
+        onCheckForUpdates?()
     }
 
     @objc private func handleRelaunch() {

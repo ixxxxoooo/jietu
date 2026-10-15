@@ -12,7 +12,7 @@ App/ (lifecycle, wiring)  →  Overlay/ (capture overlay)  and  UI/ (resident in
 
 Dependencies only point along the arrows:
 
-- **`Core/`** never imports the interface layers. It is organized by domain (`Annotation`, `Capture`, `History`, `Hotkeys`, `ImageIO`, `Notifications`, `OCR`, `Permissions`, `Recording`, `Scrolling`, `Settings`, `Logging`, `Diagnostics`).
+- **`Core/`** never imports the interface layers. It is organized by domain (`Annotation`, `Capture`, `History`, `Hotkeys`, `ImageIO`, `Notifications`, `OCR`, `Permissions`, `Recording`, `Scrolling`, `Settings`, `Update`, `Logging`, `Diagnostics`).
 - **`UI/`** talks to `Core/` through its public types, never through its internals.
 - **`UI/DesignSystem/`** is the single source of UI style (`Theme` tokens, `.floatingSurface()`, glass controls). New UI must not hard-code colors, radii or shadows.
 - **`App/`** (`AppDelegate` + `+Capture`, `+Recording`, `+Scrolling`, `+Delivery`, `+VideoTools`) only wires things together and owns the app lifecycle.
@@ -52,6 +52,24 @@ Annotations are objects (`Annotation` + `AnnotationKind`), not pixels, so they s
 - **Screen Recording** is required. TCC ties the grant to the app's *code-signing identity*. Releases are signed with one stable self-signed certificate (`Jietu`), so the designated requirement is `identifier + certificate leaf` and survives upgrades. An ad-hoc signature would reduce it to a per-build `cdhash` and force users to re-authorize on every update — `Scripts/build-dmg.sh` refuses to produce such a build unless `JIETU_ALLOW_ADHOC=1`.
 - **Accessibility** is optional (auto-scroll only) and is read live, so no restart is needed after granting.
 - Because the app is self-signed (no Developer ID / notarization), the first launch needs the quarantine flag removed; the DMG ships a copyable note for that.
+
+## Online update
+
+`Core/Update/` implements in-app updates (modelled on the sibling project *trendDash*), driven by GitHub Releases:
+
+```
+UpdateManager (state machine, @Observable)
+ ├─ UpdateChecker     releases/latest API, falls back to the web redirect (no API quota)
+ │    └─ GitHubReleaseParser → ReleaseInfo (version, zip asset, SHA-256)
+ └─ UpdateInstaller   download → SHA-256 → unpack → verify  ·  +Install: swap & relaunch
+```
+
+- **Release assets.** `Scripts/build-dmg.sh` also emits `Lucent-<version>-macOS.zip` (+ `.sha256`) from the signed app (`ditto --keepParent`), and re-verifies it: signature intact, version equal, designated requirement identical to the app's. The release workflow uploads the zip, its checksum and `SHA256SUMS.txt`; a release without a zip fails the job.
+- **Verification chain** (any failure leaves the installed app untouched): the zip's SHA-256 must equal the published digest (API `digest` field, else the `.sha256` asset; no checksum → refuse); the bundle id and version must match; `codesign --verify --deep --strict` must pass; and the new app must satisfy the **running app's designated requirement** — the same self-signed certificate. That is what keeps the Screen Recording grant valid after an update, and it blocks a swapped package. Ad-hoc builds have no stable requirement (it degrades to `cdhash`), so that last check is skipped for them.
+- **Install.** An app cannot replace itself while running, so a detached `/bin/sh` script waits for the process to exit, `ditto`-copies the new app next to the old one, strips quarantine, swaps with two `mv`s (rolling back on failure) and `open`s the result — never `open -n`, so the single-instance rule holds. Its log is `~/Library/Logs/Lucent/update.log`. If the app cannot be replaced in place (App Translocation, read-only location) the new version is still downloaded and verified, and the UI offers “Show in Finder”.
+- **Scheduling.** Auto-check runs 8 s after launch and then hourly, at most once per 6 h; it can be switched off in Settings › About, a version can be skipped, and automatic checks stay silent on failure (manual checks show the error). The Debug (`.dev`) channel never auto-checks unless `LUCENT_UPDATE_API` is set.
+- **Testing hooks.** `LUCENT_UPDATE_API` replaces the `latest` endpoint (disabling the web fallback); the DEBUG-only `--update-now` flag checks and installs immediately. Together with a local HTTP server they give an end-to-end run without publishing anything — `Scripts/e2e-update.sh` automates it (normal update, tampered checksum, different signing identity).
+- **UI.** `UI/Settings/UpdateSettingsSection` (inside the About pane) renders `UpdateManager.state`; the menu bar item “Check for Updates…” opens it and shows “Update Available: Lucent x.y.z…” when a newer version is known.
 
 ## Build channels
 

@@ -25,4 +25,5 @@ nonisolated enum Log {
     static let permissions = logger("permissions")
     static let settings = logger("settings")
     static let notifications = logger("notifications")
+    static let update = logger("update")
 }

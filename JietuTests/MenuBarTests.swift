@@ -25,6 +25,33 @@ struct MenuBarTests {
         #expect(titles.contains { accessibilityTitles.contains($0) })
     }
 
+    @Test("「检查更新…」菜单项：标题跟随更新状态，点击触发回调")
+    @MainActor
+    func checkForUpdatesItem() {
+        let menuBar = MenuBarController()
+        var hasUpdate = false
+        menuBar.updateStateProvider = {
+            hasUpdate
+                ? (title: L10n.updateMenuAvailable("9.9.9"), hasUpdate: true)
+                : (title: L10n.updateMenuCheck, hasUpdate: false)
+        }
+        var called = false
+        menuBar.onCheckForUpdates = { called = true }
+
+        menuBar.refresh()
+        let menu = menuBar.menuForTesting
+        #expect(menu.items.contains { $0.title == L10n.updateMenuCheck })
+
+        hasUpdate = true
+        menuBar.refresh()
+        guard let item = menu.items.first(where: { $0.title == L10n.updateMenuAvailable("9.9.9") }) else {
+            Issue.record("有新版本时菜单项标题应点明版本号")
+            return
+        }
+        _ = item.target?.perform(item.action, with: item)
+        #expect(called)
+    }
+
     @Test("点击拖拽授权「辅助功能」触发 onAuthorizeAccessibility 回调")
     @MainActor
     func authorizeAccessibilityActionTriggered() {

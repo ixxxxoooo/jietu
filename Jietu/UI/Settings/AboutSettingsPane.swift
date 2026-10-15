@@ -8,6 +8,8 @@ import SwiftUI
 ///
 /// @author ixxxxoooo
 struct AboutSettingsPane: View {
+    @Bindable var updates: UpdateManager
+
     private static let iconSize: CGFloat = 88
 
     private static var version: String {
@@ -25,6 +27,8 @@ struct AboutSettingsPane: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Theme.Spacing.lg)
                 }
+
+                UpdateSettingsSection(updates: updates)
 
                 Section {
                     LabeledContent(L10n.aboutBuildChannel) {

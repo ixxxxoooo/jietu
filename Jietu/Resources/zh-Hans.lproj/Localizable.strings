@@ -610,3 +610,48 @@
 
 "writer_error.video_track" = "视频轨加不进去";
 "writer_error.start_writing" = "startWriting 失败";
+
+// MARK: - Update
+
+"update.menu.check" = "检查更新…";
+"update.menu.available" = "发现新版本 %@，点击更新…";
+"update.section" = "软件更新";
+"update.current_version" = "当前版本";
+"update.auto_check" = "自动检查更新";
+"update.check_now" = "立即检查";
+"update.checking" = "正在检查更新…";
+"update.up_to_date" = "已是最新版本";
+"update.last_checked" = "上次检查：%@";
+"update.available_title" = "发现新版本 %@";
+"update.install" = "下载并安装";
+"update.skip" = "跳过此版本";
+"update.release_notes" = "更新说明";
+"update.view_release" = "查看发布页";
+"update.downloading" = "正在下载… %d%%";
+"update.cancel" = "取消";
+"update.verifying" = "正在校验安装包…";
+"update.installing" = "正在安装，Lucent 即将自动重启…";
+"update.retry" = "重试";
+"update.dismiss" = "知道了";
+"update.show_in_finder" = "在 Finder 中显示新版本";
+"update.manual_download" = "手动下载";
+"update.footer" = "更新来自 GitHub Releases，安装前会校验 SHA-256 与代码签名；升级后「屏幕录制」授权保持不变。";
+"update.dev_note" = "开发版：不自动检查更新，可用「立即检查」手动测试。";
+"update.error.no_asset" = "该版本暂未提供可安装的更新包，请到发布页手动下载。";
+"update.error.invalid_response" = "更新服务器返回了无法识别的响应。";
+"update.error.http_status" = "更新服务器返回错误（HTTP %d）。";
+"update.error.checksum_missing" = "该安装包没有发布校验值，出于安全考虑已拒绝安装。";
+"update.error.checksum_mismatch" = "下载的安装包未通过完整性校验，已丢弃。";
+"update.error.download_failed" = "下载失败：%@";
+"update.error.unpack_failed" = "解压更新包失败：%@";
+"update.error.validation_failed" = "更新包校验未通过：%@";
+"update.error.launch_failed" = "无法启动安装程序：%@";
+"update.error.no_app_in_zip" = "安装包里没有找到 App。";
+"update.error.bundle_id_mismatch" = "安装包不属于本 App。";
+"update.error.version_mismatch" = "安装包版本（%@）与发布版本不一致。";
+"update.error.identity_mismatch" = "安装包的签名身份与当前 App 不一致。";
+"update.error.not_app_bundle" = "当前不是从 App 包里运行的，无法自我更新。";
+"update.error.translocated" = "Lucent 正在从临时位置运行，请先把它拖到「应用程序」文件夹。";
+"update.error.not_writable" = "没有权限修改 %@。";
+"update.error.check_failed" = "检查更新失败：%@";
+"update.error.manual_install" = "%@ 新版本已下载好，可在 Finder 中手动替换。";

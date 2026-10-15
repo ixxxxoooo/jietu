@@ -15,6 +15,7 @@
 | `AppDelegate+Scrolling.swift` | — | ✅ 滚动长图流程 |
 | `AppDelegate+Delivery.swift` | — | ✅ 落盘/剪贴板/通知 |
 | `AppDelegate+SelfTest.swift` | — | （自身即自检） |
+| `AppDelegate+Update.swift` | `UpdateManagerTests`（状态机） | ✅ 端到端（`--update-now`） |
 | `JietuApp.swift` | — | — |
 
 ## Core（根目录）
@@ -23,6 +24,7 @@
 |--------|----------|----------|
 | `AppIdentity.swift` | `AppIdentityTests` | — |
 | `L10n.swift` | `SettingsPanesConsistencyTests` (间接) | — |
+| `L10n+Update.swift` | `ReleaseInfoTests` (间接) | — |
 
 ## Core/Annotation
 
@@ -174,6 +176,18 @@
 | `SelectionCursor.swift` | — | ✅ 光标切换 |
 | `SelectionGeometry.swift` | `SelectionGeometryTests` | — |
 
+## Core/Update
+
+| 源文件 | 单元测试 | selftest |
+|--------|----------|----------|
+| `SemanticVersion.swift` | `SemanticVersionTests` | — |
+| `ReleaseInfo.swift` | `ReleaseInfoTests` | — |
+| `GitHubReleaseParser.swift` | `GitHubReleaseParserTests` | — |
+| `UpdateChecker.swift` | `UpdateCheckerTests` | — |
+| `UpdateInstaller.swift` | `UpdateInstallerTests` | — |
+| `UpdateInstaller+Install.swift` | `UpdateInstallerInstallTests` | ✅ 端到端（`--update-now` + `LUCENT_UPDATE_API`） |
+| `UpdateManager.swift` | `UpdateManagerTests` | ✅ 端到端 |
+
 ## UI/Annotation
 
 | 源文件 | 单元测试 | selftest |
@@ -254,6 +268,7 @@
 | 源文件 | 单元测试 | selftest |
 |--------|----------|----------|
 | `AboutSettingsPane.swift` | — | — |
+| `UpdateSettingsSection.swift` | `UpdateManagerTests`（状态来源） | ✅ 端到端 |
 | `AppearanceSettingsPane.swift` | — | — |
 | `AnnotationSettingsPane.swift` | — | — |
 | `CaptureSettingsPane.swift` | — | — |

@@ -610,3 +610,48 @@
 
 "writer_error.video_track" = "Cannot add video track";
 "writer_error.start_writing" = "startWriting failed";
+
+// MARK: - Update
+
+"update.menu.check" = "Check for Updates…";
+"update.menu.available" = "Update Available: Lucent %@…";
+"update.section" = "Software Update";
+"update.current_version" = "Current Version";
+"update.auto_check" = "Check for updates automatically";
+"update.check_now" = "Check Now";
+"update.checking" = "Checking for updates…";
+"update.up_to_date" = "Lucent is up to date";
+"update.last_checked" = "Last checked %@";
+"update.available_title" = "Lucent %@ is available";
+"update.install" = "Download & Install";
+"update.skip" = "Skip This Version";
+"update.release_notes" = "Release Notes";
+"update.view_release" = "View Release Page";
+"update.downloading" = "Downloading… %d%%";
+"update.cancel" = "Cancel";
+"update.verifying" = "Verifying the download…";
+"update.installing" = "Installing — Lucent will restart shortly…";
+"update.retry" = "Retry";
+"update.dismiss" = "Dismiss";
+"update.show_in_finder" = "Show New Version in Finder";
+"update.manual_download" = "Download Manually";
+"update.footer" = "Updates come from GitHub Releases and are verified (SHA-256 and code signature) before installing. Your Screen Recording permission is kept.";
+"update.dev_note" = "Development build — automatic checks are off; use “Check Now” to test.";
+"update.error.no_asset" = "This release has no installable package yet. Please download it from the release page.";
+"update.error.invalid_response" = "The update server returned an unexpected response.";
+"update.error.http_status" = "The update server returned an error (HTTP %d).";
+"update.error.checksum_missing" = "No checksum was published for this package, so it was not installed.";
+"update.error.checksum_mismatch" = "The downloaded package failed its integrity check and was discarded.";
+"update.error.download_failed" = "Download failed: %@";
+"update.error.unpack_failed" = "Could not unpack the update: %@";
+"update.error.validation_failed" = "The update failed validation: %@";
+"update.error.launch_failed" = "Could not start the installer: %@";
+"update.error.no_app_in_zip" = "The package does not contain an app.";
+"update.error.bundle_id_mismatch" = "The package belongs to a different app.";
+"update.error.version_mismatch" = "The package version (%@) does not match the release.";
+"update.error.identity_mismatch" = "The package is not signed by the same identity as the installed app.";
+"update.error.not_app_bundle" = "Lucent is not running from an app bundle, so it cannot update itself.";
+"update.error.translocated" = "Lucent is running from a temporary location. Move it to the Applications folder first.";
+"update.error.not_writable" = "No permission to modify %@.";
+"update.error.check_failed" = "Could not check for updates: %@";
+"update.error.manual_install" = "%@ The new version has been downloaded — replace the app manually in Finder.";

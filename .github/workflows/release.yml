@@ -148,10 +148,15 @@ jobs:
         run: |
           set -euo pipefail
           DMG_PATH="$(ls dist/Lucent-*.dmg)"
-          ( cd dist && shasum -a 256 "$(basename "$DMG_PATH")" > SHA256SUMS.txt )
+          # 在线更新包：App 内「检查更新」下载它（命名约定见 Scripts/build-dmg.sh），
+          # 同名 .sha256 一并上传，缺一个就让发布失败，免得发出一个更新不了的版本。
+          ZIP_PATH="$(ls dist/Lucent-*-macOS.zip)"
+          [ -f "$ZIP_PATH.sha256" ] || { echo "::error::缺少 $ZIP_PATH.sha256"; exit 1; }
+          ( cd dist && shasum -a 256 "$(basename "$DMG_PATH")" "$(basename "$ZIP_PATH")" > SHA256SUMS.txt )
           cat dist/SHA256SUMS.txt
           echo "dmg_path=$DMG_PATH" >> "$GITHUB_OUTPUT"
           echo "dmg_name=$(basename "$DMG_PATH")" >> "$GITHUB_OUTPUT"
+          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
 
       # Release 正文 = 本版本的 CHANGELOG 小节 + 安装与权限说明。
       - name: Compose release notes
@@ -191,6 +196,12 @@ jobs:
             If **Lucent.app is already listed but the app still reports "not granted"**,
             select that row, remove it with **−**, add it again, and restart Lucent.
           - **Accessibility** (optional, for auto-scroll): System Settings › Privacy & Security › Accessibility → add Lucent.
+
+          ### Updating
+
+          Already installed? Use **Check for Updates…** in the menu bar — Lucent downloads
+          `Lucent-<version>-macOS.zip`, verifies its SHA-256 and code signature, replaces itself and restarts.
+          Your Screen Recording permission is kept.
           NOTES
           } > release-notes.md
           cat release-notes.md
@@ -201,6 +212,8 @@ jobs:
           name: Lucent-${{ github.ref_name }}
           path: |
             ${{ steps.checksum.outputs.dmg_path }}
+            ${{ steps.checksum.outputs.zip_path }}
+            ${{ steps.checksum.outputs.zip_path }}.sha256
             dist/SHA256SUMS.txt
 
       - name: Create GitHub Release
@@ -211,6 +224,8 @@ jobs:
           body_path: release-notes.md
           files: |
             ${{ steps.checksum.outputs.dmg_path }}
+            ${{ steps.checksum.outputs.zip_path }}
+            ${{ steps.checksum.outputs.zip_path }}.sha256
             dist/SHA256SUMS.txt
           draft: false
           prerelease: false

@@ -61,6 +61,7 @@
 - 🪟 **Liquid Glass** — toolbars, panels, tooltips and settings use the native macOS 27 glass material
 - 🌙 **Theme** — system / light / dark
 - 🌍 **i18n** — English & Simplified Chinese (system language or manual in Settings)
+- 🔄 **Online updates** — checks GitHub Releases, verifies SHA-256 + code signature, replaces itself and restarts (Settings › About, or *Check for Updates…* in the menu bar)
 
 ## 📦 Installation
 
@@ -75,6 +76,10 @@ Download the latest `.dmg` from [Releases](https://github.com/ixxxxoooo/jietu/re
 > ```
 >
 > Alternatively: right-click **Lucent.app** → **Open** → **Open**.
+
+### Updating
+
+Use **Check for Updates…** in the menu bar (or Settings › About). Lucent downloads `Lucent-<version>-macOS.zip` from the latest release, verifies its SHA-256 and that it is signed by the same certificate as the running app, then replaces itself and relaunches — your Screen Recording permission is kept. If the app lives somewhere it cannot replace itself (for example it is still running from the DMG), the new version is downloaded and revealed in Finder for a manual swap.
 
 ### Grant Permissions
 

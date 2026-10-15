@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 这次原地编辑是从哪张浮窗卡片进来的：编辑确认后那张旧卡片让位（见 `deliver`）。
     var cardBeingEdited: UUID?
     let notifier = CaptureNotifier()
+    /// 在线更新（检查 / 下载 / 原地替换并重启）。
+    let updates = UpdateManager()
     var menuBar: MenuBarController?
     var onboarding: OnboardingWindowController?
     var settingsWindow: SettingsWindowController?
@@ -102,12 +104,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpHotkeys()
         setUpQuickAccess()
         setUpLaunchAtLogin()
+        setUpUpdates()
         notifier.requestAuthorizationIfNeeded()
         OCRService.warmUp()
 
         #if DEBUG
         // 需要**完整接线**的自检：就地工具栏的「滚动截图」要真的把会话跑起来。
         // 它不归 `--selftest` 那批管（那批在这之前就 return 了，没有 AppDelegate 接线）。
+        if CommandLine.arguments.contains(Self.updateNowFlag) {
+            runUpdateNow()
+            return
+        }
         if CommandLine.arguments.contains(CaptureSelfTest.appLevelInlineScrollFlag) {
             runInlineScrollAppTest()
             return
@@ -162,6 +169,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onAuthorizeAccessibility = { PermissionDragController.shared.present(pane: .accessibility) }
         menuBar.onOpenOnboarding = { [weak self] in self?.showOnboarding() }
         menuBar.onOpenSettings = { [weak self] in self?.showSettings() }
+        menuBar.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
+        menuBar.updateStateProvider = { [weak self] in
+            guard let updates = self?.updates else { return (title: L10n.updateMenuCheck, hasUpdate: false) }
+            return (title: updates.menuTitle, hasUpdate: updates.hasAvailableUpdate)
+        }
         menuBar.onRelaunch = { ScreenCapturePermission.relaunchApp() }
         menuBar.onQuit = { NSApp.terminate(nil) }
         menuBar.historyItemsProvider = { [weak self] in self?.historyItems() ?? [] }
@@ -373,7 +385,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             CaptureSelfTest.appLevelInlineScrollFlag, CaptureSelfTest.appLevelRecordingFlag,
             CaptureSelfTest.appLevelRecentMenuFlag, CaptureSelfTest.videoToolsFlag,
             CaptureSelfTest.appLevelTrimFlag, CaptureSelfTest.microphoneFlag,
-            CaptureSelfTest.windowFlag,
+            CaptureSelfTest.windowFlag, Self.updateNowFlag,
         ] where CommandLine.arguments.contains(flag) {
             return false
         }
@@ -407,9 +419,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         onboarding?.present()
     }
 
-    func showSettings() {
+    func showSettings(section: SettingsSection? = nil) {
         if settingsWindow == nil {
-            let controller = SettingsWindowController(settings: settings)
+            let controller = SettingsWindowController(settings: settings, updates: updates)
             controller.onHotkeyChange = { [weak self] action, hotkey in
                 guard let self else { return }
                 guard self.applyHotkey(hotkey, for: action) else {
@@ -425,7 +437,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             settingsWindow = controller
         }
-        settingsWindow?.present()
+        settingsWindow?.present(section: section)
     }
 
     /// 热键被占用时的提示。

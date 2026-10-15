@@ -147,6 +147,19 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
 - CI 与 Release 都跑在 **`xcode-27`** runner 上（macOS 27 + Xcode 27，GitHub 的 preview 镜像）：
   工程部署目标是 macOS 27，`macos-26` 及更早的镜像里既没有 Xcode 27，测试宿主也起不来。
 
+## 在线更新
+
+App 内「检查更新…」（`Core/Update/`，设计见 `docs/ARCHITECTURE.md`「Online update」）。几条红线：
+
+- **发布必须带更新包**：`build-dmg.sh` 产出 `Lucent-<版本>-macOS.zip` + `.sha256`，release workflow 缺任何一个就失败；
+  App 端按 `-macOS.zip` 后缀认包，改命名要两边一起改。
+- **新包必须满足当前 App 的 designated requirement**（同一张 `Jietu` 证书），这是升级后屏幕录制授权不丢的保证，
+  别为了省事去掉这一环；没有校验值（`digest` / `.sha256`）一律拒绝安装。
+- 改了 `Core/Update/`、安装脚本或打包脚本后，除单元测试外跑一遍真机端到端：
+  `bash Scripts/e2e-update.sh`（本地假发布服务 + 真安装脚本，3 个场景：正常更新 / 摘要被篡改 / 身份不同；
+  需要 Debug 构建、证书 `Jietu`、桌面会话，会临时退出正在运行的 Lucent Dev，结束后自动拉回）。
+- 测试钩子：`LUCENT_UPDATE_API` 替换 latest 接口；DEBUG 专用 `--update-now`。Dev 渠道默认不自动检查。
+
 ## 单实例
 
 Debug / Release 各自只有一个实例：

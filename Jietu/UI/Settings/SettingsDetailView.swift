@@ -9,6 +9,7 @@ import SwiftUI
 struct SettingsDetailView: View {
     @Bindable var settings: SettingsStore
     @Bindable var navigation: SettingsNavigationState
+    var updates: UpdateManager
     var onHotkeyChange: (HotkeyAction, Hotkey?) -> Void
 
     var body: some View {
@@ -31,7 +32,7 @@ struct SettingsDetailView: View {
             case .permission:
                 PermissionSettingsPane()
             case .about:
-                AboutSettingsPane()
+                AboutSettingsPane(updates: updates)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
