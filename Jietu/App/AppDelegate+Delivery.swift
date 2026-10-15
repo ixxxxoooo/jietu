@@ -25,7 +25,7 @@ extension AppDelegate {
         }
     }
 
-    /// 窗口截图完成：优先独立截取纯净窗口（无视遮挡），应用原生圆角与 macOS 拟物多层柔和阴影，最后交付。
+    /// 窗口截图完成：独立截取用户点中的那个窗口（无视遮挡），应用原生圆角与阴影，最后交付。
     func handleWindowCaptured(window: WindowInfo, snapshot: DisplaySnapshot) {
         Task { @MainActor in
             do {

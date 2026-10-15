@@ -12,7 +12,8 @@ final class OverlayCanvasView: NSView {
 
     // MARK: - Inputs
 
-    let snapshot: DisplaySnapshot
+    /// 冻结画面。窗口截图选中后会把目标窗口的「干净画面」盖上去（见 `+CleanWindow`），所以可变。
+    var snapshot: DisplaySnapshot
     let session: CaptureSession
     let displayIndex: Int
     let displayCount: Int
@@ -50,6 +51,8 @@ final class OverlayCanvasView: NSView {
     var onSelectionChanged: ((CGRect?) -> Void)?
     /// 用户选定某个窗口（单击窗口触发）。
     var onWindowSelected: ((WindowInfo) -> Void)?
+    /// 按窗口号独立截取「干净」的整个窗口（无视遮挡）。没设置（单元测试）就不换底图。
+    var cleanWindowProvider: ((WindowInfo) async -> CGImage?)?
 
     /// 拖动中判定「停住」的时长；停住就浮出工具栏，不必等用户松手。
     static let regionPickPauseDelay: TimeInterval = 0.35

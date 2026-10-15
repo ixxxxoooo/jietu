@@ -39,6 +39,11 @@ final class OverlayWindowController {
         get { canvas.onWindowSelected }
         set { canvas.onWindowSelected = newValue }
     }
+    /// 按窗口号独立截取干净窗口画面（窗口截图选中后换进冻结画面）。
+    var cleanWindowProvider: ((WindowInfo) async -> CGImage?)? {
+        get { canvas.cleanWindowProvider }
+        set { canvas.cleanWindowProvider = newValue }
+    }
 
     /// 鼠标在选区上停住（或松手）→ 选区 local 矩形。
     var onSelectionPaused: ((CGRect) -> Void)? {

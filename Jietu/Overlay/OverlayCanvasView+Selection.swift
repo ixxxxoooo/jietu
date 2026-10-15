@@ -182,6 +182,9 @@ extension OverlayCanvasView {
         cursorPoint = point
 
         if isWindowOnlyMode {
+            // 以「按下的这一点」为准重新命中窗口：悬停状态可能是旧的（鼠标没动过、
+            // 或窗口清单在鼠标移动之后才就绪），不能拿它当「用户点的是哪个窗口」。
+            updateHoveredWindow(at: point)
             interaction = .pressing(anchor: point)
             // 按下的瞬间收起吸附描边（单击命中窗口靠的是 `hoveredWindow` 状态，不影响）。
             updateWindowHighlight()
@@ -350,7 +353,8 @@ extension OverlayCanvasView {
 
         switch interaction {
         case .pressing:
-            // 单击：命中窗口
+            // 单击：命中窗口。再按松开的这一点校一次，保证「点哪个窗口就是哪个窗口」。
+            updateHoveredWindow(at: point)
             if let hoveredWindow {
                 // 录屏：不拖也行——点哪个窗口就录哪个窗口。
                 if isRecordMode {
@@ -395,6 +399,8 @@ extension OverlayCanvasView {
                     Self.rememberedSelection[snapshot.displayID] = selection
                     updateAllLayers()
                     enterAnnotating()
+                    // 冻结画面里这个窗口可能被别的窗口压住一块：异步换成它自己的干净画面。
+                    replaceWithCleanWindow(hoveredWindow)
                     return
                 }
                 onWindowSelected?(hoveredWindow)

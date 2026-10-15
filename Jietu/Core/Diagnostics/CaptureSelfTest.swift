@@ -44,6 +44,9 @@ enum CaptureSelfTest {
     /// 所以它**允许**与正式实例同时在场（单例守卫为它放行）。
     static let videoToolsFlag = "--selftest-video-tools"
 
+    /// 窗口截图：逐个窗口走真实的 `captureWindow`，报告成败与尺寸（只读屏幕、不建窗口）。
+    static let windowFlag = "--selftest-window"
+
     /// 真接线打开裁剪窗口：复现「点裁剪就退出应用」这类只在完整接线里出现的问题。
     static let appLevelTrimFlag = "--selftest-app-trim"
 
@@ -145,6 +148,15 @@ enum CaptureSelfTest {
         case videoToolsFlag:
             // 成片再加工：造一段合成视频，跑真实的 GIF 导出与裁剪导出，读回产物校验。
             VideoToolsSelfTest.run(
+                outputDirectory: URL(
+                    fileURLWithPath: value ?? NSTemporaryDirectory(),
+                    isDirectory: true
+                )
+            )
+            return true
+
+        case windowFlag:
+            WindowCaptureSelfTest.run(
                 outputDirectory: URL(
                     fileURLWithPath: value ?? NSTemporaryDirectory(),
                     isDirectory: true

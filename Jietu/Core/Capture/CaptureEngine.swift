@@ -101,13 +101,18 @@ final class CaptureEngine {
     /// 用 `SCContentFilter(desktopIndependentWindow:)` 直接按窗口抓，
     /// 不需要弹遮罩，也不会把遮挡它的窗口拍进去。
     ///
-    /// 只有这里需要**完整**窗口清单（含别的 Space 里的窗口），所以显式要离屏窗口。
+    /// 屏幕上的窗口清单里找不到目标时，才退回完整清单（含别的 Space 里的窗口）。
     func captureWindow(_ window: WindowInfo) async throws -> CGImage {
         guard ScreenCapturePermission.isGranted else {
             throw CaptureError.permissionDenied
         }
 
-        let content = try await shareableContent(onScreenWindowsOnly: false)
+        // 用户点中的窗口一定在屏幕上：先只查屏幕上的窗口（几十毫秒），
+        // 找不到才退回完整清单（要枚举所有进程的离屏窗口，一次往返 1s 以上）。
+        var content = try await shareableContent(onScreenWindowsOnly: true)
+        if !content.windows.contains(where: { $0.windowID == window.windowID }) {
+            content = try await shareableContent(onScreenWindowsOnly: false)
+        }
         guard let scWindow = content.windows.first(where: { $0.windowID == window.windowID }) else {
             throw CaptureError.windowNotCapturable(window.windowID)
         }

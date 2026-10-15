@@ -126,6 +126,9 @@ final class OverlayCoordinator {
             controller.isRecordMode = (purpose == .record || purpose == .recordWindow)
             // 专选窗口模式（直接高亮并选窗）：截图的那档和「窗口录制」共用。
             controller.isWindowOnlyMode = (purpose == .windowCapture || purpose == .recordWindow)
+            controller.cleanWindowProvider = { window in
+                try? await CaptureEngine().captureWindow(window)
+            }
             controller.onWindowSelected = { [weak self] window in
                 self?.finish(
                     .windowCaptured(window: window, snapshot: snapshot),

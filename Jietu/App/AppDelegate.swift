@@ -373,6 +373,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             CaptureSelfTest.appLevelInlineScrollFlag, CaptureSelfTest.appLevelRecordingFlag,
             CaptureSelfTest.appLevelRecentMenuFlag, CaptureSelfTest.videoToolsFlag,
             CaptureSelfTest.appLevelTrimFlag, CaptureSelfTest.microphoneFlag,
+            CaptureSelfTest.windowFlag,
         ] where CommandLine.arguments.contains(flag) {
             return false
         }

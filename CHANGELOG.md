@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] — 2026-10-16
+
+### Fixed
+- **Window capture now captures the window you click.** Clicking a window that was partly covered by another one used to produce an image with the covering window baked in, because the editor cropped the frozen screen photo. The clicked window is now captured on its own (occlusion-free) and swapped into the frozen frame, so what you edit and save is that window only.
+- The window under the pointer is resolved from the actual click position (on mouse-down and mouse-up) instead of the last hover state, so a click can no longer pick a stale window when the pointer did not move before clicking.
+- Capturing a single window no longer waits for a full off-screen window enumeration (about a second); it looks at on-screen windows first and only falls back to the full list when needed.
+
+### Added
+- `--selftest-window` (DEBUG): captures the frontmost windows one by one through the real window-capture path and reports success and size.
+
 ## [0.1.0] — 2026-10-16
 
 ### Changed
