@@ -8,12 +8,60 @@ on:
   # 用来在真机 runner 上验证打包流程，通过了再打 tag。
   workflow_dispatch:
 
+# 默认只读；只有真正发布的 job 才提升到 contents: write。
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  # 闸门 1：tag、工程版本、CHANGELOG 必须是同一个版本号，否则不浪费 macOS 分钟数。
+  verify:
+    name: Verify version & changelog
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check release metadata
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            bash Scripts/check-release.sh "$GITHUB_REF_NAME"
+          else
+            bash Scripts/check-release.sh
+          fi
+
+  # 闸门 2：测试不过不出包（和 CI 同一条命令）。
+  test:
+    name: Test
+    needs: verify
+    runs-on: macos-26
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          XCODE="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+          [ -n "$XCODE" ] || XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          echo "Using ${XCODE}"
+          sudo xcode-select -s "$XCODE"
+
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
+            -destination 'platform=macOS' -derivedDataPath .build \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Automatic \
+            test \
+            | xcbeautify --renderer github-actions
+
   build-and-release:
     name: Build DMG & Create Release
+    needs: [verify, test]
+    permissions:
+      contents: write
     # 工程的部署目标是 macOS 26，构建/签名/排版/打包全部交给 Scripts/build-dmg.sh。
     # runner 上没有本机的自签名证书「Jietu」，所以下面那步先把证书从 secrets 导进
     # 临时钥匙串：build-dmg.sh 找不到证书就拒绝产出 ad-hoc 签名的 DMG。
@@ -86,54 +134,76 @@ jobs:
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/jietu-signing.keychain-db" || true
 
+      # SHA256SUMS.txt 与 DMG 放在同一目录，用户下载后可直接 `shasum -a 256 -c SHA256SUMS.txt`。
       - name: Compute checksums
         id: checksum
         run: |
+          set -euo pipefail
           DMG_PATH="$(ls dist/Jietu-*.dmg)"
-          SHA256="$(shasum -a 256 "$DMG_PATH" | cut -d' ' -f1)"
+          ( cd dist && shasum -a 256 "$(basename "$DMG_PATH")" > SHA256SUMS.txt )
+          cat dist/SHA256SUMS.txt
           echo "dmg_path=$DMG_PATH" >> "$GITHUB_OUTPUT"
-          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
           echo "dmg_name=$(basename "$DMG_PATH")" >> "$GITHUB_OUTPUT"
+
+      # Release 正文 = 本版本的 CHANGELOG 小节 + 安装与权限说明。
+      - name: Compose release notes
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/changes.md"
+          [ -s "$RUNNER_TEMP/changes.md" ] \
+            || { echo "::error::CHANGELOG 里找不到 $VERSION 的内容"; exit 1; }
+          {
+            echo "## Jietu $VERSION"
+            echo
+            cat "$RUNNER_TEMP/changes.md"
+            echo
+            cat <<'NOTES'
+          ### Installation
+
+          1. Download the DMG below and (optionally) verify it with `SHA256SUMS.txt`:
+             `shasum -a 256 -c SHA256SUMS.txt`
+          2. Open the DMG and drag **Jietu.app** onto the **Applications** folder.
+          3. Before first launch, remove the quarantine flag in Terminal
+             (the release is self-signed, not notarized):
+             ```
+             xattr -dr com.apple.quarantine /Applications/Jietu.app
+             ```
+             The DMG also ships `安装说明.txt` — the same line, ready to copy.
+
+          ### Permissions
+
+          - **Screen Recording** (required): System Settings › Privacy & Security ›
+            Screen & System Audio Recording → drag Jietu in (or click **+** and pick it)
+            → turn it on → then restart Jietu.
+            If **Jietu.app is already listed but the app still reports "not granted"**,
+            select that row, remove it with **−**, add it again, and restart Jietu.
+          - **Accessibility** (optional, for auto-scroll): System Settings › Privacy & Security › Accessibility → add Jietu.
+          NOTES
+          } > release-notes.md
+          cat release-notes.md
 
       - name: Upload DMG as artifact
         uses: actions/upload-artifact@v6
         with:
           name: Jietu-${{ github.ref_name }}
-          path: ${{ steps.checksum.outputs.dmg_path }}
+          path: |
+            ${{ steps.checksum.outputs.dmg_path }}
+            dist/SHA256SUMS.txt
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:
           name: Jietu ${{ steps.version.outputs.version }}
-          body: |
-            ## Jietu ${{ steps.version.outputs.version }}
-
-            ### Installation
-
-            1. Download `${{ steps.checksum.outputs.dmg_name }}` below.
-            2. Open the DMG and drag **Jietu.app** onto the **Applications** folder.
-            3. Before first launch, remove the quarantine flag in Terminal:
-               ```
-               xattr -dr com.apple.quarantine /Applications/Jietu.app
-               ```
-               The DMG also ships `安装说明.txt` — the same line, ready to copy.
-
-            ### Permissions
-
-            - **Screen Recording** (required): System Settings › Privacy & Security ›
-              Screen & System Audio Recording → drag Jietu in (or click **+** and pick it)
-              → turn it on → then restart Jietu.
-              If **Jietu.app is already listed but the app still reports "not granted"**,
-              select that row, remove it with **−**, add it again, and restart Jietu.
-            - **Accessibility** (optional, for auto-scroll): System Settings › Privacy & Security › Accessibility → add Jietu.
-
-            ### Checksum
-
-            ```
-            SHA-256: ${{ steps.checksum.outputs.sha256 }}
-            ```
-          files: ${{ steps.checksum.outputs.dmg_path }}
+          body_path: release-notes.md
+          files: |
+            ${{ steps.checksum.outputs.dmg_path }}
+            dist/SHA256SUMS.txt
           draft: false
           prerelease: false
         env:

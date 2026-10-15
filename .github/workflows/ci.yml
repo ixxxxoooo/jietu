@@ -7,11 +7,40 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# 最小权限：CI 只需要读代码。
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # 脚本与发版元数据的静态检查：不需要 macOS 26，用便宜的 runner。
+  lint:
+    name: Lint scripts & release metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: ShellCheck
+        run: shellcheck -S warning Scripts/*.sh
+
+      # 工程版本与 CHANGELOG 最新条目必须一致，否则尽早失败。
+      - name: Release metadata is consistent
+        run: bash Scripts/check-release.sh
+
+  swiftlint:
+    name: SwiftLint (advisory)
+    runs-on: ubuntu-latest
+    container: ghcr.io/realm/swiftlint:latest
+    # 风格提示，不阻塞合并：违规以注解形式出现在 PR 上。
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: SwiftLint
+        run: swiftlint lint --reporter github-actions-logging
+
   build-and-test:
     name: Build & Test
     # 工程的部署目标是 macOS 26，必须跑在 macOS 26 的 runner 上：
@@ -44,6 +73,16 @@ jobs:
           set -o pipefail
           xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
             -destination 'platform=macOS' -derivedDataPath .build \
+            -resultBundlePath TestResults.xcresult \
             CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Automatic \
             test \
             | xcbeautify --renderer github-actions
+
+      # 失败时留下结果包，方便下载后用 Xcode 打开定位。
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: TestResults
+          path: TestResults.xcresult
+          retention-days: 7

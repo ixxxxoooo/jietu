@@ -8,7 +8,7 @@
 #
 # 用法：bash Scripts/restart-dev.sh
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 APP=".build/Build/Products/Debug/Jietu Dev.app"
 BIN="$APP/Contents/MacOS/Jietu Dev"
