@@ -176,4 +176,34 @@ struct HistoryStoreTests {
         let reopened = HistoryStore(directory: directory)
         #expect(reopened.entries.isEmpty, "本体没了，这条就该消失")
     }
+
+    @Test("录屏条目写不进（历史目录不可写）：临时视频原样留在原处，不会变成无主孤儿")
+    func failedVideoRecordKeepsTemporaryFile() throws {
+        let (store, directory) = makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // 让「历史目录」是一个同名的普通文件：封面与视频都写不进去。
+        try Data("blocker".utf8).write(to: directory)
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jietu-keep-\(UUID().uuidString).mp4")
+        try Data("fake".utf8).write(to: tempURL)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        #expect(store.recordVideo(temporaryURL: tempURL, cover: image(), duration: 2) == nil)
+        #expect(FileManager.default.fileExists(atPath: tempURL.path), "失败时视频不能被搬走或删掉")
+        #expect(store.entries.isEmpty)
+    }
+
+    @Test("用户另存的那份被删掉后，读原图回退到历史目录里的 PNG")
+    func imageFallsBackToHistoryCopy() throws {
+        let (store, directory) = makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let entry = try #require(store.record(image(width: 12, height: 8)))
+        store.attachSavedFile(directory.appendingPathComponent("已经被删掉的另存.png"), to: entry.id)
+        let updated = try #require(store.entries.first)
+
+        let loaded = try #require(store.image(for: updated), "另存的那份不在时应回退到历史那份")
+        #expect(loaded.width == 12 && loaded.height == 8)
+    }
 }

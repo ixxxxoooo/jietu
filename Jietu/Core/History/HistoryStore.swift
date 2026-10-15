@@ -110,16 +110,19 @@ final class HistoryStore {
         let id = UUID().uuidString
         let stamp = Self.fileStamp(date)
 
-        // 搬视频到历史目录（主副本）
-        let videoDestination = directory.appendingPathComponent("\(stamp)-\(id.prefix(8)).mp4")
-        guard (try? FileManager.default.moveItem(at: temporaryURL, to: videoDestination)) != nil
-        else { return nil }
-
-        // 存封面缩略图
+        // 先存封面再搬视频：封面写不进就整体放弃，视频还留在原处，不会出现「视频搬走了、索引里没有」的孤儿文件。
         let coverURL = directory.appendingPathComponent("\(stamp)-\(id.prefix(8))-cover.png")
         guard let data = CaptureOutput.pngData(cover),
             (try? data.write(to: coverURL, options: .atomic)) != nil
         else { return nil }
+
+        // 搬视频到历史目录（主副本）；搬不动就把刚写的封面一起收回。
+        let videoDestination = directory.appendingPathComponent("\(stamp)-\(id.prefix(8)).mp4")
+        guard (try? FileManager.default.moveItem(at: temporaryURL, to: videoDestination)) != nil
+        else {
+            try? FileManager.default.removeItem(at: coverURL)
+            return nil
+        }
 
         let entry = HistoryEntry(
             id: id, date: date, historyPath: Self.normalizedPath(coverURL),
@@ -170,9 +173,9 @@ final class HistoryStore {
 
     /// 读原图（复制用）。历史那份永远是 PNG，直接解。
     func image(for entry: HistoryEntry) -> CGImage? {
-        NSImage(contentsOf: entry.displayURL)?.cgImage(
-            forProposedRect: nil, context: nil, hints: nil
-        )
+        // 用户那份被删 / 挪走时回退到历史目录里的原图，复制与预览不至于失败。
+        let image = NSImage(contentsOf: entry.displayURL) ?? NSImage(contentsOf: entry.historyURL)
+        return image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
     }
 
     // MARK: - 索引

@@ -81,6 +81,7 @@ final class OnboardingWindowController {
     }
 
     func close() {
+        model.stopPolling()
         window?.orderOut(nil)
         window = nil
         // 回到菜单栏代理模式。

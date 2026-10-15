@@ -173,6 +173,7 @@ final class OverlayWindowController {
             displayIndex: displayIndex,
             displayCount: displayCount
         )
+        canvas.assignedScreen = screen
         canvas.inlineMode = inlineMode
         canvas.allowsCrop = allowsCrop
         canvas.annotationDefaults = annotationDefaults

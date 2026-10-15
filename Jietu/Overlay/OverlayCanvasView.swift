@@ -111,6 +111,8 @@ final class OverlayCanvasView: NSView {
 
     /// 原地编辑模式：选区定下来后不立刻截图，而是在选框下方弹出工具栏原地标注。
     var inlineMode = false
+    /// 窗口控制器指定的所在屏幕（nil 时按显示器 ID 现查）。
+    var assignedScreen: NSScreen?
     /// 原地编辑时给不给「裁剪」工具。
     ///
     /// 只有「已有的图片」才给（从浮窗卡片 / 钉图 / 历史记录进来编辑的）；刚截下来的那块画面不给——

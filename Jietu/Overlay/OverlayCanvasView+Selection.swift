@@ -5,10 +5,16 @@ import AppKit
 /// @author ixxxxoooo
 extension OverlayCanvasView {
 
+    /// 这块遮罩所在的屏幕：窗口控制器建好后会直接指定，没指定（单元测试）才按显示器 ID 查。
     var screen: NSScreen {
-        NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID }
-            ?? NSScreen.screens.first
-            ?? NSScreen.main!
+        if let assignedScreen { return assignedScreen }
+        guard
+            let found = NSScreen.screens.first(where: { $0.jietu_displayID == snapshot.displayID })
+                ?? NSScreen.screens.first
+        else {
+            preconditionFailure("遮罩画布需要至少一块屏幕")
+        }
+        return found
     }
 
     func updateHoveredWindow(at point: CGPoint) {

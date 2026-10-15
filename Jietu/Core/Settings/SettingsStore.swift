@@ -366,7 +366,8 @@ final class SettingsStore {
     }
 
     /// 出厂默认保存目录：`~/Pictures/Jietu`。
-    private static func defaultSaveDirectory() -> URL {        let pictures = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first
+    private static func defaultSaveDirectory() -> URL {
+        let pictures = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first
         return (pictures ?? FileManager.default.homeDirectoryForCurrentUser)
             .appendingPathComponent("Jietu", isDirectory: true)
     }

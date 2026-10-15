@@ -43,7 +43,13 @@ extension AppDelegate {
                     "independent window capture failed: \(error.localizedDescription), falling back to screen crop"
                 )
                 // 2. 若独立捕获不可用（如特殊系统浮层），回退到底图截取并套用圆角与阴影
-                let screen = NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID } ?? NSScreen.main!
+                guard
+                    let screen = NSScreen.screens.first(where: { $0.jietu_displayID == snapshot.displayID })
+                        ?? NSScreen.main ?? NSScreen.screens.first
+                else {
+                    presentCaptureFailure(error)
+                    return
+                }
                 let localRect = DisplayGeometry.localRect(
                     fromCGRect: window.frameInCGPoints,
                     screen: screen
@@ -135,11 +141,13 @@ extension AppDelegate {
         cardBeingEdited = sourceCard
 
         // 确定目标屏幕：优先包含 anchor 的屏幕，否则主屏幕
-        let targetScreen: NSScreen
-        if let anchor, anchor.width > 0, anchor.height > 0 {
-            targetScreen = NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main ?? NSScreen.screens.first!
-        } else {
-            targetScreen = NSScreen.main ?? NSScreen.screens.first!
+        let anchoredScreen: NSScreen? = {
+            guard let anchor, anchor.width > 0, anchor.height > 0 else { return nil }
+            return NSScreen.screens.first { $0.frame.intersects(anchor) }
+        }()
+        guard let targetScreen = anchoredScreen ?? NSScreen.main ?? NSScreen.screens.first else {
+            presentCaptureFailure(CaptureError.noDisplays)
+            return
         }
 
         Task { @MainActor in

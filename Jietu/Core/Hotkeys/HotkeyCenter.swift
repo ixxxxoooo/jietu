@@ -55,6 +55,17 @@ final class HotkeyCenter {
         entries.removeAll()
     }
 
+    /// 释放时一并摘掉 Carbon 回调：它的 `userData` 是不持有的 `self` 指针，
+    /// 留着的话对象没了、热键再触发就是野指针。
+    isolated deinit {
+        for entry in entries.values {
+            UnregisterEventHotKey(entry.ref)
+        }
+        if let eventHandler {
+            RemoveEventHandler(eventHandler)
+        }
+    }
+
     fileprivate func perform(id: UInt32) {
         entries[id]?.action()
     }
@@ -82,7 +93,8 @@ final class HotkeyCenter {
     }
 
     /// 'JTU1'
-    private static let signature: OSType = 0x4A545531
+    fileprivate nonisolated static let signatureValue: OSType = 0x4A545531
+    private static var signature: OSType { signatureValue }
 }
 
 /// Carbon 回调是 C 函数指针，不能捕获上下文，因此用 `userData` 把 self 传进来。
@@ -106,6 +118,10 @@ private nonisolated func jietuHotKeyEventHandler(
         &hotKeyID
     )
     guard status == noErr else { return status }
+    // 只认自己注册的热键（签名不符的交还给系统继续分发）。
+    guard hotKeyID.signature == HotkeyCenter.signatureValue else {
+        return OSStatus(eventNotHandledErr)
+    }
 
     let center = Unmanaged<HotkeyCenter>.fromOpaque(userData).takeUnretainedValue()
     MainActor.assumeIsolated {

@@ -48,8 +48,11 @@ enum WindowHitTester {
             // 太小的（提示气泡、tooltip）不值得吸附。
             guard frame.width >= 48, frame.height >= 48 else { return nil }
 
+            // 没有窗口号的条目没法被截取，直接丢掉（别拿 0 冒充一个窗口）。
+            guard let windowID = entry[kCGWindowNumber as String] as? CGWindowID else { return nil }
+
             return WindowInfo(
-                windowID: entry[kCGWindowNumber as String] as? CGWindowID ?? 0,
+                windowID: windowID,
                 ownerPID: ownerPID,
                 ownerName: entry[kCGWindowOwnerName as String] as? String ?? "",
                 title: entry[kCGWindowName as String] as? String ?? "",

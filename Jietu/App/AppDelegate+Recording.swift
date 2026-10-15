@@ -144,6 +144,8 @@ extension AppDelegate {
                 if settings.recordMicrophone {
                     wantsMicrophone = await MicrophoneCapture.requestPermission()
                 }
+                // 等授权的这段时间用户已经取消了：不要再起一个没有界面的录制。
+                guard recordingEngine === engine else { return }
                 let options = RecordingEngine.Options(
                     fps: settings.recordFrameRate,
                     capturesSystemAudio: settings.recordSystemAudio,

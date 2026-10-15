@@ -616,6 +616,8 @@ final class PinContentView: NSView {
         closeButton?.isHidden = true
         editButton?.isHidden = true
         translateButton?.isHidden = true
+        // 鼠标还停在钉图上时不会再来一次 mouseEntered，得自己把悬浮按钮请回来。
+        refreshFloatingButtons()
     }
 
     @objc private func handleExitLiveText() {

@@ -269,8 +269,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickAccess.onAnnotate = { [weak self] image, cardID in
             self?.openInlineEditor(image, allowsCrop: true, sourceCard: cardID)
         }
-        quickAccess.onPin = { image in
-            PinWindowController.pin(image: image, on: NSScreen.main)
+        quickAccess.onPin = { [weak self] image in
+            PinWindowController.pin(image: image, on: self?.screenUnderMouse())
         }
         // 录屏收工的那张卡：文件已经落盘了，能做的就是「拿去看 / 拿去找 / 拿去用」。
         quickAccess.onPlayVideo = { url in
@@ -322,8 +322,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.overlays.setOverlayHidden(false)
             }
         }
-        overlays.onPinImage = { image, screenRect in
-            PinWindowController.pin(image: image, on: NSScreen.main, targetFrame: screenRect)
+        overlays.onPinImage = { [weak self] image, screenRect in
+            PinWindowController.pin(image: image, on: self?.screenUnderMouse(), targetFrame: screenRect)
         }
         overlays.annotationDefaults = settings.annotationDefaults
         overlays.onAnnotationDefaultsChange = { [weak self] updated in

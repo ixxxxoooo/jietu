@@ -85,6 +85,10 @@ final class RecordingEngine {
     private var ticker: Timer?
 
     private(set) var isRunning = false
+    /// `start` 已经进来、采集流还没起好的那段（SCK 起流要等一会儿）。
+    private var isStarting = false
+    /// 起流期间收到了取消：流一起好就拆掉，不留「没有界面的幽灵录屏」。
+    private var cancelRequested = false
     private(set) var isPaused = false
     /// 这次录制麦克风**真的**启用了没。
     ///
@@ -101,8 +105,11 @@ final class RecordingEngine {
         options: Options = Options(),
         excludingWindowNumbers: [Int] = []
     ) async throws {
-        guard !isRunning else { return }
+        guard !isRunning, !isStarting else { return }
         guard ScreenCapturePermission.isGranted else { throw Failure.permissionDenied }
+        isStarting = true
+        cancelRequested = false
+        defer { isStarting = false }
 
         let region = regionInPoints.integral
         guard region.width >= 4, region.height >= 4 else { throw Failure.emptyRegion }
@@ -177,6 +184,15 @@ final class RecordingEngine {
         } catch {
             writer.cancel()
             throw Failure.startFailed(error.localizedDescription)
+        }
+
+        // 起流的这段时间用户取消了：把刚起好的流和临时文件原样拆掉。
+        if cancelRequested {
+            cancelRequested = false
+            try? await stream.stopCapture()
+            queue.sync {}
+            writer.cancel()
+            return
         }
 
         self.writer = writer
@@ -259,13 +275,18 @@ final class RecordingEngine {
     func stop() async {
         guard isRunning else { return }
         isRunning = false
-        if !(await finishCurrentSession()) {
-            onFail?(Failure.noFrames)
+        if let failure = await finishCurrentSession() {
+            onFail?(failure)
         }
     }
 
     /// 取消：停流、删掉临时文件、不回调。
     func cancel() async {
+        // 还在起流：记一笔，起好后由 `start` 自己拆掉。
+        if isStarting {
+            cancelRequested = true
+            return
+        }
         guard isRunning else { return }
         isRunning = false
         stopTicker()
@@ -282,28 +303,32 @@ final class RecordingEngine {
         isRunning = false
         logger.error("stream stopped: \(error.localizedDescription)")
         Task { @MainActor in
-            if !(await finishCurrentSession()) {
-                onFail?(Failure.stream(error))
+            if let failure = await finishCurrentSession() {
+                // 一帧都没有时，真正的原因是流断了；写盘出错则如实上报。
+                if case .noFrames = failure {
+                    onFail?(Failure.stream(error))
+                } else {
+                    onFail?(failure)
+                }
             }
         }
     }
 
-    /// 停流 → 排空回调 → 结束写入。返回是否已经交付（false = 调用方去报错）。
-    @discardableResult
-    private func finishCurrentSession() async -> Bool {
+    /// 停流 → 排空回调 → 结束写入。成功交付返回 nil，否则返回**真实**的失败原因。
+    private func finishCurrentSession() async -> Failure? {
         stopTicker()
         stopMicrophoneRecording()
         await stopStream()
         defer { cleanUp() }
-        guard let writer else { return false }
+        guard let writer else { return .noFrames }
         do {
             try await writer.finish()
             onFinish?(writer.url)
-            return true
+            return nil
         } catch {
             logger.error("finish failed: \(error.localizedDescription)")
             writer.cancel()
-            return false
+            return (error as? Failure) ?? .writer(error)
         }
     }
 

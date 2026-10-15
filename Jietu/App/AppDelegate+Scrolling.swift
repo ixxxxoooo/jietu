@@ -97,9 +97,9 @@ struct CaptureRegionTarget {
         // 必须用 `cgRect`（整块矩形换算）：local 的 origin 是左下角，翻到 cg 是上边，
         // 直接拿它配 size 会把选区整体往下推一个高度——滚轮发到别处、输入屏蔽区也会盖住控制条。
         let screen = NSScreen.screens.first { $0.jietu_displayID == snapshot.displayID }
-        let globalRect = screen.map {
-            DisplayGeometry.cgRect(fromLocal: localRect, screen: $0)
-        } ?? localRect
+        // 找不到屏幕就放弃这次取景：拿 local 矩形冒充全局坐标，合成滚轮会发到别处。
+        guard let screen else { return nil }
+        let globalRect = DisplayGeometry.cgRect(fromLocal: localRect, screen: screen)
 
         let selectionRect = CGRect(
             x: screenFrame.minX + localRect.minX,

@@ -67,6 +67,17 @@ struct HotkeyCenterTests {
         }
     }
 
+    @Test("HotkeyCenter 释放后不留悬空回调：反复创建销毁不会崩溃")
+    func repeatedCreateAndDestroyDoesNotCrash() {
+        for _ in 0..<5 {
+            let center = HotkeyCenter()
+            let hotkey = Hotkey(
+                keyCode: UInt32(kVK_ANSI_D), carbonModifiers: UInt32(cmdKey | optionKey | shiftKey)
+            )
+            _ = center.register(hotkey, action: {})
+        }
+    }
+
     @Test("注销后再注销同一个 ID 不崩溃")
     func unregisterTwiceDoesNotCrash() {
         let center = HotkeyCenter()
