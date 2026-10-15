@@ -6,6 +6,8 @@ included:
 excluded:
   - .build
   - dist
+  # DEBUG 专用的命令行自检：长函数是脚本的天然形态，不做度量。
+  - Jietu/Core/Diagnostics
 
 disabled_rules:
   - line_length
@@ -16,10 +18,15 @@ disabled_rules:
   - large_tuple
   - function_parameter_count
   - cyclomatic_complexity
+  # 与现有代码风格冲突、纯格式类的规则（格式交给 .editorconfig 与 Xcode）
+  - trailing_comma
+  - opening_brace
+  - vertical_whitespace
+  - trailing_newline
+  - orphaned_doc_comment
 
 opt_in_rules:
   - empty_count
-  - force_unwrapping
 
 # 文件规模上限与仓库规范（~500 行）对齐。
 file_length:

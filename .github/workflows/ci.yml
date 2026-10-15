@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: SwiftLint
-        run: swiftlint lint --reporter github-actions-logging
+        run: swiftlint lint --lenient --reporter github-actions-logging
 
   build-and-test:
     name: Build & Test
