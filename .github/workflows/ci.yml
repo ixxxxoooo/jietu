@@ -43,19 +43,24 @@ jobs:
 
   build-and-test:
     name: Build & Test
-    # 工程的部署目标是 macOS 26，必须跑在 macOS 26 的 runner 上：
-    # macos-15 上既没有 Xcode 27，测试宿主也起不来（deployment target 对不上）。
-    runs-on: macos-26
+    # 工程的部署目标是 macOS 27，必须跑在带 macOS 27 / Xcode 27 的 runner 上
+    # （`xcode-27` 镜像，目前是 GitHub 的 preview）：macos-26 及更早的镜像里既没有
+    # Xcode 27，测试宿主也起不来（deployment target 对不上）。
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v5
 
       - name: Select Xcode
         run: |
           set -euo pipefail
-          XCODE="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)"
-          [ -n "$XCODE" ] || XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          # 优先镜像默认的正式版 Xcode 27；没有再取任一 Xcode 27，最后才退回 Xcode.app。
+          # （pipefail 下 ls 没匹配会让整行失败，所以每条都带 `|| true`。）
+          XCODE=/Applications/Xcode_27.app
+          [ -d "$XCODE" ] || XCODE="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1 || true)"
+          [ -n "$XCODE" ] || XCODE=/Applications/Xcode.app
           echo "Using ${XCODE}"
           sudo xcode-select -s "$XCODE"
+          xcodebuild -version
 
       # pipefail 不能省：否则管道的状态取的是 xcbeautify（它总是返回 0），
       # 构建失败也会判成功——之前 CI 一直显示绿，就是这么来的。

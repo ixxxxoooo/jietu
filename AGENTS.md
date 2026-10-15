@@ -144,8 +144,8 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
   窗口背景图是不带 alpha 的 RGB（带 alpha 白涨约 180KB）。这几条 `build-dmg.sh` 里都有守门。
 - 只想验打包流程、不发布：在 Actions 里手动跑 `Release`（`workflow_dispatch`），
   它只构建并上传 artifact，不建 release。
-- CI 与 Release 都跑在 **`macos-26`** runner 上：工程部署目标是 macOS 26，
-  macos-15 上既没有 Xcode 26，测试宿主也起不来。
+- CI 与 Release 都跑在 **`xcode-27`** runner 上（macOS 27 + Xcode 27，GitHub 的 preview 镜像）：
+  工程部署目标是 macOS 27，`macos-26` 及更早的镜像里既没有 Xcode 27，测试宿主也起不来。
 
 ## 单实例
 

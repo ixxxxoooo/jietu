@@ -34,7 +34,7 @@ jobs:
   test:
     name: Test
     needs: verify
-    runs-on: macos-26
+    runs-on: xcode-27
     permissions:
       contents: read
     steps:
@@ -43,10 +43,14 @@ jobs:
       - name: Select Xcode
         run: |
           set -euo pipefail
-          XCODE="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)"
-          [ -n "$XCODE" ] || XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          # 优先镜像默认的正式版 Xcode 27；没有再取任一 Xcode 27，最后才退回 Xcode.app。
+          # （pipefail 下 ls 没匹配会让整行失败，所以每条都带 `|| true`。）
+          XCODE=/Applications/Xcode_27.app
+          [ -d "$XCODE" ] || XCODE="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1 || true)"
+          [ -n "$XCODE" ] || XCODE=/Applications/Xcode.app
           echo "Using ${XCODE}"
           sudo xcode-select -s "$XCODE"
+          xcodebuild -version
 
       - name: Test
         run: |
@@ -65,17 +69,21 @@ jobs:
     # 工程的部署目标是 macOS 26，构建/签名/排版/打包全部交给 Scripts/build-dmg.sh。
     # runner 上没有本机的自签名证书「Jietu」，所以下面那步先把证书从 secrets 导进
     # 临时钥匙串：build-dmg.sh 找不到证书就拒绝产出 ad-hoc 签名的 DMG。
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v5
 
       - name: Select Xcode
         run: |
           set -euo pipefail
-          XCODE="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)"
-          [ -n "$XCODE" ] || XCODE="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          # 优先镜像默认的正式版 Xcode 27；没有再取任一 Xcode 27，最后才退回 Xcode.app。
+          # （pipefail 下 ls 没匹配会让整行失败，所以每条都带 `|| true`。）
+          XCODE=/Applications/Xcode_27.app
+          [ -d "$XCODE" ] || XCODE="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1 || true)"
+          [ -n "$XCODE" ] || XCODE=/Applications/Xcode.app
           echo "Using ${XCODE}"
           sudo xcode-select -s "$XCODE"
+          xcodebuild -version
 
       # 签名身份必须**和本地、和历史版本一致**：TCC（屏幕录制等）把授权记在 App 的
       # 代码签名身份上。ad-hoc 签名的身份是 cdhash（这一个二进制的指纹），每次构建都变，
