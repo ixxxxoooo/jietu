@@ -211,7 +211,7 @@ private final class RecordingControlContentView: NSView {
     /// 当前选中的麦克风设备 UID。
     var selectedMicrophoneDeviceUID: String?
 
-    private let glass = NSVisualEffectView()
+    private let glass = NSGlassEffectView.floatingSurface(cornerRadius: Theme.Radius.dialog)
     private let dot = NSView()
     private let label = NSTextField(labelWithString: L10n.recordReady)
     /// 音频开关：**待开始态可以直接点**（CapCut 那类录屏的「录前先配好」），
@@ -246,12 +246,6 @@ private final class RecordingControlContentView: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
 
-        glass.material = .hudWindow
-        glass.blendingMode = .withinWindow
-        glass.state = .active
-        glass.wantsLayer = true
-        glass.layer?.cornerRadius = Theme.Radius.dialog
-        glass.layer?.masksToBounds = true
         addSubview(glass)
 
         // 红点：录制中一直亮着，暂停 / 待开始时压暗——一眼能看出状态。

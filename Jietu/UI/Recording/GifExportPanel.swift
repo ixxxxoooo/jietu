@@ -30,13 +30,8 @@ final class GifExportPanel {
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
 
-        let effect = NSVisualEffectView()
-        effect.material = .hudWindow
-        effect.blendingMode = .withinWindow
-        effect.state = .active
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = Theme.Radius.menuPanel
-        effect.layer?.masksToBounds = true
+        let content = NSView()
+        let effect = NSGlassEffectView.floatingSurface(content: content)
 
         label.font = .systemFont(ofSize: NSFont.systemFontSize)
         label.textColor = .labelColor
@@ -53,11 +48,11 @@ final class GifExportPanel {
         stack.alignment = .leading
         stack.spacing = Theme.Spacing.sm
         stack.translatesAutoresizingMaskIntoConstraints = false
-        effect.addSubview(stack)
+        content.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: effect.leadingAnchor, constant: Theme.Spacing.lg),
-            stack.trailingAnchor.constraint(equalTo: effect.trailingAnchor, constant: -Theme.Spacing.lg),
-            stack.centerYAnchor.constraint(equalTo: effect.centerYAnchor),
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: Theme.Spacing.lg),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -Theme.Spacing.lg),
+            stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
             bar.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
         panel.contentView = effect

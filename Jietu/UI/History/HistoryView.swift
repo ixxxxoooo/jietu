@@ -46,6 +46,6 @@ struct HistoryView: View {
             )
         }
         .frame(width: Theme.Size.historyPanel.width, height: Theme.Size.historyPanel.height)
-        .floatingSurface(cornerRadius: Theme.Radius.dialog, showsBorder: false)
+        .floatingSurface(cornerRadius: Theme.Radius.dialog)
     }
 }

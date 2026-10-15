@@ -122,7 +122,7 @@ struct PixelLoupeCard<Readout: View>: View {
             readout
         }
         .padding(PixelLoupe.padding)
-        .liquidGlass(cornerRadius: Theme.Radius.menuPanel)
+        .glassPanel(cornerRadius: Theme.Radius.menuPanel)
         .shadow(color: .black.opacity(0.22), radius: 12, y: 4)
     }
 }

@@ -8,13 +8,11 @@ enum TooltipPlacement {
     case bottom
 }
 
-/// 符合 Jietu UI 规范的悬停提示标签（气泡）。
+/// 悬停提示标签（气泡）：一枚 Liquid Glass 胶囊。
 ///
-/// 承重规则对齐：
-/// 1. 表面 = 磨砂 + 墨色 scrim（`VisualEffectView(.hudWindow)` + `Theme.Colors.panelScrim`）；
-/// 2. 只有一条 alpha ramp，不用灰（`Theme.Colors.textPrimary` + `Theme.Colors.border`）；
-/// 4. 边角是溶解不是裁切（`Capsule`）；
-/// 5. 动画时长取设计令牌 `Theme.Duration.tooltip`（0.15s）。
+/// 1. 表面 = 系统玻璃（`glassEffect(.regular)`），投影与描边由系统负责；
+/// 2. 文字只用墨色 ramp（`Theme.Colors.textPrimary`），不用灰；
+/// 3. 动画时长取设计令牌 `Theme.Duration.tooltip`（0.15s）。
 ///
 /// @author ixxxxoooo
 struct TooltipView: View {
@@ -26,27 +24,7 @@ struct TooltipView: View {
             .foregroundStyle(Theme.Colors.textPrimary)
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.xs)
-            .background {
-                Capsule()
-                    .fill(Theme.Colors.panelScrim)
-                    .background(
-                        VisualEffectView(material: .hudWindow)
-                            .clipShape(Capsule())
-                    )
-            }
-            .overlay {
-                Capsule()
-                    .strokeBorder(Theme.Colors.border, lineWidth: Theme.Size.hairline)
-            }
-            .shadow(
-                color: Theme.Colors.adaptive(
-                    dark: .srgbInk(0, alpha: 0.35),
-                    light: .srgbInk(0, alpha: 0.12)
-                ),
-                radius: 4,
-                x: 0,
-                y: 1.5
-            )
+            .glassEffect(.regular, in: Capsule())
             .fixedSize()
             .allowsHitTesting(false)
     }

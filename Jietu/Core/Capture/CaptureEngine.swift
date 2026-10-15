@@ -2,6 +2,20 @@ import AppKit
 import os
 @preconcurrency import ScreenCaptureKit
 
+/// 一块显示器的抓取任务（装进并行任务组用）。
+private struct CaptureJob: @unchecked Sendable {
+    let index: Int
+    let screen: NSScreen
+    let display: SCDisplay
+    let excluded: [SCRunningApplication]
+}
+
+/// 一块显示器的抓取结果（按 `index` 归位回屏幕原顺序）。
+private struct CaptureOutcome: @unchecked Sendable {
+    let index: Int
+    let result: Result<DisplaySnapshot, Error>
+}
+
 /// 截图引擎。职责边界：
 /// - 只负责「拿到干净的画面」，不负责任何 UI
 /// - 所有失败路径都必须抛出可诊断的错误（SCK 会静默失败，不能吞掉）
@@ -22,27 +36,54 @@ final class CaptureEngine {
             ? content.applications.filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
             : []
 
-        var snapshots: [DisplaySnapshot] = []
-        var failures: [Error] = []
-
-        for screen in NSScreen.screens {
-            guard let displayID = screen.jietu_displayID else { continue }
-            guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
-                failures.append(CaptureError.displayNotShareable(displayID))
-                continue
+        // 多显示器并行抓：每块屏的耗时主要在 ScreenCaptureKit 守护进程里，串行抓就是把各屏耗时加起来。
+        // 结果按 `NSScreen.screens` 的原顺序归位，保持与之前一致的行为。
+        let targets: [(index: Int, screen: NSScreen, display: SCDisplay)] = NSScreen.screens
+            .enumerated()
+            .compactMap { index, screen in
+                guard let displayID = screen.jietu_displayID else { return nil }
+                guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
+                    return nil
+                }
+                return (index, screen, display)
             }
 
-            do {
-                snapshots.append(
-                    try await capture(
-                        screen: screen,
-                        display: display,
-                        excluding: ownApplications
+        var failures: [Error] = NSScreen.screens.compactMap { screen in
+            guard let displayID = screen.jietu_displayID,
+                !content.displays.contains(where: { $0.displayID == displayID })
+            else { return nil }
+            return CaptureError.displayNotShareable(displayID)
+        }
+
+        // 每块屏一个主线程上的 Task：`await` 挂起期间主线程是空的，几块屏的请求同时在途。
+        let log = logger
+        let tasks = targets.map { target -> Task<CaptureOutcome, Never> in
+            let job = CaptureJob(
+                index: target.index, screen: target.screen,
+                display: target.display, excluded: ownApplications
+            )
+            return Task { @MainActor in
+                do {
+                    let snapshot = try await self.capture(
+                        screen: job.screen, display: job.display, excluding: job.excluded
                     )
-                )
-            } catch {
-                logger.error("display \(displayID) capture failed: \(error.localizedDescription)")
-                failures.append(error)
+                    return CaptureOutcome(index: job.index, result: .success(snapshot))
+                } catch {
+                    log.error(
+                        "display \(job.display.displayID) capture failed: \(error.localizedDescription)"
+                    )
+                    return CaptureOutcome(index: job.index, result: .failure(error))
+                }
+            }
+        }
+        var results: [CaptureOutcome] = []
+        for task in tasks { results.append(await task.value) }
+
+        var snapshots: [DisplaySnapshot] = []
+        for outcome in results {
+            switch outcome.result {
+            case .success(let snapshot): snapshots.append(snapshot)
+            case .failure(let error): failures.append(error)
             }
         }
 

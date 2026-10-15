@@ -283,21 +283,15 @@ extension CaptureSelfTest {
     static func runEditorTest(outputDirectory: URL, inline: Bool) {
         Task { @MainActor in
             var report: [String] = []
-            do {
-                let model = InlineToolbarModel()
-                let probe = InlineMainToolbar(model: model)
-                let probeHost = NSHostingView(rootView: probe)
-                report.append(
-                    "InlineToolbar SwiftUI 最小宽=\(Int(probeHost.fittingSize.width.rounded()))"
-                        + " 高=\(Int(probeHost.fittingSize.height.rounded()))"
-                )
-                report.append("RESULT: PASS")
-                finish(report, code: 0)
-            } catch {
-                report.append("error: \(error.localizedDescription)")
-                report.append("RESULT: FAIL")
-                finish(report, code: 1)
-            }
+            let model = InlineToolbarModel()
+            let probe = InlineMainToolbar(model: model)
+            let probeHost = NSHostingView(rootView: probe)
+            report.append(
+                "InlineToolbar SwiftUI 最小宽=\(Int(probeHost.fittingSize.width.rounded()))"
+                    + " 高=\(Int(probeHost.fittingSize.height.rounded()))"
+            )
+            report.append("RESULT: PASS")
+            finish(report, code: 0)
         }
     }
 

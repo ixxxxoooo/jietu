@@ -26,10 +26,6 @@ enum Theme {
             adaptive(dark: .srgbInk(1, alpha: dark), light: .srgbInk(0, alpha: light))
         }
 
-        /// ramp 的反向：深色压黑、浅色压白，用于面板 / 浮窗 / 工具栏压底。
-        static let panelScrim = adaptive(
-            dark: .srgbInk(0, alpha: 0.40), light: .srgbInk(1, alpha: 0.55))
-
         /// 选中行填充，所有列表共用。
         static let selection = ramp(dark: 0.10, light: 0.09)
         /// 鼠标悬停：比选中更淡的一层。

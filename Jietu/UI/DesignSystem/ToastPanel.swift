@@ -3,7 +3,7 @@ import AppKit
 /// 一条自动消失的提示浮窗：不抢焦点、不打断，只说一句「做完了」。
 ///
 /// 取色器要用它：系统放大镜一收，用户没法确认到底复制到没有，得有个回执。
-/// 表面沿用设计系统那一套（`.hudWindow` + `.withinWindow`，与录屏控制条、GIF 进度浮窗同一配方），
+/// 表面沿用设计系统那一套（`NSGlassEffectView` Liquid Glass，与录屏控制条、GIF 进度浮窗同一配方），
 /// 位置贴着刚才操作的地方（鼠标），别让人满屏找。
 ///
 /// @author ixxxxoooo
@@ -33,13 +33,9 @@ final class ToastPanel {
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
 
-        let effect = NSVisualEffectView()
-        effect.material = .hudWindow
-        effect.blendingMode = .withinWindow
-        effect.state = .active
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = Theme.Radius.menuPanel
-        effect.layer?.masksToBounds = true
+        // 玻璃只负责底；文字与色块放进它的 contentView。
+        let content = NSView()
+        let effect = NSGlassEffectView.floatingSurface(content: content)
 
         label.font = .systemFont(ofSize: NSFont.systemFontSize)
         label.textColor = .labelColor
@@ -55,16 +51,16 @@ final class ToastPanel {
         stack.addArrangedSubview(swatch)
         stack.addArrangedSubview(label)
         stack.translatesAutoresizingMaskIntoConstraints = false
-        effect.addSubview(stack)
+        content.addSubview(stack)
         NSLayoutConstraint.activate([
             swatch.widthAnchor.constraint(equalToConstant: Self.swatchSide),
             swatch.heightAnchor.constraint(equalToConstant: Self.swatchSide),
-            stack.centerXAnchor.constraint(equalTo: effect.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: effect.centerYAnchor),
+            stack.centerXAnchor.constraint(equalTo: content.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
             stack.leadingAnchor.constraint(
-                equalTo: effect.leadingAnchor, constant: Self.padding.left),
+                equalTo: content.leadingAnchor, constant: Self.padding.left),
             stack.trailingAnchor.constraint(
-                equalTo: effect.trailingAnchor, constant: -Self.padding.right),
+                equalTo: content.trailingAnchor, constant: -Self.padding.right),
         ])
         panel.contentView = effect
     }

@@ -2,8 +2,8 @@ import SwiftUI
 
 /// 设置详情列：按当前分区渲染对应面板。
 ///
-/// 背景交给窗口材质（`contentBackground`），并把滚动背景藏起来，
-/// 这样 `Form(.grouped)` 的卡片浮在窗口材质上，和系统设置一致。
+/// 背景交给窗口自己（系统设置同款）：`Form(.grouped)` 的分组卡片直接浮在窗口背景上，
+/// 工具栏与侧栏的玻璃由 `NSSplitViewController` / `NSToolbar` 提供。
 ///
 /// @author ixxxxoooo
 struct SettingsDetailView: View {
@@ -35,10 +35,5 @@ struct SettingsDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            VisualEffectView(material: .contentBackground, blending: .behindWindow)
-                .ignoresSafeArea()
-        )
-        .scrollContentBackground(.hidden)
     }
 }
