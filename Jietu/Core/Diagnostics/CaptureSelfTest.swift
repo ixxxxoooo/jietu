@@ -12,22 +12,22 @@ import UniformTypeIdentifiers
 /// 存在的原因：屏幕捕获的失败模式大多发生在「UI 之前」（权限、坐标、缩放），
 /// 靠肉眼点界面很难定位。这两个开关让捕获链路可以无人值守地跑通并留下证据。
 ///
-///   Lucent --selftest-capture <输出目录>     冻结全部屏幕 → 落 PNG → 打印报告 → 退出
-///   Lucent --selftest-overlay <持续秒数>     冻结全部屏幕 → 弹出遮罩 → 保持 N 秒 → 退出
-///   Lucent --selftest-region x,y,w,h         核对 SCK sourceRect 坐标系（直接抓 vs 整屏裁）
-///   Lucent --selftest-chrome x,y,w,h         取景框态下「含 / 不含本 App」各抓一张，辨黑屏
-///   Lucent --selftest-session x,y,w,h        不弹遮罩，直接跑真实采样会话（自动滚动）
-///   Lucent --selftest-frames x,y,w,h [--with-blocker]
+///   Jietu --selftest-capture <输出目录>     冻结全部屏幕 → 落 PNG → 打印报告 → 退出
+///   Jietu --selftest-overlay <持续秒数>     冻结全部屏幕 → 弹出遮罩 → 保持 N 秒 → 退出
+///   Jietu --selftest-region x,y,w,h         核对 SCK sourceRect 坐标系（直接抓 vs 整屏裁）
+///   Jietu --selftest-chrome x,y,w,h         取景框态下「含 / 不含本 App」各抓一张，辨黑屏
+///   Jietu --selftest-session x,y,w,h        不弹遮罩，直接跑真实采样会话（自动滚动）
+///   Jietu --selftest-frames x,y,w,h [--with-blocker]
 ///                                           逐拍 dump 帧 + 平均差 / Vision 位移 / 拼接判定
-///   Lucent --selftest-scrollprobe x,y,w,h    几种合成滚轮写法哪个能真的推动目标窗口
-///   Lucent --selftest-quickaccess <输出目录> 浮窗图标：逐个注入点击，量响应速度（含截图）
-///   Lucent --selftest-scroll-cost            滚动长图每帧成本：拼接 / 预览（含老做法对比）
-///   Lucent --selftest-record <输出目录>       录屏：真录一段（含暂停），读回成片验时长/尺寸
-///   Lucent --selftest-video-tools <输出目录>   成片再加工：GIF 导出 + 裁剪导出，读回产物校验
-///   Lucent --selftest-inline-draw <输出目录>   就地标注：验证「框里还能再画框」
-///   Lucent --selftest-inline-scroll <输出目录>
+///   Jietu --selftest-scrollprobe x,y,w,h    几种合成滚轮写法哪个能真的推动目标窗口
+///   Jietu --selftest-quickaccess <输出目录> 浮窗图标：逐个注入点击，量响应速度（含截图）
+///   Jietu --selftest-scroll-cost            滚动长图每帧成本：拼接 / 预览（含老做法对比）
+///   Jietu --selftest-record <输出目录>       录屏：真录一段（含暂停），读回成片验时长/尺寸
+///   Jietu --selftest-video-tools <输出目录>   成片再加工：GIF 导出 + 裁剪导出，读回产物校验
+///   Jietu --selftest-inline-draw <输出目录>   就地标注：验证「框里还能再画框」
+///   Jietu --selftest-inline-scroll <输出目录>
 ///                                           就地工具栏的「滚动截图」：点开手动 / 自动并截图
-///   Lucent --selftest-overlay-press <输出目录>
+///   Jietu --selftest-overlay-press <输出目录>
 ///                                           吸附预览：量「按下 → 窗口描边消失」，拖动中不许回来
 enum CaptureSelfTest {
     /// 需要**完整 App 接线**的自检开关。
@@ -340,13 +340,13 @@ enum CaptureSelfTest {
         // 要还原的动作注册到 `cleanupBeforeExit`，这里统一跑一遍再退。
         for action in cleanupBeforeExit { action() }
         cleanupBeforeExit.removeAll()
-        print("=== Lucent selftest ===")
+        print("=== Jietu selftest ===")
         for line in lines { print(line) }
         print("======================")
         fflush(stdout)
         // 再落一份文件：有些场景必须走 LaunchServices 启动（TCC 才认权限，见麦克风自检），
         // 那种情况下看不到 stdout，报告只能从文件读。
-        let report = (["=== Lucent selftest ==="] + lines + ["======================"])
+        let report = (["=== Jietu selftest ==="] + lines + ["======================"])
             .joined(separator: "\n")
         try? report.write(
             to: URL(fileURLWithPath: NSTemporaryDirectory())

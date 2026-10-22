@@ -30,7 +30,7 @@ enum ScreenCapturePermission {
     }
 
     // 刻意不提供「向系统申请一次」（CGRequestScreenCaptureAccess）的封装：
-    // 它只会在授权入口前多弹一次「Lucent 想要录制此电脑的屏幕和音频」，而我们自己
+    // 它只会在授权入口前多弹一次「Jietu 想要录制此电脑的屏幕和音频」，而我们自己
     // 打开系统设置 + 浮出拖拽面板已经把该做的事做完了。见 PermissionDragPanel.present。
 
     static func openSystemSettings() {

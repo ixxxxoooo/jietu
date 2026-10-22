@@ -9,12 +9,12 @@ struct GitHubReleaseParserTests {
         let release = try GitHubReleaseParser.parse(UpdateFixtures.releaseJSON(version: "1.2.0", digest: hex))
         #expect(release.version.description == "1.2.0")
         #expect(release.tag == "v1.2.0")
-        #expect(release.name == "Lucent 1.2.0")
-        #expect(release.zipName == "Lucent-1.2.0-macOS.zip")
+        #expect(release.name == "Jietu 1.2.0")
+        #expect(release.zipName == "Jietu-1.2.0-macOS.zip")
         #expect(release.zipSize == 4_096_000)
         // 摘要统一为小写（fixture 里给的是大写）。
         #expect(release.sha256 == hex)
-        #expect(release.checksumURL?.lastPathComponent == "Lucent-1.2.0-macOS.zip.sha256")
+        #expect(release.checksumURL?.lastPathComponent == "Jietu-1.2.0-macOS.zip.sha256")
         #expect(release.notes.contains("Online update"))
         #expect(release.publishedAt != nil)
     }
@@ -53,7 +53,7 @@ struct GitHubReleaseParserTests {
 
     @Test func 校验文件与digest格式() {
         let hex = String(repeating: "ab", count: 32)
-        #expect(GitHubReleaseParser.parseChecksumFile("\(hex)  Lucent-1.2.0-macOS.zip\n") == hex)
+        #expect(GitHubReleaseParser.parseChecksumFile("\(hex)  Jietu-1.2.0-macOS.zip\n") == hex)
         #expect(GitHubReleaseParser.parseChecksumFile("SHA256 (x.zip) = \(hex.uppercased())") == hex)
         #expect(GitHubReleaseParser.parseChecksumFile("not a checksum") == nil)
         #expect(GitHubReleaseParser.parseDigest("sha256:\(hex)") == hex)
@@ -63,7 +63,7 @@ struct GitHubReleaseParserTests {
     }
 
     @Test func 更新说明裁掉安装与权限说明() {
-        let body = "## Lucent 1.2.0\n\n- Online update\n\n### Installation\n\n1. Download the DMG"
+        let body = "## Jietu 1.2.0\n\n- Online update\n\n### Installation\n\n1. Download the DMG"
         let notes = GitHubReleaseParser.releaseNotes(from: body)
         #expect(notes.contains("Online update"))
         #expect(!notes.contains("Installation") && !notes.contains("Download the DMG"))
@@ -71,9 +71,9 @@ struct GitHubReleaseParserTests {
     }
 
     @Test func 更新说明转成可渲染的行内Markdown() {
-        let md = "## Lucent 1.2.0\n\n### Added\n- **Online** update\n  * nested\nplain"
+        let md = "## Jietu 1.2.0\n\n### Added\n- **Online** update\n  * nested\nplain"
         let shown = GitHubReleaseParser.displayMarkdown(md)
-        #expect(shown == "**Lucent 1.2.0**\n\n**Added**\n• **Online** update\n• nested\nplain")
+        #expect(shown == "**Jietu 1.2.0**\n\n**Added**\n• **Online** update\n• nested\nplain")
         #expect(GitHubReleaseParser.displayMarkdown("#") == "")
     }
 }

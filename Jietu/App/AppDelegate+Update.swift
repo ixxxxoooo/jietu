@@ -4,13 +4,13 @@ import AppKit
 ///
 /// 流程本身在 `Core/Update/UpdateManager`，这里只负责把它接进 App 生命周期。
 extension AppDelegate {
-    /// DEBUG 端到端验证：启动后立刻检查并安装更新（配合 `LUCENT_UPDATE_API` 指向本地假发布）。
+    /// DEBUG 端到端验证：启动后立刻检查并安装更新（配合 `JIETU_UPDATE_API` 指向本地假发布）。
     static let updateNowFlag = "--update-now"
 
     /// 在启动时调用一次。
     func setUpUpdates() {
         updates.terminate = { NSApp.terminate(nil) }
-        // Dev 渠道不自动检查（本地构建没有对应的发布包）；设了 `LUCENT_UPDATE_API` 则视为有意测试。
+        // Dev 渠道不自动检查（本地构建没有对应的发布包）；设了 `JIETU_UPDATE_API` 则视为有意测试。
         let overridden = ProcessInfo.processInfo.environment[UpdateChecker.apiOverrideEnvironmentKey] != nil
         if !AppIdentity.isDevChannel || overridden {
             updates.startAutoCheck()

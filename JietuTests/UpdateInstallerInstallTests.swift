@@ -79,7 +79,7 @@ struct UpdateInstallerInstallTests {
     }
 
     @Test func 原地安装的拦截条件() {
-        let translocated = URL(fileURLWithPath: "/private/var/folders/x/AppTranslocation/ABC/d/Lucent.app")
+        let translocated = URL(fileURLWithPath: "/private/var/folders/x/AppTranslocation/ABC/d/Jietu.app")
         #expect(UpdateInstaller.inPlaceInstallBlocker(for: translocated) != nil)
         #expect(UpdateInstaller.inPlaceInstallBlocker(for: URL(fileURLWithPath: "/System/Applications/Calculator.app")) != nil)
         #expect(UpdateInstaller.inPlaceInstallBlocker(for: URL(fileURLWithPath: "/tmp/not-an-app")) != nil)

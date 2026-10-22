@@ -1,4 +1,4 @@
-/* English localization for Lucent */
+/* English localization for Jietu */
 
 // MARK: - Menu Bar
 
@@ -15,8 +15,8 @@
 "menu.open_save_folder" = "Open Save Folder";
 "menu.no_recent_history" = "No Recent History";
 "menu.preferences" = "Preferences…";
-"menu.restart_jietu" = "Restart Lucent";
-"menu.quit_jietu" = "Quit Lucent";
+"menu.restart_jietu" = "Restart Jietu";
+"menu.quit_jietu" = "Quit Jietu";
 "menu.permission_guide" = "Permission Guide…";
 "menu.drag_authorize_screen_recording" = "Drag to Authorize Screen Recording…";
 "menu.drag_authorize_accessibility" = "Drag to Authorize Accessibility…";
@@ -41,7 +41,7 @@
 // MARK: - General Settings
 
 "general.launch_at_login" = "Launch at Login";
-"general.launch_at_login_desc" = "Auto-start Lucent after login, stay in menu bar.";
+"general.launch_at_login_desc" = "Auto-start Jietu after login, stay in menu bar.";
 "general.play_shutter_sound" = "Play Shutter Sound";
 "general.play_shutter_sound_desc" = "Play system shutter sound after capture.";
 "general.copy_to_clipboard" = "Auto Copy to Clipboard";
@@ -49,12 +49,12 @@
 "general.show_notification" = "Show Notification After Save";
 "general.show_notification_desc" = "Show system notification after saving, click to locate file.";
 "general.notification_denied" = "Notifications are off in macOS";
-"general.notification_denied_desc" = "The switch above only works once Lucent is allowed in System Settings › Notifications; otherwise nothing appears after saving.";
+"general.notification_denied_desc" = "The switch above only works once Jietu is allowed in System Settings › Notifications; otherwise nothing appears after saving.";
 "general.open_notification_settings" = "Open System Settings";
 "general.section_general" = "General";
 "general.default_behavior_footer" = "These are the default behaviors for every capture.";
 "general.theme" = "Theme";
-"general.theme_desc" = "Follow system, or lock Lucent to light / dark mode.";
+"general.theme_desc" = "Follow system, or lock Jietu to light / dark mode.";
 
 // MARK: - Appearance Settings
 
@@ -75,7 +75,7 @@
 "language.chinese" = "简体中文";
 "language.english" = "English";
 "general.language" = "Language";
-"general.language_desc" = "Follow system language, or lock Lucent to Chinese / English.";
+"general.language_desc" = "Follow system language, or lock Jietu to Chinese / English.";
 "language.restart_title" = "Restart to Apply Language";
 "language.restart_body" = "Menu bar and open windows need a restart to show the new language.";
 "language.restart_now" = "Restart Now";
@@ -250,7 +250,7 @@
 "scroll.manual" = "Manual Scroll";
 "scroll.automatic" = "Auto Scroll";
 "scroll.manual_help" = "Manual Scroll: scroll by yourself with mouse or trackpad";
-"scroll.automatic_help" = "Auto Scroll: Lucent scrolls automatically (requires Accessibility permission)";
+"scroll.automatic_help" = "Auto Scroll: Jietu scrolls automatically (requires Accessibility permission)";
 
 // MARK: - Crop
 
@@ -262,12 +262,12 @@
 // MARK: - Permission Settings
 
 "perm.screen_recording" = "Screen Recording";
-"perm.screen_recording_granted" = "Lucent can freeze the screen and capture normally.";
+"perm.screen_recording_granted" = "Jietu can freeze the screen and capture normally.";
 "perm.screen_recording_needs_relaunch" = "Already checked, will take effect after restart.";
 "perm.screen_recording_denied" = "Without it, captures will return blank images.";
 "perm.recheck" = "Recheck";
 "perm.recheck_help" = "Re-read the system authorization status now";
-"perm.recheck_stale_hint" = "\"Recheck\" reports the access this process got at launch — after granting or revoking in System Settings, restart Lucent before trusting it.";
+"perm.recheck_stale_hint" = "\"Recheck\" reports the access this process got at launch — after granting or revoking in System Settings, restart Jietu before trusting it.";
 "perm.grant_target" = "Grant Target";
 "perm.grant_target_desc" = "Check it in \"System Settings › Privacy & Security › Screen Recording\"; if not listed, click \"+\" at the bottom left to manually add this app.";
 "perm.grant_action" = "Grant Action";
@@ -275,7 +275,7 @@
 "perm.drag_authorize_help" = "Open System Settings and show the drag panel; drag the app card into the list";
 "perm.needs_relaunch" = "Restart Needed";
 "perm.needs_relaunch_desc" = "macOS limitation: authorization only takes effect in processes launched after granting.";
-"perm.restart_jietu" = "Restart Lucent";
+"perm.restart_jietu" = "Restart Jietu";
 "perm.accessibility" = "Accessibility";
 "perm.accessibility_granted" = "Scrolling Capture (Auto Scroll) can now synthesize scroll events.";
 "perm.accessibility_denied" = "Scrolling Capture (Auto Scroll) needs it to synthesize scroll events; manual scroll works without it.";
@@ -292,7 +292,7 @@
 "about.section_info" = "Info";
 "about.section_links" = "Links";
 "about.tagline" = "Local screenshot tool: capture, annotate, copy, save — all on your Mac.";
-"about.copyright" = "© 2026 Lucent · All captures and annotations stay on your Mac";
+"about.copyright" = "© 2026 Jietu · All captures and annotations stay on your Mac";
 "about.issues" = "Issues";
 
 // MARK: - Onboarding
@@ -321,7 +321,7 @@
 "onboarding.grant_target_desc" = "Check it in the corresponding list in System Settings; if not listed, click \"+\" to add or drag the card.";
 "onboarding.relaunch_needed" = "Restart Needed";
 "onboarding.relaunch_desc" = "macOS limitation: authorization only takes effect in processes launched after granting.";
-"onboarding.relaunch_hint" = "Already checked but still not authorized? Click \"Restart Lucent\" to apply.";
+"onboarding.relaunch_hint" = "Already checked but still not authorized? Click \"Restart Jietu\" to apply.";
 "onboarding.drag_hint" = "Click the authorize button to open System Settings and show the drag panel; drag the card into the list.";
 "onboarding.authorize_accessibility" = "Authorize Accessibility";
 "onboarding.no_hotkey_hint" = "No hotkeys bound by default, to avoid conflicts with system or other apps.";
@@ -424,8 +424,8 @@
 "error.window_not_capturable" = "Window %u is not capturable";
 "error.no_window_under_cursor" = "No capturable window under cursor";
 
-"error.recovery_permission" = "Please check Lucent in \"System Settings › Privacy & Security › Screen Recording\", then restart Lucent.";
-"error.recovery_relaunch" = "Usually caused by permission just granted but process not restarted. Please restart Lucent and try again.";
+"error.recovery_permission" = "Please check Jietu in \"System Settings › Privacy & Security › Screen Recording\", then restart Jietu.";
+"error.recovery_relaunch" = "Usually caused by permission just granted but process not restarted. Please restart Jietu and try again.";
 "error.recovery_no_displays" = "Please make sure your display is properly connected.";
 "error.recovery_empty_region" = "Please select a larger area and try again.";
 "error.recovery_no_window" = "Please move the cursor over the window you want to capture and try again.";
@@ -436,7 +436,7 @@
 "notify.recording_complete" = "Recording Complete";
 "notify.duration" = "Duration %02d:%02d";
 "notify.mic_unavailable" = "Microphone Not Recorded";
-"notify.mic_unavailable_body" = "Only system audio in this recording. Please allow Lucent in \"System Settings › Privacy & Security › Microphone\", or check input device.";
+"notify.mic_unavailable_body" = "Only system audio in this recording. Please allow Jietu in \"System Settings › Privacy & Security › Microphone\", or check input device.";
 
 // MARK: - Alerts
 
@@ -445,7 +445,7 @@
 "alert.recording_failed" = "Recording Failed";
 "alert.open_system_settings" = "Open System Settings";
 "alert.hotkey_failed" = "Hotkey %@ for \"%@\" registration failed";
-"alert.hotkey_conflict" = "This key combination may already be taken by the system, another app, or another action in Lucent. Reverted to the previous hotkey.";
+"alert.hotkey_conflict" = "This key combination may already be taken by the system, another app, or another action in Jietu. Reverted to the previous hotkey.";
 
 // MARK: - Misc
 
@@ -457,7 +457,7 @@
 "scroll_panel.manual" = "Manual";
 "scroll_panel.manual_help" = "Scroll by yourself in the selected area";
 "scroll_panel.automatic" = "Auto";
-"scroll_panel.automatic_help" = "Lucent scrolls automatically (requires Accessibility permission)";
+"scroll_panel.automatic_help" = "Jietu scrolls automatically (requires Accessibility permission)";
 "scroll_panel.cancel" = "Cancel (Esc)";
 "scroll_panel.finish" = "Finish";
 "scroll_panel.help" = "Scrolling Capture: select area, choose who scrolls";
@@ -471,7 +471,7 @@
 "scroll.need_accessibility_body" = "System has prompted for authorization; after granting, retry auto scroll.\nYou can also switch to manual scroll: place cursor in the area and scroll down yourself.";
 "scroll.use_manual" = "Use Manual Scroll";
 "scroll.no_content" = "No scrolling content captured";
-"scroll.no_content_body" = "The selected area needs to be a scrollable page, and you need to actually scroll:\n· Manual: after clicking \"Manual\", place your mouse in the area and scroll down;\n· Auto: Lucent sends scroll events, but controls like charts or dropdowns may intercept them.\nTry a different area or switch to manual.";
+"scroll.no_content_body" = "The selected area needs to be a scrollable page, and you need to actually scroll:\n· Manual: after clicking \"Manual\", place your mouse in the area and scroll down;\n· Auto: Jietu sends scroll events, but controls like charts or dropdowns may intercept them.\nTry a different area or switch to manual.";
 
 // MARK: - GIF Export
 
@@ -494,7 +494,7 @@
 
 // MARK: - Onboarding Window
 
-"onboarding.window_title" = "Welcome to Lucent";
+"onboarding.window_title" = "Welcome to Jietu";
 
 // MARK: - History
 
@@ -524,7 +524,7 @@
 "drag_card.hint" = "Hold and drag me";
 "drag_panel.instruction" = "Drag %@ into the list on the right";
 "drag_panel.close" = "Close";
-"drag_panel.restart" = "Restart Lucent";
+"drag_panel.restart" = "Restart Jietu";
 "drag_panel.restart_help" = "Restart required after authorization to take effect";
 "drag_panel.stale_row" = "Already listed but still \"not granted\"? That row is left over from an earlier build: select it, remove it with −, then drag the card in again.";
 
@@ -583,7 +583,7 @@
 
 // MARK: - Menu Bar Tooltip
 
-"menu_bar.tooltip" = "Lucent Screenshot";
+"menu_bar.tooltip" = "Jietu Screenshot";
 
 // MARK: - CaptureOutput Errors
 
@@ -614,15 +614,15 @@
 // MARK: - Update
 
 "update.menu.check" = "Check for Updates…";
-"update.menu.available" = "Update Available: Lucent %@…";
+"update.menu.available" = "Update Available: Jietu %@…";
 "update.section" = "Software Update";
 "update.current_version" = "Current Version";
 "update.auto_check" = "Check for updates automatically";
 "update.check_now" = "Check Now";
 "update.checking" = "Checking for updates…";
-"update.up_to_date" = "Lucent is up to date";
+"update.up_to_date" = "Jietu is up to date";
 "update.last_checked" = "Last checked %@";
-"update.available_title" = "Lucent %@ is available";
+"update.available_title" = "Jietu %@ is available";
 "update.install" = "Download & Install";
 "update.skip" = "Skip This Version";
 "update.release_notes" = "Release Notes";
@@ -630,7 +630,7 @@
 "update.downloading" = "Downloading… %d%%";
 "update.cancel" = "Cancel";
 "update.verifying" = "Verifying the download…";
-"update.installing" = "Installing — Lucent will restart shortly…";
+"update.installing" = "Installing — Jietu will restart shortly…";
 "update.retry" = "Retry";
 "update.dismiss" = "Dismiss";
 "update.show_in_finder" = "Show New Version in Finder";
@@ -650,8 +650,8 @@
 "update.error.bundle_id_mismatch" = "The package belongs to a different app.";
 "update.error.version_mismatch" = "The package version (%@) does not match the release.";
 "update.error.identity_mismatch" = "The package is not signed by the same identity as the installed app.";
-"update.error.not_app_bundle" = "Lucent is not running from an app bundle, so it cannot update itself.";
-"update.error.translocated" = "Lucent is running from a temporary location. Move it to the Applications folder first.";
+"update.error.not_app_bundle" = "Jietu is not running from an app bundle, so it cannot update itself.";
+"update.error.translocated" = "Jietu is running from a temporary location. Move it to the Applications folder first.";
 "update.error.not_writable" = "No permission to modify %@.";
 "update.error.check_failed" = "Could not check for updates: %@";
 "update.error.manual_install" = "%@ The new version has been downloaded — replace the app manually in Finder.";

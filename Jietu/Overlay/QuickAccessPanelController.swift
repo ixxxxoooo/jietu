@@ -419,7 +419,7 @@ final class QuickAccessPanelController {
     private static func writeDragFile(_ image: CGImage) -> URL? {
         guard let data = CaptureOutput.pngData(image) else { return nil }
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Lucent-\(UUID().uuidString).png")
+            .appendingPathComponent("Jietu-\(UUID().uuidString).png")
         do {
             try data.write(to: url)
             return url

@@ -22,7 +22,7 @@ nonisolated enum GitHubReleaseParser {
         let assets: [Asset]
     }
 
-    /// 安装包命名约定：`Lucent-<版本>-macOS.zip`（由 `Scripts/build-dmg.sh` 产出）。
+    /// 安装包命名约定：`Jietu-<版本>-macOS.zip`（由 `Scripts/build-dmg.sh` 产出）。
     static func isInstallableAsset(_ name: String) -> Bool { name.hasSuffix("-macOS.zip") }
 
     /// 解析 `releases/latest` 响应。

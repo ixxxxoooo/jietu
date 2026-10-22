@@ -13,7 +13,7 @@
 // 用法：
 //   swift Scripts/dmg-background.swift --out <目录> --size 660x420 \
 //       --app 200,185 --applications 460,185 --command 200,320 \
-//       --name Lucent --version 0.0.2 --repo github.com/ixxxxoooo/jietu
+//       --name Jietu --version 0.0.2 --repo github.com/ixxxxoooo/jietu
 //
 // @author ixxxxoooo
 import AppKit
@@ -31,7 +31,7 @@ struct Config {
     var applications = CGPoint(x: 460, y: 185)
     /// 安装说明那份 txt 的槽位；说明文字画在它右边。
     var command = CGPoint(x: 200, y: 320)
-    var appName = "Lucent"
+    var appName = "Jietu"
     var version = ""
     var repo = ""
 }

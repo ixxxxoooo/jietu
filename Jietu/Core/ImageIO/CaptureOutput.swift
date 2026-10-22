@@ -81,7 +81,7 @@ enum CaptureOutput {
 
     // MARK: - Disk
 
-    /// 保存为图片，文件名由模板展开（默认 `Lucent 2026-09-15 at 20.01.23.png`，同名自动加序号）。
+    /// 保存为图片，文件名由模板展开（默认 `Jietu 2026-09-15 at 20.01.23.png`，同名自动加序号）。
     static func save(
         _ image: CGImage,
         toDirectory directory: URL,

@@ -185,7 +185,7 @@
 | `GitHubReleaseParser.swift` | `GitHubReleaseParserTests` | — |
 | `UpdateChecker.swift` | `UpdateCheckerTests` | — |
 | `UpdateInstaller.swift` | `UpdateInstallerTests` | — |
-| `UpdateInstaller+Install.swift` | `UpdateInstallerInstallTests` | ✅ 端到端（`--update-now` + `LUCENT_UPDATE_API`） |
+| `UpdateInstaller+Install.swift` | `UpdateInstallerInstallTests` | ✅ 端到端（`--update-now` + `JIETU_UPDATE_API`） |
 | `UpdateManager.swift` | `UpdateManagerTests` | ✅ 端到端 |
 
 ## UI/Annotation

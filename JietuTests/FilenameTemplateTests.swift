@@ -23,7 +23,7 @@ struct FilenameTemplateTests {
     @Test("默认模板与历史命名格式一致")
     func defaultTemplateMatchesLegacyName() {
         let name = FilenameTemplate.makeName(template: FilenameTemplate.defaultTemplate, date: date)
-        #expect(name == "Lucent 2026-09-16 at 10.59.31")
+        #expect(name == "Jietu 2026-09-16 at 10.59.31")
     }
 
     @Test("展开各个占位符")
@@ -58,10 +58,10 @@ struct FilenameTemplateTests {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
-        let template = "Lucent {counter}"
+        let template = "Jietu {counter}"
         #expect(FilenameTemplate.nextCounter(template: template, in: directory, fileExtension: "png") == 1)
 
-        for name in ["Lucent 1.png", "Lucent 2.png", "Lucent 3.png", "其它.png"] {
+        for name in ["Jietu 1.png", "Jietu 2.png", "Jietu 3.png", "其它.png"] {
             try Data().write(to: directory.appendingPathComponent(name))
         }
         #expect(FilenameTemplate.nextCounter(template: template, in: directory, fileExtension: "png") == 4)
@@ -69,7 +69,7 @@ struct FilenameTemplateTests {
 
     @Test("序号从 1 起步")
     func counterStartsAtOne() {
-        let name = FilenameTemplate.makeName(template: "Lucent-{counter}", date: date, counter: 0)
-        #expect(name == "Lucent-1")
+        let name = FilenameTemplate.makeName(template: "Jietu-{counter}", date: date, counter: 0)
+        #expect(name == "Jietu-1")
     }
 }

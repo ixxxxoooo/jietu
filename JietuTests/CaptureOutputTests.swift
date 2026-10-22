@@ -84,7 +84,7 @@ struct CaptureOutputTests {
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let image = makeSnapshot().image
-        let template = "Lucent {counter}"
+        let template = "Jietu {counter}"
         let first = try CaptureOutput.save(
             image,
             toDirectory: directory,
@@ -96,8 +96,8 @@ struct CaptureOutputTests {
             nameTemplate: template
         )
 
-        #expect(first.lastPathComponent == "Lucent 1.png")
-        #expect(second.lastPathComponent == "Lucent 2.png")
+        #expect(first.lastPathComponent == "Jietu 1.png")
+        #expect(second.lastPathComponent == "Jietu 2.png")
     }
 
     @Test("JPEG 保存使用 .jpg 扩展名")

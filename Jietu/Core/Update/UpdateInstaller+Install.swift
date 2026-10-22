@@ -10,7 +10,7 @@ extension UpdateInstaller {
     /// 安装日志（脚本每步都写，App 已退出后仍可排查）。
     static var installLogURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Lucent/update.log")
+            .appendingPathComponent("Library/Logs/Jietu/update.log")
     }
 
     /// 当前 App 能不能原地替换；不能时返回给用户看的原因（此时应引导手动安装）。

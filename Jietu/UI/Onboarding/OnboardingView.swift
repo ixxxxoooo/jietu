@@ -425,7 +425,7 @@ final class OnboardingModel {
     /// 这次会话里是否已经引导过授权（点了「授权屏幕录制」或打开过系统设置）。
     ///
     /// 用过之后如果状态还是「未授权」，多半是 macOS 不刷新进程内状态，
-    /// 这时要给出「重启 Lucent」这个出口。
+    /// 这时要给出「重启 Jietu」这个出口。
     var hasTriedGranting = false
 
     private let settings: SettingsStore
@@ -436,7 +436,7 @@ final class OnboardingModel {
     /// 授权晚于本次启动：已勾选，但当前进程用不了。
     var needsRelaunch: Bool { ScreenCapturePermission.needsRelaunch }
 
-    /// 该不该给「重启 Lucent」这个出口。
+    /// 该不该给「重启 Jietu」这个出口。
     var suggestsRelaunch: Bool {
         needsRelaunch || (hasTriedGranting && !isGranted)
     }

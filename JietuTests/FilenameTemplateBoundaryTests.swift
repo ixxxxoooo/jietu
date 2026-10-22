@@ -95,9 +95,9 @@ struct FilenameTemplateBoundaryTests {
 
     // MARK: - captureDate 解析
 
-    @Test("标准 Lucent 文件名能解析出日期")
+    @Test("标准 Jietu 文件名能解析出日期")
     func standardJietuNameParsesDate() {
-        let url = URL(fileURLWithPath: "/tmp/Lucent 2026-09-16 at 10.59.31.png")
+        let url = URL(fileURLWithPath: "/tmp/Jietu 2026-09-16 at 10.59.31.png")
         let parsed = FilenameTemplate.captureDate(of: url)
         let calendar = Calendar.current
         #expect(calendar.component(.year, from: parsed) == 2026)
@@ -116,7 +116,7 @@ struct FilenameTemplateBoundaryTests {
         #expect(calendar.component(.hour, from: parsed) == 10)
     }
 
-    @Test("非 Lucent 前缀的文件名不走解析逻辑")
+    @Test("非 Jietu 前缀的文件名不走解析逻辑")
     func nonJietuNameDoesNotParse() {
         let url = URL(fileURLWithPath: "/tmp/Screenshot 2026-09-16 at 10.59.31.png")
         let parsed = FilenameTemplate.captureDate(of: url)
@@ -124,9 +124,9 @@ struct FilenameTemplateBoundaryTests {
         #expect(parsed.timeIntervalSince1970 > 0)
     }
 
-    @Test("Lucent 文件名但时间格式异常时回落到文件时间")
+    @Test("Jietu 文件名但时间格式异常时回落到文件时间")
     func malformedJietuNameFallsBack() {
-        let url = URL(fileURLWithPath: "/tmp/Lucent XXXX-YY-ZZ at AA.BB.CC.png")
+        let url = URL(fileURLWithPath: "/tmp/Jietu XXXX-YY-ZZ at AA.BB.CC.png")
         let parsed = FilenameTemplate.captureDate(of: url)
         #expect(parsed.timeIntervalSince1970 > 0, "格式异常时不应崩溃")
     }
@@ -140,7 +140,7 @@ struct FilenameTemplateBoundaryTests {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let counter = FilenameTemplate.nextCounter(template: "Lucent {date}", in: dir, fileExtension: "png")
+        let counter = FilenameTemplate.nextCounter(template: "Jietu {date}", in: dir, fileExtension: "png")
         #expect(counter == 1, "没有 {counter} 时固定返回 1")
     }
 
@@ -151,7 +151,7 @@ struct FilenameTemplateBoundaryTests {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let counter = FilenameTemplate.nextCounter(template: "Lucent {counter}", in: dir, fileExtension: "png")
+        let counter = FilenameTemplate.nextCounter(template: "Jietu {counter}", in: dir, fileExtension: "png")
         #expect(counter == 1)
     }
 }

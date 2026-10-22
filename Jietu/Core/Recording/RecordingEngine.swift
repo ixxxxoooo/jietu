@@ -148,7 +148,7 @@ final class RecordingEngine {
         configuration.sampleRate = 44_100
         configuration.channelCount = 2
 
-        // 只排除自家的控制条 / 红框，别的 Lucent 窗口（比如钉图）照常入镜。
+        // 只排除自家的控制条 / 红框，别的 Jietu 窗口（比如钉图）照常入镜。
         let excluded = content.windows.filter {
             excludingWindowNumbers.contains(Int($0.windowID))
         }
@@ -383,7 +383,7 @@ final class RecordingEngine {
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let token = ProcessInfo.processInfo.globallyUniqueString.replacingOccurrences(of: "/", with: "-")
         return FileManager.default.temporaryDirectory
-            .appendingPathComponent("Lucent-\(formatter.string(from: Date()))-\(token).mp4")
+            .appendingPathComponent("Jietu-\(formatter.string(from: Date()))-\(token).mp4")
     }
 }
 

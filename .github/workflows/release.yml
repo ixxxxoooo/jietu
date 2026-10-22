@@ -147,10 +147,10 @@ jobs:
         id: checksum
         run: |
           set -euo pipefail
-          DMG_PATH="$(ls dist/Lucent-*.dmg)"
+          DMG_PATH="$(ls dist/Jietu-*.dmg)"
           # 在线更新包：App 内「检查更新」下载它（命名约定见 Scripts/build-dmg.sh），
           # 同名 .sha256 一并上传，缺一个就让发布失败，免得发出一个更新不了的版本。
-          ZIP_PATH="$(ls dist/Lucent-*-macOS.zip)"
+          ZIP_PATH="$(ls dist/Jietu-*-macOS.zip)"
           [ -f "$ZIP_PATH.sha256" ] || { echo "::error::缺少 $ZIP_PATH.sha256"; exit 1; }
           ( cd dist && shasum -a 256 "$(basename "$DMG_PATH")" "$(basename "$ZIP_PATH")" > SHA256SUMS.txt )
           cat dist/SHA256SUMS.txt
@@ -171,7 +171,7 @@ jobs:
           [ -s "$RUNNER_TEMP/changes.md" ] \
             || { echo "::error::CHANGELOG 里找不到 $VERSION 的内容"; exit 1; }
           {
-            echo "## Lucent $VERSION"
+            echo "## Jietu $VERSION"
             echo
             cat "$RUNNER_TEMP/changes.md"
             echo
@@ -180,27 +180,27 @@ jobs:
 
           1. Download the DMG below and (optionally) verify it with `SHA256SUMS.txt`:
              `shasum -a 256 -c SHA256SUMS.txt`
-          2. Open the DMG and drag **Lucent.app** onto the **Applications** folder.
+          2. Open the DMG and drag **Jietu.app** onto the **Applications** folder.
           3. Before first launch, remove the quarantine flag in Terminal
              (the release is self-signed, not notarized):
              ```
-             xattr -dr com.apple.quarantine /Applications/Lucent.app
+             xattr -dr com.apple.quarantine /Applications/Jietu.app
              ```
              The DMG also ships `安装说明.txt` — the same line, ready to copy.
 
           ### Permissions
 
           - **Screen Recording** (required): System Settings › Privacy & Security ›
-            Screen & System Audio Recording → drag Lucent in (or click **+** and pick it)
-            → turn it on → then restart Lucent.
-            If **Lucent.app is already listed but the app still reports "not granted"**,
-            select that row, remove it with **−**, add it again, and restart Lucent.
-          - **Accessibility** (optional, for auto-scroll): System Settings › Privacy & Security › Accessibility → add Lucent.
+            Screen & System Audio Recording → drag Jietu in (or click **+** and pick it)
+            → turn it on → then restart Jietu.
+            If **Jietu.app is already listed but the app still reports "not granted"**,
+            select that row, remove it with **−**, add it again, and restart Jietu.
+          - **Accessibility** (optional, for auto-scroll): System Settings › Privacy & Security › Accessibility → add Jietu.
 
           ### Updating
 
-          Already installed? Use **Check for Updates…** in the menu bar — Lucent downloads
-          `Lucent-<version>-macOS.zip`, verifies its SHA-256 and code signature, replaces itself and restarts.
+          Already installed? Use **Check for Updates…** in the menu bar — Jietu downloads
+          `Jietu-<version>-macOS.zip`, verifies its SHA-256 and code signature, replaces itself and restarts.
           Your Screen Recording permission is kept.
           NOTES
           } > release-notes.md
@@ -209,7 +209,7 @@ jobs:
       - name: Upload DMG as artifact
         uses: actions/upload-artifact@v6
         with:
-          name: Lucent-${{ github.ref_name }}
+          name: Jietu-${{ github.ref_name }}
           path: |
             ${{ steps.checksum.outputs.dmg_path }}
             ${{ steps.checksum.outputs.zip_path }}
@@ -220,7 +220,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:
-          name: Lucent ${{ steps.version.outputs.version }}
+          name: Jietu ${{ steps.version.outputs.version }}
           body_path: release-notes.md
           files: |
             ${{ steps.checksum.outputs.dmg_path }}

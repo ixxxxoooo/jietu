@@ -16,8 +16,8 @@ git add -A && git commit -m "<type>: <描述>"
 而正在跑的进程可能还是上一次构建的。`Scripts/restart-dev.sh` 会比较
 「进程启动时刻」与「产物 mtime」，发现跑旧了自动再重启一次，并打印
 实例数 / 产物 mtime / 进程启动时刻 / 进程路径 —— 每次改完都看这几行。
-（手动等价物：`xcodebuild ... build` → `pkill -f "Build/Products/Debug/Lucent Dev.app"` →
-`open ".build/Build/Products/Debug/Lucent Dev.app"`。）
+（手动等价物：`xcodebuild ... build` → `pkill -f "Build/Products/Debug/Jietu Dev.app"` →
+`open ".build/Build/Products/Debug/Jietu Dev.app"`。）
 
 - 构建必须成功（`** BUILD SUCCEEDED **`）才能提交。
 - 签名保持默认的自签名证书 `Jietu`，不要加 `CODE_SIGNING_ALLOWED=NO`，否则重签名会丢「屏幕录制」授权。
@@ -72,21 +72,21 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
 
 | | Debug | Release |
 |---|---|---|
-| `PRODUCT_NAME` | `Lucent Dev` | `Lucent` |
+| `PRODUCT_NAME` | `Jietu Dev` | `Jietu` |
 | `PRODUCT_BUNDLE_IDENTIFIER` | `com.ixxxxoooo.jietu.dev` | `com.ixxxxoooo.jietu` |
 | `PRODUCT_MODULE_NAME` | `Jietu`（固定，否则 `@testable import Jietu` 会断） | `Jietu` |
-| 产物路径 | `.build/Build/Products/Debug/Lucent Dev.app` | `.../Release/Lucent.app` |
+| 产物路径 | `.build/Build/Products/Debug/Jietu Dev.app` | `.../Release/Jietu.app` |
 
-- **命名**：产品名是 **Lucent（澄影）**，原名 Jietu。改名只动了「面向用户的名字」（`PRODUCT_NAME`、界面文案、DMG、文档）；
+- **命名**：产品名就是 **Jietu**（0.1.x–0.2.0 曾短暂改名 Lucent，0.2.1 起改回）。
   Xcode target / scheme / Swift 模块（`Jietu`）、源码目录 `Jietu/`、bundle id（`com.ixxxxoooo.jietu`）、
   自签名证书 `Jietu`、仓库名都**刻意保留**——改它们会断 `@testable import`、TCC 授权与升级链路。
 - 独立 bundle id = 独立的 TCC 授权 / 偏好 / 登录项，本地调试不会污染正式版。
-- 系统设置的「屏幕录制」列表里，Debug 显示为 **Lucent Dev**；设置页「权限 › 授权对象」
+- 系统设置的「屏幕录制」列表里，Debug 显示为 **Jietu Dev**；设置页「权限 › 授权对象」
   与权限引导都会把当前身份（含 `dev` 标记）显示出来，照着勾选即可。
 - 改了渠道相关的 build setting 后，`JietuTests` 的 `TEST_HOST` 也要同步指向
-  `Lucent Dev.app/Contents/MacOS/Lucent Dev`（Debug 侧已就位）。
+  `Jietu Dev.app/Contents/MacOS/Jietu Dev`（Debug 侧已就位）。
 - **Debug 必须 `ENABLE_DEBUG_DYLIB = NO`**（已写进 Debug 配置）。Xcode 16+ 默认把 Debug 的
-  真代码放进 `Lucent Dev.debug.dylib`、主可执行文件只留 ~58KB 的壳；那样 TCC 拿不到稳定的
+  真代码放进 `Jietu Dev.debug.dylib`、主可执行文件只留 ~58KB 的壳；那样 TCC 拿不到稳定的
   签名身份，「屏幕录制」授权会出现「API 说已授权、列表里却看不到这个 App」的怪状态。
   关掉后主可执行文件是完整二进制（~6.5MB）。
 
@@ -121,14 +121,14 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
   跑 `bash Scripts/check-release.sh` 确认两者一致；
   再 `git tag vX.Y.Z && git push origin vX.Y.Z` → Actions 先校验 tag / 版本 / CHANGELOG 并跑测试，
   然后用同一张 p12 签名 → 出 DMG 与 `SHA256SUMS.txt`，Release 正文取自 CHANGELOG。
-  本地验身份：`codesign -d -r- dist/…/Lucent.app` 应看到 `certificate leaf = H"aec7af8f…"`，
+  本地验身份：`codesign -d -r- dist/…/Jietu.app` 应看到 `certificate leaf = H"aec7af8f…"`，
   和历史版本同一串。
 
   **禁止**：重新跑 `generate-signing-cert.sh`、换一张新 p12、改 Release 的
   `PRODUCT_BUNDLE_IDENTIFIER`（必须一直是 `com.ixxxxoooo.jietu`，不能带 `.dev`）。
 
   - 已经中招（列表里那一行是旧身份留下的死记录、开关开着却仍是未授权）：在系统设置里
-    选中那一行按 `−` 删掉，再把 App 拖回去、打开开关、重启 Lucent。
+    选中那一行按 `−` 删掉，再把 App 拖回去、打开开关、重启 Jietu。
 - **镜像工具**：优先 `diskutil image`（macOS 26+），旧系统回退 `hdiutil`，脚本自己探测；
   可用 `JIETU_IMAGE_TOOL=diskutil|hdiutil` 强制某条路径做验证。
 - **窗口版式**（背景图 + 图标位置）靠 Finder 把设置写进镜像的 `.DS_Store`：本机排不上直接失败
@@ -151,14 +151,14 @@ Debug 构建是**独立的开发渠道**，配置在 `Jietu.xcodeproj` 的 Debug
 
 App 内「检查更新…」（`Core/Update/`，设计见 `docs/ARCHITECTURE.md`「Online update」）。几条红线：
 
-- **发布必须带更新包**：`build-dmg.sh` 产出 `Lucent-<版本>-macOS.zip` + `.sha256`，release workflow 缺任何一个就失败；
+- **发布必须带更新包**：`build-dmg.sh` 产出 `Jietu-<版本>-macOS.zip` + `.sha256`，release workflow 缺任何一个就失败；
   App 端按 `-macOS.zip` 后缀认包，改命名要两边一起改。
 - **新包必须满足当前 App 的 designated requirement**（同一张 `Jietu` 证书），这是升级后屏幕录制授权不丢的保证，
   别为了省事去掉这一环；没有校验值（`digest` / `.sha256`）一律拒绝安装。
 - 改了 `Core/Update/`、安装脚本或打包脚本后，除单元测试外跑一遍真机端到端：
   `bash Scripts/e2e-update.sh`（本地假发布服务 + 真安装脚本，3 个场景：正常更新 / 摘要被篡改 / 身份不同；
-  需要 Debug 构建、证书 `Jietu`、桌面会话，会临时退出正在运行的 Lucent Dev，结束后自动拉回）。
-- 测试钩子：`LUCENT_UPDATE_API` 替换 latest 接口；DEBUG 专用 `--update-now`。Dev 渠道默认不自动检查。
+  需要 Debug 构建、证书 `Jietu`、桌面会话，会临时退出正在运行的 Jietu Dev，结束后自动拉回）。
+- 测试钩子：`JIETU_UPDATE_API` 替换 latest 接口；DEBUG 专用 `--update-now`。Dev 渠道默认不自动检查。
 
 ## 单实例
 
@@ -171,7 +171,7 @@ Debug / Release 各自只有一个实例：
 - 刻意**不用** `LSMultipleInstancesProhibited`：它没法绕过，会让 `xcodebuild test`
   的测试宿主起不来。
 
-**不要用 `open -n`**——`-n` 就是「强制开新实例」，正是多实例的来源。「重启 Lucent」
+**不要用 `open -n`**——`-n` 就是「强制开新实例」，正是多实例的来源。「重启 Jietu」
 走的是「起一个后台 shell 等旧进程退出、再 `open`」，所以重启前后都只有一个实例。
 
 ## 权限：辅助功能
@@ -189,7 +189,7 @@ Debug / Release 各自只有一个实例：
 - 判断权限**别只看系统设置的列表**：自签名 / Debug 构建可能不在列表里，但授权照样生效。
   以 `CGPreflightScreenCaptureAccess()` 和实际能否截图为准。
 - 让 App 出现在列表里，两条路：
-  1. 点该栏左下的 **`+`** 手动选中 `Lucent Dev.app`；
+  1. 点该栏左下的 **`+`** 手动选中 `Jietu Dev.app`；
   2. 菜单栏 **「拖拽授权「屏幕录制」…」**：打开系统设置并浮出一个面板，把里面的 App 卡片
      拖进列表即可（那一栏接受拖入）。实现见 `UI/Permissions/`，用 `CGWindowList` 定位系统设置
      窗口，**不需要辅助功能权限**。

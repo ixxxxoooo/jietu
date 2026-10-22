@@ -55,7 +55,7 @@ struct UpdateInstallerTests {
     @Test func 从sha256文件取得校验值() async throws {
         let dir = UpdateFixtures.tempDir()
         let (zip, sha) = try await packaged(dir)
-        let checksum = URL(string: "https://example.com/Lucent-9.0.0-macOS.zip.sha256")!
+        let checksum = URL(string: "https://example.com/Jietu-9.0.0-macOS.zip.sha256")!
         let text = "\(sha)  \(zip.lastPathComponent)\n"
         let net = StubNetwork(routes: [checksum.absoluteString: .success((Data(text.utf8), checksum))])
         let release = UpdateFixtures.release(version: "9.0.0", zip: zip, sha: nil, checksumURL: checksum)

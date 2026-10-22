@@ -88,7 +88,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     private func configureStatusButton() {
         guard let button = statusItem.button else { return }
-        button.image = Self.icon("camera.viewfinder", description: "Lucent")
+        button.image = Self.icon("camera.viewfinder", description: "Jietu")
         button.toolTip = L10n.menuBarTooltip
     }
 

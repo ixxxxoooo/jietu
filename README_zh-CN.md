@@ -5,10 +5,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/icon.png" width="128" alt="Lucent 图标">
+  <img src="docs/icon.png" width="128" alt="Jietu 图标">
 </p>
 
-<h1 align="center">Lucent · 澄影</h1>
+<h1 align="center">Jietu</h1>
 
 <p align="center">
   <b>原生 macOS 截图与录屏工具，全面采用 Liquid Glass</b><br>
@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <sub><i>Lucent</i>：澄澈、透亮。中文名 <b>澄影</b>，取「澄澈留影」之意。项目原名 <i>Jietu</i>。</sub>
+  <sub>0.1.x–0.2.0 曾短暂叫 <i>Lucent</i>，0.2.1 起改回 <i>Jietu</i>。</sub>
 </p>
 
 ---
@@ -67,24 +67,24 @@
 
 ### 下载 DMG
 
-从 [Releases](https://github.com/ixxxxoooo/jietu/releases/latest) 下载最新 `.dmg`，打开后将 `Lucent.app` 拖入 `/Applications`。
+从 [Releases](https://github.com/ixxxxoooo/jietu/releases/latest) 下载最新 `.dmg`，打开后将 `Jietu.app` 拖入 `/Applications`。
 
 > **首次打开提示**：本应用使用自签名证书（无 Developer ID / 公证），macOS Gatekeeper 会拦截首次启动。打开前请在终端执行下面这行——DMG 里的 **`安装说明.txt`** 里也有一份，可以直接复制：
 >
 > ```
-> xattr -dr com.apple.quarantine /Applications/Lucent.app
+> xattr -dr com.apple.quarantine /Applications/Jietu.app
 > ```
 >
-> 或者：右键 **Lucent.app** → **打开** → **打开**。
+> 或者：右键 **Jietu.app** → **打开** → **打开**。
 
 ### 更新
 
-点菜单栏的 **检查更新…**（或设置 › 关于）。Lucent 会从最新发布下载 `Lucent-<版本>-macOS.zip`，校验 SHA-256，并确认它与当前运行的 App 由同一张证书签名，然后自行替换并重新打开——「屏幕录制」授权保持不变。如果 App 所在位置不允许自我替换（例如还在 DMG 里直接运行），新版本会下载好并在 Finder 中定位，供手动替换。
+点菜单栏的 **检查更新…**（或设置 › 关于）。Jietu 会从最新发布下载 `Jietu-<版本>-macOS.zip`，校验 SHA-256，并确认它与当前运行的 App 由同一张证书签名，然后自行替换并重新打开——「屏幕录制」授权保持不变。如果 App 所在位置不允许自我替换（例如还在 DMG 里直接运行），新版本会下载好并在 Finder 中定位，供手动替换。
 
 ### 授权
 
-1. **屏幕录制**（必需）— **系统设置 › 隐私与安全性 › 录屏与系统录音**，把 Lucent 拖进去（或点 **+** 选中它）并打开开关，然后 **重启应用**（macOS 要求重启后才生效）。如果列表里**已经有 Lucent 却仍显示未授权**，那一行是升级前留下的旧记录：选中它按 **−** 删掉，重新加一次，再重启应用。
-2. **辅助功能**（可选）— 仅用于滚动长图的自动滚动。前往 **系统设置 › 隐私与安全性 › 辅助功能** 添加 Lucent，无需重启。
+1. **屏幕录制**（必需）— **系统设置 › 隐私与安全性 › 录屏与系统录音**，把 Jietu 拖进去（或点 **+** 选中它）并打开开关，然后 **重启应用**（macOS 要求重启后才生效）。如果列表里**已经有 Jietu 却仍显示未授权**，那一行是升级前留下的旧记录：选中它按 **−** 删掉，重新加一次，再重启应用。
+2. **辅助功能**（可选）— 仅用于滚动长图的自动滚动。前往 **系统设置 › 隐私与安全性 › 辅助功能** 添加 Jietu，无需重启。
 3. **通知**（可选）— 允许横幅，保存到磁盘后才会弹出系统通知。
 
 ## 🛠 从源码构建
@@ -97,12 +97,12 @@
 ### 构建
 
 ```bash
-# Debug 构建（Lucent Dev.app — 独立 bundle ID，不干扰正式版）
+# Debug 构建（Jietu Dev.app — 独立 bundle ID，不干扰正式版）
 xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
   -destination 'platform=macOS' -derivedDataPath .build build
 
 # 运行
-open ".build/Build/Products/Debug/Lucent Dev.app"
+open ".build/Build/Products/Debug/Jietu Dev.app"
 ```
 
 ### 测试
@@ -118,7 +118,7 @@ xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
 
 ```bash
 bash Scripts/build-dmg.sh
-# 产物：dist/Lucent-<版本>.dmg
+# 产物：dist/Jietu-<版本>.dmg
 ```
 
 ## 🏗 架构

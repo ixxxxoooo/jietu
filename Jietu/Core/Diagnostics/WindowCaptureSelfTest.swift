@@ -6,7 +6,7 @@ import CoreGraphics
 /// 窗口截图的自检：枚举屏幕上的窗口，逐个走**真实**的 `CaptureEngine.captureWindow`，
 /// 报告每个窗口能不能截、截出来的尺寸对不对，并把成图落盘供目视检查。
 ///
-///   Lucent --selftest-window <输出目录>
+///   Jietu --selftest-window <输出目录>
 ///
 /// 只读屏幕、不建窗口，可以和正式实例同时在跑。
 ///

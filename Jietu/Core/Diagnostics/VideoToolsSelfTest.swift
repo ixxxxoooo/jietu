@@ -10,7 +10,7 @@ import ImageIO
 /// 单测只能钉纯函数（尺寸 / 步长），解码 + 编码这条链路必须在真环境里跑一遍——
 /// GIF 编不出来只有跑起来才知道。裁剪功能已去掉（macOS 预览 App 自带）。
 ///
-///   Lucent --selftest-video-tools <输出目录>
+///   Jietu --selftest-video-tools <输出目录>
 ///
 /// @author ixxxxoooo
 enum VideoToolsSelfTest {

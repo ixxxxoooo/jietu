@@ -25,7 +25,7 @@ struct UpdateCheckerTests {
         #expect(latest.version.description == "1.3.0")
         #expect(
             latest.zipURL.absoluteString
-                == "https://github.com/o/r/releases/download/v1.3.0/Lucent-1.3.0-macOS.zip")
+                == "https://github.com/o/r/releases/download/v1.3.0/Jietu-1.3.0-macOS.zip")
         #expect(latest.checksumURL?.absoluteString.hasSuffix(".zip.sha256") == true)
         #expect(latest.sha256 == nil)
     }

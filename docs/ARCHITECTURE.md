@@ -1,6 +1,6 @@
 # Architecture
 
-Lucent (formerly *Jietu*; the Xcode target, Swift module and source root keep the original codename) is a menu-bar (`LSUIElement`) macOS app written in Swift 6 with AppKit and SwiftUI. It targets macOS 27+ and has **no third-party dependencies** — everything is built on system frameworks (ScreenCaptureKit, Vision, AVFoundation, Carbon hot keys, Translation).
+Jietu (formerly *Jietu*; the Xcode target, Swift module and source root keep the original codename) is a menu-bar (`LSUIElement`) macOS app written in Swift 6 with AppKit and SwiftUI. It targets macOS 27+ and has **no third-party dependencies** — everything is built on system frameworks (ScreenCaptureKit, Vision, AVFoundation, Carbon hot keys, Translation).
 
 This document explains how the code is organized and why. For build and contribution steps see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
@@ -64,20 +64,20 @@ UpdateManager (state machine, @Observable)
  └─ UpdateInstaller   download → SHA-256 → unpack → verify  ·  +Install: swap & relaunch
 ```
 
-- **Release assets.** `Scripts/build-dmg.sh` also emits `Lucent-<version>-macOS.zip` (+ `.sha256`) from the signed app (`ditto --keepParent`), and re-verifies it: signature intact, version equal, designated requirement identical to the app's. The release workflow uploads the zip, its checksum and `SHA256SUMS.txt`; a release without a zip fails the job.
+- **Release assets.** `Scripts/build-dmg.sh` also emits `Jietu-<version>-macOS.zip` (+ `.sha256`) from the signed app (`ditto --keepParent`), and re-verifies it: signature intact, version equal, designated requirement identical to the app's. The release workflow uploads the zip, its checksum and `SHA256SUMS.txt`; a release without a zip fails the job.
 - **Verification chain** (any failure leaves the installed app untouched): the zip's SHA-256 must equal the published digest (API `digest` field, else the `.sha256` asset; no checksum → refuse); the bundle id and version must match; `codesign --verify --deep --strict` must pass; and the new app must satisfy the **running app's designated requirement** — the same self-signed certificate. That is what keeps the Screen Recording grant valid after an update, and it blocks a swapped package. Ad-hoc builds have no stable requirement (it degrades to `cdhash`), so that last check is skipped for them.
-- **Install.** An app cannot replace itself while running, so a detached `/bin/sh` script waits for the process to exit, `ditto`-copies the new app next to the old one, strips quarantine, swaps with two `mv`s (rolling back on failure) and `open`s the result — never `open -n`, so the single-instance rule holds. Its log is `~/Library/Logs/Lucent/update.log`. If the app cannot be replaced in place (App Translocation, read-only location) the new version is still downloaded and verified, and the UI offers “Show in Finder”.
-- **Scheduling.** Auto-check runs 8 s after launch and then hourly, at most once per 6 h; it can be switched off in Settings › About, a version can be skipped, and automatic checks stay silent on failure (manual checks show the error). The Debug (`.dev`) channel never auto-checks unless `LUCENT_UPDATE_API` is set.
-- **Testing hooks.** `LUCENT_UPDATE_API` replaces the `latest` endpoint (disabling the web fallback); the DEBUG-only `--update-now` flag checks and installs immediately. Together with a local HTTP server they give an end-to-end run without publishing anything — `Scripts/e2e-update.sh` automates it (normal update, tampered checksum, different signing identity).
-- **UI.** `UI/Settings/UpdateSettingsSection` (inside the About pane) renders `UpdateManager.state`; the menu bar item “Check for Updates…” opens it and shows “Update Available: Lucent x.y.z…” when a newer version is known.
+- **Install.** An app cannot replace itself while running, so a detached `/bin/sh` script waits for the process to exit, `ditto`-copies the new app next to the old one, strips quarantine, swaps with two `mv`s (rolling back on failure) and `open`s the result — never `open -n`, so the single-instance rule holds. Its log is `~/Library/Logs/Jietu/update.log`. If the app cannot be replaced in place (App Translocation, read-only location) the new version is still downloaded and verified, and the UI offers “Show in Finder”.
+- **Scheduling.** Auto-check runs 8 s after launch and then hourly, at most once per 6 h; it can be switched off in Settings › About, a version can be skipped, and automatic checks stay silent on failure (manual checks show the error). The Debug (`.dev`) channel never auto-checks unless `JIETU_UPDATE_API` is set.
+- **Testing hooks.** `JIETU_UPDATE_API` replaces the `latest` endpoint (disabling the web fallback); the DEBUG-only `--update-now` flag checks and installs immediately. Together with a local HTTP server they give an end-to-end run without publishing anything — `Scripts/e2e-update.sh` automates it (normal update, tampered checksum, different signing identity).
+- **UI.** `UI/Settings/UpdateSettingsSection` (inside the About pane) renders `UpdateManager.state`; the menu bar item “Check for Updates…” opens it and shows “Update Available: Jietu x.y.z…” when a newer version is known.
 
 ## Build channels
 
 | | Debug | Release |
 |---|---|---|
-| Product | `Lucent Dev` | `Lucent` |
+| Product | `Jietu Dev` | `Jietu` |
 | Bundle ID | `com.ixxxxoooo.jietu.dev` | `com.ixxxxoooo.jietu` |
-| Output | `.build/Build/Products/Debug/Lucent Dev.app` | `…/Release/Lucent.app` |
+| Output | `.build/Build/Products/Debug/Jietu Dev.app` | `…/Release/Jietu.app` |
 
 The channels are independent: separate TCC grants, preferences and login items. Debug builds must keep `ENABLE_DEBUG_DYLIB = NO`, otherwise the main executable is a tiny shell and TCC cannot resolve a stable identity.
 

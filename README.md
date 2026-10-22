@@ -5,10 +5,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/icon.png" width="128" alt="Lucent icon">
+  <img src="docs/icon.png" width="128" alt="Jietu icon">
 </p>
 
-<h1 align="center">Lucent</h1>
+<h1 align="center">Jietu</h1>
 
 <p align="center">
   <b>A native macOS screenshot & screen recording tool, dressed in Liquid Glass</b><br>
@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <sub><i>Lucent</i> — clear, luminous, see-through. Chinese name: <b>澄影</b> (“clear image”). The project was formerly called <i>Jietu</i>.</sub>
+  <sub>Versions 0.1.x–0.2.0 were briefly named <i>Lucent</i>; the name is back to <i>Jietu</i> from 0.2.1.</sub>
 </p>
 
 ---
@@ -67,24 +67,24 @@
 
 ### Download DMG
 
-Download the latest `.dmg` from [Releases](https://github.com/ixxxxoooo/jietu/releases/latest), open it, and drag `Lucent.app` to `/Applications`.
+Download the latest `.dmg` from [Releases](https://github.com/ixxxxoooo/jietu/releases/latest), open it, and drag `Jietu.app` to `/Applications`.
 
 > **First launch note:** The app is self-signed (no Developer ID / notarization), so macOS Gatekeeper blocks the first launch. Before opening, run this in Terminal — the DMG also ships **`安装说明.txt`** with the same line, ready to copy:
 >
 > ```
-> xattr -dr com.apple.quarantine /Applications/Lucent.app
+> xattr -dr com.apple.quarantine /Applications/Jietu.app
 > ```
 >
-> Alternatively: right-click **Lucent.app** → **Open** → **Open**.
+> Alternatively: right-click **Jietu.app** → **Open** → **Open**.
 
 ### Updating
 
-Use **Check for Updates…** in the menu bar (or Settings › About). Lucent downloads `Lucent-<version>-macOS.zip` from the latest release, verifies its SHA-256 and that it is signed by the same certificate as the running app, then replaces itself and relaunches — your Screen Recording permission is kept. If the app lives somewhere it cannot replace itself (for example it is still running from the DMG), the new version is downloaded and revealed in Finder for a manual swap.
+Use **Check for Updates…** in the menu bar (or Settings › About). Jietu downloads `Jietu-<version>-macOS.zip` from the latest release, verifies its SHA-256 and that it is signed by the same certificate as the running app, then replaces itself and relaunches — your Screen Recording permission is kept. If the app lives somewhere it cannot replace itself (for example it is still running from the DMG), the new version is downloaded and revealed in Finder for a manual swap.
 
 ### Grant Permissions
 
-1. **Screen Recording** (required) — **System Settings › Privacy & Security › Screen & System Audio Recording**, then drag Lucent in (or click **+**) and turn it on, then **restart the app** (macOS requires a relaunch after granting). If Lucent is **already listed but the app still reports “not granted”**, that row is left over from an earlier build: select it, remove it with **−**, add it again, then restart.
-2. **Accessibility** (optional) — only needed for auto-scroll in Scrolling Capture. Go to **System Settings › Privacy & Security › Accessibility** and add Lucent. No restart required.
+1. **Screen Recording** (required) — **System Settings › Privacy & Security › Screen & System Audio Recording**, then drag Jietu in (or click **+**) and turn it on, then **restart the app** (macOS requires a relaunch after granting). If Jietu is **already listed but the app still reports “not granted”**, that row is left over from an earlier build: select it, remove it with **−**, add it again, then restart.
+2. **Accessibility** (optional) — only needed for auto-scroll in Scrolling Capture. Go to **System Settings › Privacy & Security › Accessibility** and add Jietu. No restart required.
 3. **Notifications** (optional) — allow banners so “saved” feedback appears after writing to disk.
 
 ## 🛠 Build from Source
@@ -97,12 +97,12 @@ Use **Check for Updates…** in the menu bar (or Settings › About). Lucent dow
 ### Build
 
 ```bash
-# Debug build (Lucent Dev.app — separate bundle ID, won't interfere with release)
+# Debug build (Jietu Dev.app — separate bundle ID, won't interfere with release)
 xcodebuild -project Jietu.xcodeproj -scheme Jietu -configuration Debug \
   -destination 'platform=macOS' -derivedDataPath .build build
 
 # Run
-open ".build/Build/Products/Debug/Lucent Dev.app"
+open ".build/Build/Products/Debug/Jietu Dev.app"
 ```
 
 ### Test
@@ -118,7 +118,7 @@ Real-window checks that unit tests cannot reach (overlay, recording, scrolling) 
 
 ```bash
 bash Scripts/build-dmg.sh
-# Output: dist/Lucent-<version>.dmg
+# Output: dist/Jietu-<version>.dmg
 ```
 
 ## 🏗 Architecture

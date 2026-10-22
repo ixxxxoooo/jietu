@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "AA5555555555555555555555"
-               BuildableName = "Lucent.app"
+               BuildableName = "Jietu.app"
                BlueprintName = "Jietu"
                ReferencedContainer = "container:Jietu.xcodeproj">
             </BuildableReference>
@@ -55,7 +55,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA5555555555555555555555"
-            BuildableName = "Lucent.app"
+            BuildableName = "Jietu.app"
             BlueprintName = "Jietu"
             ReferencedContainer = "container:Jietu.xcodeproj">
          </BuildableReference>
@@ -72,7 +72,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA5555555555555555555555"
-            BuildableName = "Lucent.app"
+            BuildableName = "Jietu.app"
             BlueprintName = "Jietu"
             ReferencedContainer = "container:Jietu.xcodeproj">
          </BuildableReference>

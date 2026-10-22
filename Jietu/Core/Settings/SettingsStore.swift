@@ -365,15 +365,15 @@ final class SettingsStore {
         persistHotkeys()
     }
 
-    /// 出厂默认保存目录：`~/Pictures/Lucent`。
+    /// 出厂默认保存目录：`~/Pictures/Jietu`。
     ///
-    /// 改名前的版本存在 `~/Pictures/Jietu`；那个目录还在、新目录还没建时继续用旧的，
-    /// 避免老用户的截图在升级后「悄悄换了地方」。
+    /// 0.1.x–0.2.0 曾叫 Lucent，新装用户的截图在 `~/Pictures/Lucent`；
+    /// `Jietu` 目录不存在而 `Lucent` 还在时继续用它，避免截图在升级后「悄悄换了地方」。
     private static func defaultSaveDirectory() -> URL {
         let pictures = (FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser)
-        let current = pictures.appendingPathComponent("Lucent", isDirectory: true)
-        let legacy = pictures.appendingPathComponent("Jietu", isDirectory: true)
+        let current = pictures.appendingPathComponent("Jietu", isDirectory: true)
+        let legacy = pictures.appendingPathComponent("Lucent", isDirectory: true)
         let manager = FileManager.default
         if !manager.fileExists(atPath: current.path), manager.fileExists(atPath: legacy.path) {
             return legacy

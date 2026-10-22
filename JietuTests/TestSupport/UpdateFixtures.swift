@@ -33,12 +33,12 @@ nonisolated final class ProgressBox: @unchecked Sendable {
 /// 更新相关测试的共享脚手架：假 App、zip、发布 JSON。
 enum UpdateFixtures {
     static let bundleID = "com.ixxxxoooo.jietu"
-    static let appName = "Lucent.app"
+    static let appName = "Jietu.app"
     static let latestURL = URL(string: "https://api.test/latest")!
 
     static func tempDir(_ name: String = UUID().uuidString) -> URL {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("lucent-update-\(name)", isDirectory: true)
+            .appendingPathComponent("jietu-update-\(name)", isDirectory: true)
         try? FileManager.default.removeItem(at: url)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
@@ -53,10 +53,10 @@ enum UpdateFixtures {
         let macos = app.appendingPathComponent("Contents/MacOS")
         try FileManager.default.createDirectory(at: macos, withIntermediateDirectories: true)
         try FileManager.default.copyItem(
-            atPath: "/usr/bin/true", toPath: macos.appendingPathComponent("Lucent").path)
+            atPath: "/usr/bin/true", toPath: macos.appendingPathComponent("Jietu").path)
         let plist: [String: Any] = [
             "CFBundleIdentifier": bundleID, "CFBundleShortVersionString": version,
-            "CFBundleVersion": "1", "CFBundleExecutable": "Lucent", "CFBundlePackageType": "APPL",
+            "CFBundleVersion": "1", "CFBundleExecutable": "Jietu", "CFBundlePackageType": "APPL",
         ]
         (plist as NSDictionary).write(
             to: app.appendingPathComponent("Contents/Info.plist"), atomically: true)
@@ -69,7 +69,7 @@ enum UpdateFixtures {
 
     /// 把 App 打成 zip，返回 (zip, sha256)。
     static func zip(_ app: URL, version: String) async throws -> (URL, String) {
-        let zip = app.deletingLastPathComponent().appendingPathComponent("Lucent-\(version)-macOS.zip")
+        let zip = app.deletingLastPathComponent().appendingPathComponent("Jietu-\(version)-macOS.zip")
         let r = await UpdateInstaller.run("/usr/bin/ditto", ["-c", "-k", "--keepParent", app.path, zip.path])
         #expect(r.status == 0, "\(r.output)")
         return (zip, sha(of: try Data(contentsOf: zip)))
@@ -110,10 +110,10 @@ enum UpdateFixtures {
         version: String, zipURL: URL? = nil, digest: String? = String(repeating: "ab", count: 32),
         includeZip: Bool = true, includeChecksumAsset: Bool = true, draft: Bool = false
     ) -> Data {
-        let name = "Lucent-\(version)-macOS.zip"
+        let name = "Jietu-\(version)-macOS.zip"
         let base = "https://github.com/ixxxxoooo/jietu/releases/download/v\(version)/"
         var assets: [[String: Any]] = [
-            ["name": "Lucent-\(version).dmg", "size": 8_000_000, "browser_download_url": base + "Lucent-\(version).dmg"]
+            ["name": "Jietu-\(version).dmg", "size": 8_000_000, "browser_download_url": base + "Jietu-\(version).dmg"]
         ]
         if includeZip {
             var zip: [String: Any] = [
@@ -127,7 +127,7 @@ enum UpdateFixtures {
             }
         }
         let json: [String: Any] = [
-            "tag_name": "v\(version)", "name": "Lucent \(version)", "body": "## Changes\n- Online update",
+            "tag_name": "v\(version)", "name": "Jietu \(version)", "body": "## Changes\n- Online update",
             "draft": draft, "prerelease": false,
             "html_url": "https://github.com/ixxxxoooo/jietu/releases/tag/v\(version)",
             "published_at": "2026-10-16T08:00:00Z", "assets": assets,

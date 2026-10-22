@@ -26,7 +26,7 @@ nonisolated struct URLSessionUpdateNetwork: UpdateNetwork {
     func get(_ url: URL, accept: String) async throws -> (Data, URL) {
         var request = URLRequest(url: url)
         request.setValue(accept, forHTTPHeaderField: "Accept")
-        request.setValue("Lucent-Updater", forHTTPHeaderField: "User-Agent")
+        request.setValue("Jietu-Updater", forHTTPHeaderField: "User-Agent")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -44,7 +44,7 @@ nonisolated struct UpdateChecker: Sendable {
     /// 项目仓库（owner/name）。
     static let defaultRepository = "ixxxxoooo/jietu"
     /// 测试 / 镜像时可用这个环境变量替换 latest 接口地址（此时不启用网页回退）。
-    static let apiOverrideEnvironmentKey = "LUCENT_UPDATE_API"
+    static let apiOverrideEnvironmentKey = "JIETU_UPDATE_API"
 
     let network: UpdateNetwork
     let apiURL: URL
@@ -89,7 +89,7 @@ nonisolated struct UpdateChecker: Sendable {
             throw UpdateError.invalidResponse
         }
         let tag = parts[index + 1]
-        let zipName = "Lucent-\(version)-macOS.zip"
+        let zipName = "Jietu-\(version)-macOS.zip"
         let base = "https://github.com/\(repository)/releases/download/\(tag)/"
         return ReleaseInfo(
             version: version, tag: tag, name: tag, notes: "",

@@ -9,15 +9,15 @@
 #   3. 新包换成 ad-hoc 签名（身份不同）、摘要正确 → 必须拒绝，旧版原封不动。
 #
 # 前置：已构建 Debug（bash Scripts/restart-dev.sh）、本机有自签名证书 `Jietu`、有桌面会话。
-# 注意：会先退出正在运行的 Lucent Dev；结束后重新拉起正式的 Debug 构建。
+# 注意：会先退出正在运行的 Jietu Dev；结束后重新拉起正式的 Debug 构建。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SRC=".build/Build/Products/Debug/Lucent Dev.app"
-APP_NAME="Lucent Dev.app"
-E2E="$(mktemp -d /tmp/lucent-e2e.XXXXXX)"
+SRC=".build/Build/Products/Debug/Jietu Dev.app"
+APP_NAME="Jietu Dev.app"
+E2E="$(mktemp -d /tmp/jietu-e2e.XXXXXX)"
 PORT=8765
-LOG="$HOME/Library/Logs/Lucent/update.log"
+LOG="$HOME/Library/Logs/Jietu/update.log"
 SERVER_PID=""
 FAILS=0
 
@@ -36,7 +36,7 @@ check() { # check "说明" 条件命令...
     if "$@"; then echo "    ✅ $msg"; else echo "    ❌ $msg"; FAILS=$((FAILS + 1)); fi
 }
 
-pkill -f "Lucent Dev.app/Contents/MacOS" 2>/dev/null || true
+pkill -f "Jietu Dev.app/Contents/MacOS" 2>/dev/null || true
 sleep 1
 
 # 起假发布服务：$1 = 目录
@@ -59,14 +59,14 @@ make_release() {
     /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 9.9.9" -c "Set :CFBundleVersion 999" \
         "$dir/new/$APP_NAME/Contents/Info.plist"
     codesign --force --deep --sign "$identity" "$dir/new/$APP_NAME" >/dev/null 2>&1
-    local zip="$dir/server/Lucent-9.9.9-macOS.zip"
+    local zip="$dir/server/Jietu-9.9.9-macOS.zip"
     ditto -c -k --keepParent "$dir/new/$APP_NAME" "$zip"
     local sha; sha="$(shasum -a 256 "$zip" | cut -d' ' -f1)"
     cat >"$dir/server/latest.json" <<JSON
-{"tag_name":"v9.9.9","name":"Lucent 9.9.9 (e2e)","body":"- e2e","draft":false,"prerelease":false,
+{"tag_name":"v9.9.9","name":"Jietu 9.9.9 (e2e)","body":"- e2e","draft":false,"prerelease":false,
  "html_url":"https://example.com/r","published_at":"2026-10-16T08:00:00Z",
- "assets":[{"name":"Lucent-9.9.9-macOS.zip","size":$(stat -f%z "$zip"),
- "browser_download_url":"http://127.0.0.1:$PORT/Lucent-9.9.9-macOS.zip","digest":"sha256:${digest:-$sha}"}]}
+ "assets":[{"name":"Jietu-9.9.9-macOS.zip","size":$(stat -f%z "$zip"),
+ "browser_download_url":"http://127.0.0.1:$PORT/Jietu-9.9.9-macOS.zip","digest":"sha256:${digest:-$sha}"}]}
 JSON
 }
 
@@ -76,7 +76,7 @@ run_old() {
     mkdir -p "$dir/Applications"
     ditto "$SRC" "$dir/Applications/$APP_NAME"
     rm -rf "$HOME/Library/Caches/com.ixxxxoooo.jietu/Updates" "$LOG"
-    open "$dir/Applications/$APP_NAME" --env "LUCENT_UPDATE_API=http://127.0.0.1:$PORT/latest.json" \
+    open "$dir/Applications/$APP_NAME" --env "JIETU_UPDATE_API=http://127.0.0.1:$PORT/latest.json" \
         --args --update-now
     # 最多等 40 秒：版本变了（成功）或旧进程退出（被拒绝）。
     for _ in $(seq 1 80); do

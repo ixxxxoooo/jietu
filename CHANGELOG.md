@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-10-22
+
+### Changed
+- **The app is called Jietu again.** The Lucent rename (0.1.0–0.2.0) is reverted: app name, DMG (`Jietu-<version>.dmg`), update package (`Jietu-<version>-macOS.zip`), menu bar, notifications, update log (`~/Library/Logs/Jietu/`) and documentation. The bundle identifier and signing identity never changed, so updating keeps your Screen Recording permission. An app updated in place from 0.2.0 keeps the file name `Lucent.app` until you replace it with the DMG copy.
+- Screenshots saved as `Lucent …` and the `~/Pictures/Lucent` folder are still recognized, so nothing moves or disappears.
+
 ## [0.2.0] — 2026-10-22
 
 ### Added
