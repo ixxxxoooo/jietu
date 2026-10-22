@@ -207,7 +207,7 @@ jobs:
           cat release-notes.md
 
       - name: Upload DMG as artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: Jietu-${{ github.ref_name }}
           path: |
