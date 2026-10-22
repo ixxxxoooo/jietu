@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-22
+
 ### Added
 - **Online updates.** Settings › About has a new *Software Update* section and the menu bar has *Check for Updates…*. Lucent checks GitHub Releases (automatically at most every 6 hours, or on demand), shows the release notes, and can download, verify and install the new version, then restart itself. Before anything is replaced it verifies the package's SHA-256, its code signature, and that it is signed by the same identity as the installed app — so your Screen Recording permission survives the update. You can skip a version or turn automatic checks off.
 - Releases now ship `Lucent-<version>-macOS.zip` (with a `.sha256`) next to the DMG; it is what the in-app updater downloads. Note: the first release that contains it is the first one you can update *to* in-app — earlier versions have to be updated from the DMG once.
