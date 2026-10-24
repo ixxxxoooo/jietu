@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-10-24
+
 ### Added
 - Settings › Appearance › Liquid Glass: follow the system glass transparency, or turn it off and adjust opacity from clear to frosted.
 
