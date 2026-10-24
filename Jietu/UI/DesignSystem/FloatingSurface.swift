@@ -18,7 +18,7 @@ struct FloatingSurface<Content: View>: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        let surface = content.glassEffect(.regular, in: shape)
+        let surface = content.floatingGlass(in: shape)
         if clipsContent {
             surface.clipShape(shape)
         } else {
@@ -49,7 +49,7 @@ extension NSGlassEffectView {
         cornerRadius: CGFloat = Theme.Radius.menuPanel,
         content: NSView? = nil
     ) -> NSGlassEffectView {
-        let view = NSGlassEffectView()
+        let view = FloatingGlassView()
         view.style = .regular
         view.cornerRadius = cornerRadius
         view.contentView = content

@@ -37,6 +37,25 @@ struct AppearanceSettingsPane: View {
             }
 
             Section {
+                Toggle(isOn: $settings.glassFollowSystem) {
+                    Text(L10n.appearanceGlassFollowSystem)
+                    Text(L10n.appearanceGlassFollowSystemDesc)
+                }
+                if !settings.glassFollowSystem {
+                    LabeledContent(L10n.appearanceGlassOpacity) {
+                        HStack {
+                            Text(L10n.appearanceGlassClear).font(.caption)
+                            Slider(value: $settings.glassOpacity, in: 0...1)
+                                .frame(width: 180)
+                            Text(L10n.appearanceGlassFrosted).font(.caption)
+                        }
+                    }
+                }
+            } header: {
+                SettingsSectionHeader(title: L10n.appearanceSectionGlass)
+            }
+
+            Section {
                 Toggle(isOn: $settings.pinBorderGlow) {
                     Text(L10n.appearancePinBorderGlow)
                     Text(L10n.appearancePinBorderGlowDesc)

@@ -59,6 +59,12 @@
 // MARK: - 外观设置
 
 "appearance.section_interface" = "界面";
+"appearance.section_glass" = "液态玻璃";
+"appearance.glass_follow_system" = "跟随系统";
+"appearance.glass_follow_system_desc" = "使用系统默认的玻璃透明度；关闭后可手动调节。";
+"appearance.glass_opacity" = "不透明度";
+"appearance.glass_clear" = "通透";
+"appearance.glass_frosted" = "磨砂";
 "appearance.section_pin" = "钉图";
 "appearance.pin_border_glow" = "边框光晕";
 "appearance.pin_border_glow_desc" = "在钉图四周加一圈选区绿的光晕，随钉图一起缩放。关掉则保持默认的窗口阴影。";

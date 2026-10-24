@@ -303,7 +303,7 @@ extension View {
     /// 主表面永远不用玻璃——那是 `FloatingSurface`（磨砂 + scrim）的活。
     func glassPanel(cornerRadius: CGFloat = Theme.Radius.menuPanel) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        return glassEffect(.regular, in: shape).clipShape(shape)
+        return floatingGlass(in: shape).clipShape(shape)
     }
 }
 

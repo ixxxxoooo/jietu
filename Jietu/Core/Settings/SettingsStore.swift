@@ -22,6 +22,8 @@ final class SettingsStore {
         static let appearance = "appearance.theme"
         static let language = "appearance.language"
         static let pinBorderGlow = "appearance.pinBorderGlow"
+        static let glassFollowSystem = GlassOpacity.followSystemKey
+        static let glassOpacity = GlassOpacity.levelKey
         static let copyToClipboard = "behavior.copyToClipboard"
         static let playShutterSound = "behavior.playShutterSound"
         static let saveToDisk = "behavior.saveToDisk"
@@ -102,6 +104,16 @@ final class SettingsStore {
 
     /// 钉图边框是否开一圈选区绿的光晕。关 = 现状（仅系统阴影）。
     /// 只影响之后新钉的图，已在屏上的钉图不回改。
+    /// 玻璃透明度是否跟随系统。
+    var glassFollowSystem: Bool {
+        didSet { defaults.set(glassFollowSystem, forKey: Key.glassFollowSystem) }
+    }
+
+    /// 自定义玻璃不透明度 0...1（越大越实）。
+    var glassOpacity: Double {
+        didSet { defaults.set(glassOpacity, forKey: Key.glassOpacity) }
+    }
+
     var pinBorderGlow: Bool {
         didSet { defaults.set(pinBorderGlow, forKey: Key.pinBorderGlow) }
     }
@@ -252,6 +264,9 @@ final class SettingsStore {
         let loadedLanguage =
             defaults.string(forKey: Key.language).flatMap(AppLanguage.init) ?? .system
         self.language = loadedLanguage
+        self.glassFollowSystem = defaults.object(forKey: Key.glassFollowSystem) as? Bool ?? true
+        self.glassOpacity =
+            defaults.object(forKey: Key.glassOpacity) as? Double ?? GlassOpacity.defaultLevel
         self.pinBorderGlow = defaults.object(forKey: Key.pinBorderGlow) as? Bool ?? false
         self.copyToClipboard = defaults.object(forKey: Key.copyToClipboard) as? Bool ?? true
         self.playShutterSound = defaults.object(forKey: Key.playShutterSound) as? Bool ?? true

@@ -59,6 +59,12 @@
 // MARK: - Appearance Settings
 
 "appearance.section_interface" = "Interface";
+"appearance.section_glass" = "Liquid Glass";
+"appearance.glass_follow_system" = "Follow system";
+"appearance.glass_follow_system_desc" = "Use the system's default glass transparency. Turn off to adjust it.";
+"appearance.glass_opacity" = "Opacity";
+"appearance.glass_clear" = "Clear";
+"appearance.glass_frosted" = "Frosted";
 "appearance.section_pin" = "Pinned Images";
 "appearance.pin_border_glow" = "Border glow";
 "appearance.pin_border_glow_desc" = "Add a selection-green halo around pinned images that scales with them. Off keeps the default window shadow.";

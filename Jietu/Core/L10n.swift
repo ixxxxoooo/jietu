@@ -70,6 +70,12 @@ enum L10n {
     // MARK: - 外观设置
 
     static var appearanceSectionInterface: String { s("appearance.section_interface") }
+    static var appearanceSectionGlass: String { s("appearance.section_glass") }
+    static var appearanceGlassFollowSystem: String { s("appearance.glass_follow_system") }
+    static var appearanceGlassFollowSystemDesc: String { s("appearance.glass_follow_system_desc") }
+    static var appearanceGlassOpacity: String { s("appearance.glass_opacity") }
+    static var appearanceGlassClear: String { s("appearance.glass_clear") }
+    static var appearanceGlassFrosted: String { s("appearance.glass_frosted") }
     static var appearanceSectionPin: String { s("appearance.section_pin") }
     static var appearancePinBorderGlow: String { s("appearance.pin_border_glow") }
     static var appearancePinBorderGlowDesc: String { s("appearance.pin_border_glow_desc") }

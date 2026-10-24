@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+- Settings › Appearance › Liquid Glass: follow the system glass transparency, or turn it off and adjust opacity from clear to frosted.
+
 ### Removed
 - The Translate button (pinned images) and the Translate context-menu item, along with the Translation framework bridge.
 
