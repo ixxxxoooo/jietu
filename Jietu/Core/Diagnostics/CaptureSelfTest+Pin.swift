@@ -71,19 +71,12 @@ extension CaptureSelfTest {
                 try writePNG(snapshot.image, to: url)
                 report.append("截图 -> \(url.path)")
 
-                // 四个角按钮的中心（各留 8pt 边距；圆盘直径 28，左下角的「翻译」是胶囊）；
+                // 四个角按钮的中心（各留 8pt 边距；圆盘直径 28）；
                 // 各取两块：圆盘边缘（不含图标）与圆心（图标）——前者代表按钮自身的亮度。
-                let translateSize = GlassControlButton.preferredSize(
-                    diameter: 28, labelText: "翻译"
-                )
-                let translateCenter = CGPoint(
-                    x: frame.minX + 8 + translateSize.width / 2, y: frame.minY + 22
-                )
                 let buttonCenters = [
                     ("右上关闭", closeCenter),
                     ("右下识别文本", CGPoint(x: frame.maxX - 22, y: frame.minY + 22)),
                     ("左上编辑", CGPoint(x: frame.minX + 22, y: frame.maxY - 22)),
-                    ("左下翻译", translateCenter),
                 ]
                 for (name, center) in buttonCenters {
                     let disc = luminance(in: snapshot, at: center, size: 6)
@@ -130,8 +123,7 @@ extension CaptureSelfTest {
                            offBlue, litBlue, discBlue, turnedBlue ? "已是蓝底实心" : "**没变蓝**")
                 )
 
-                // 左下角「翻译」：先关掉识别文本（它会把覆盖层铺满截图，点不到下面的按钮），
-                // 再点一次「翻译」，看 macOS 自己的翻译面板有没有弹出来。
+                // 再点一次「识别文本」关掉它，免得覆盖层挡住后面的按钮。
                 postMouse(.mouseMoved, at: liveTextClick)
                 try? await Task.sleep(for: .milliseconds(200))
                 postMouse(.leftMouseDown, at: liveTextClick)
@@ -172,7 +164,7 @@ extension CaptureSelfTest {
                     report.append("关闭按钮：3 秒内窗口**没关掉**")
                 }
 
-                // 用一张**有字**的图来验「编辑」与「翻译」（白图识别不出文字）。
+                // 用一张**有字**的图来验「编辑」。
                 // 上面那张已经关掉了，这张仍钉在屏幕正中。
                 let textImage = try makeTextTestImage(width: 520, height: 240)
                 PinWindowController.pin(image: textImage, on: screen)
@@ -225,93 +217,7 @@ extension CaptureSelfTest {
                     == CGSize(width: textImage.width, height: textImage.height)
                     && pinGone
 
-                // 左下角「翻译」：再钉一张同样的图，点一次，看 **macOS 自己的翻译面板**弹没弹。
-                // （放在最后：面板会浮在图上，挡住后面的点击。）
-                PinWindowController.pin(image: textImage, on: screen)
-                try? await Task.sleep(for: .milliseconds(700))
-                let pinContent = NSApp.windows
-                    .compactMap { $0 as? PinPanel }
-                    .compactMap { $0.contentView as? PinContentView }
-                    .first
-                let textTranslateCenter = CGPoint(
-                    x: textFrame.minX + 8 + translateSize.width / 2, y: textFrame.minY + 22
-                )
-                let translateClick = CGPoint(
-                    x: textTranslateCenter.x,
-                    y: DisplayGeometry.referenceHeight - textTranslateCenter.y
-                )
-                let windowsBefore = Set(NSApp.windows.map(ObjectIdentifier.init))
-                postMouse(
-                    .mouseMoved,
-                    at: CGPoint(x: textTranslateCenter.x, y: textTranslateCenter.y + 200)
-                )
-                try? await Task.sleep(for: .milliseconds(150))
-                let translatePressAt = CFAbsoluteTimeGetCurrent()
-                postMouse(.mouseMoved, at: translateClick)
-                try? await Task.sleep(for: .milliseconds(250))
-                postMouse(.leftMouseDown, at: translateClick)
-                try? await Task.sleep(for: .milliseconds(80))
-                postMouse(.leftMouseUp, at: translateClick)
-
-                // 先等文字识别（首次可能要装语言模型），再等系统翻译面板。
-                var recognizeMs: Double?
-                while CFAbsoluteTimeGetCurrent() - translatePressAt < 90 {
-                    try? await Task.sleep(for: .milliseconds(100))
-                    if pinContent?.recognizedTextForTesting != nil {
-                        recognizeMs = (CFAbsoluteTimeGetCurrent() - translatePressAt) * 1000
-                        break
-                    }
-                }
-                if recognizeMs == nil {
-                    // 可能压根没点中：看看有没有弹「没识别到文字」。
-                    report.append("「翻译」：90 秒内没识别出文字（按钮没点中？还是识别卡住了）")
-                }
-                var translationWindowAppeared = false
-                while CFAbsoluteTimeGetCurrent() - translatePressAt < 50 {
-                    try? await Task.sleep(for: .milliseconds(100))
-                    if NSApp.windows.contains(where: {
-                        !windowsBefore.contains(ObjectIdentifier($0)) && $0.isVisible
-                    }) {
-                        translationWindowAppeared = true
-                        break
-                    }
-                }
-                let translationMs = (CFAbsoluteTimeGetCurrent() - translatePressAt) * 1000
-                report.append(
-                    "「翻译」进度：宿主已挂=\(pinContent?.isTranslationHostAttached ?? false)，"
-                        + "识别原文=\(pinContent?.recognizedTextForTesting.map { "\($0.count) 字" } ?? "**还没识别**")"
-                        + String(format: "（识别 %.0f ms）", recognizeMs ?? -1)
-                        + "，要求弹面板=\(pinContent?.isSystemTranslationPresented ?? false)"
-                )
-                try? await Task.sleep(for: .milliseconds(700))
-                let translateShots = try await CaptureEngine().captureAllDisplays(
-                    excludingOwnApplication: false
-                )
-                if let shot = translateShots.first(where: { $0.displayID == snapshot.displayID })
-                    ?? translateShots.first
-                {
-                    let url = outputDirectory.appendingPathComponent("pin-translate.png")
-                    try writePNG(shot.image, to: url)
-                    report.append("点「翻译」后截图 -> \(url.path)")
-                    // 系统翻译面板浮在钉图上方：那块不该再是白图（亮度会明显掉下来）。
-                    let probe = luminance(
-                        in: shot,
-                        at: CGPoint(x: textFrame.minX + 60, y: textFrame.maxY - 60),
-                        size: 8
-                    )
-                    report.append(
-                        String(format: "「翻译」：点击后 %.0f ms，系统翻译面板新窗口=%@，面板区亮度 %.3f",
-                               translationMs,
-                               translationWindowAppeared ? "已出现" : "**没出现**",
-                               probe)
-                    )
-                } else {
-                    report.append("「翻译」：抓不到屏幕，没法看面板")
-                }
-                let translateOK = pinContent?.recognizedTextForTesting?.isEmpty == false
-                    && translationWindowAppeared
-
-                let passed = turnedBlue && editOK && translateOK
+                let passed = turnedBlue && editOK
                 report.append("RESULT: \(passed ? "PASS" : "FAIL")")
                 finish(report, code: passed ? 0 : 1)
             } catch {

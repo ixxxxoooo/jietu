@@ -379,16 +379,11 @@
 "pin.edit" = "编辑 (⌘E)";
 "pin.live_text_on" = "退出识别文本";
 "pin.live_text_off" = "识别文本";
-"pin.translate" = "翻译…";
 "pin.close" = "关闭";
 "pin.edit_tooltip" = "编辑 (⌘E)";
 "pin.close_tooltip" = "关闭 (⌘W)";
 "pin.live_text_tooltip" = "识别文本";
-"pin.translate_tooltip" = "翻译（用 macOS 自己的翻译）";
 "pin.exit_live_text" = "退出识别文本";
-"pin.recognizing" = "正在识别图上的文字…";
-"pin.no_text_found" = "没识别到文字";
-"pin.no_text_found_detail" = "这张图里没有可以翻译的文字。";
 
 // MARK: - 放大镜信息
 

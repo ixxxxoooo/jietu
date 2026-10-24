@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Removed
+- The Translate button (pinned images) and the Translate context-menu item, along with the Translation framework bridge.
+
 ## [0.2.1] — 2026-10-22
 
 ### Changed

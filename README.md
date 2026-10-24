@@ -54,7 +54,6 @@
 
 ### More
 - 🔍 **Live Text (OCR)** — select & copy text from any screenshot or pin
-- 🌐 **Translation** — powered by macOS built-in Translation framework
 - 📌 **Pin to screen** — drag-resize, scroll-zoom, double-click to dismiss
 - 🎨 **Color picker** — magnifier + hex copy
 - ⌨️ **Global hotkeys** — 8 customizable actions (area capture is ⌃⌘A by default; the rest start unbound)
@@ -151,7 +150,6 @@ Jietu/            Source root (the Xcode target / Swift module keeps its origina
     Recording/    Recording border, control panel, video Quick Look
     Scrolling/    Scrolling capture control & live preview
     Settings/     Preferences window (sidebar + detail panes)
-    Translation/  System Translation bridge
   Resources/      Assets, localization strings (en / zh-Hans)
 JietuTests/       Swift Testing unit tests (source → test matrix in COVERAGE.md)
 Scripts/          Build, DMG packaging, signing and release-check scripts

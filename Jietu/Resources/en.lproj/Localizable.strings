@@ -379,16 +379,11 @@
 "pin.edit" = "Edit (⌘E)";
 "pin.live_text_on" = "Exit Text Recognition";
 "pin.live_text_off" = "Recognize Text";
-"pin.translate" = "Translate…";
 "pin.close" = "Close";
 "pin.edit_tooltip" = "Edit (⌘E)";
 "pin.close_tooltip" = "Close (⌘W)";
 "pin.live_text_tooltip" = "Recognize Text";
-"pin.translate_tooltip" = "Translate (uses macOS built-in translation)";
 "pin.exit_live_text" = "Exit Text Recognition";
-"pin.recognizing" = "Recognizing text in the image…";
-"pin.no_text_found" = "No Text Found";
-"pin.no_text_found_detail" = "No translatable text was found in this image.";
 
 // MARK: - Loupe
 

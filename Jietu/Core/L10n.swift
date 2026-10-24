@@ -395,16 +395,11 @@ enum L10n {
     static var pinEdit: String { s("pin.edit") }
     static var pinLiveTextOn: String { s("pin.live_text_on") }
     static var pinLiveTextOff: String { s("pin.live_text_off") }
-    static var pinTranslate: String { s("pin.translate") }
     static var pinClose: String { s("pin.close") }
     static var pinEditTooltip: String { s("pin.edit_tooltip") }
     static var pinCloseTooltip: String { s("pin.close_tooltip") }
     static var pinLiveTextTooltip: String { s("pin.live_text_tooltip") }
-    static var pinTranslateTooltip: String { s("pin.translate_tooltip") }
     static var pinExitLiveText: String { s("pin.exit_live_text") }
-    static var pinRecognizing: String { s("pin.recognizing") }
-    static var pinNoTextFound: String { s("pin.no_text_found") }
-    static var pinNoTextFoundDetail: String { s("pin.no_text_found_detail") }
 
     // MARK: - 放大镜信息
 

@@ -287,12 +287,6 @@
 | `SettingsToolbarController.swift` | — | — |
 | `SettingsWindowController.swift` | — | — |
 
-## UI/Translation
-
-| 源文件 | 单元测试 | selftest |
-|--------|----------|----------|
-| `SystemTranslationPresenter.swift` | — | — |
-
 ## 工程级一致性
 
 | 检查项 | 单元测试 |
@@ -320,4 +314,3 @@
 - `Core/Settings/LaunchAtLogin.swift` — 开机启动
 - `UI/Settings/*` — SwiftUI 设置面板（视图层，通常由 snapshot test 覆盖）
 - `UI/DesignSystem/*` — 大部分设计系统组件（纯视图，依赖 SwiftUI Preview 验证）
-- `UI/Translation/SystemTranslationPresenter.swift` — 系统翻译

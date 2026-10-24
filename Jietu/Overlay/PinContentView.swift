@@ -22,15 +22,6 @@ final class PinContentView: NSView {
     private var liveTextButton: GlassControlButton?
     private var isLiveTextOn = false
 
-    /// 左下角「翻译」。
-    private var translateButton: GlassControlButton?
-    /// 系统翻译面板（macOS 自己的翻译 UI），只在第一次点「翻译」时挂上。
-    private let translationPresenter = SystemTranslationPresenter()
-    private var translationHostInstalled = false
-    private var isTranslating = false
-    /// 识别过的原文（同一张图只用识别一次）。
-    private var recognizedText: String?
-
     init(frame: NSRect, image: CGImage) {
         self.cgImage = image
         self.nsImage = NSImage(cgImage: image, size: frame.size)
@@ -42,7 +33,6 @@ final class PinContentView: NSView {
         configureEditButton()
         configureCloseButton()
         configureLiveTextButton()
-        configureTranslateButton()
 
         // 若鼠标当前已落在窗口范围内，初始就展示浮动按钮
         if frame.contains(NSEvent.mouseLocation) {
@@ -69,9 +59,6 @@ final class PinContentView: NSView {
         }
         if let liveTextButton, !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
             return liveTextButton
-        }
-        if let translateButton, !translateButton.isHidden, translateButton.frame.contains(point) {
-            return translateButton
         }
         // 边缘手柄检测区优先由 PinContentView 响应，避免被全屏覆盖的实况文本视图拦截
         if PinGeometry.handle(at: point, in: bounds) != nil {
@@ -167,9 +154,6 @@ final class PinContentView: NSView {
             NSCursor.arrow.set()
         } else if let liveTextButton, !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
             NSCursor.arrow.set()
-        } else if let translateButton, !translateButton.isHidden,
-            translateButton.frame.contains(point) {
-            NSCursor.arrow.set()
         } else if let handle = activeHandle {
             SelectionCursor.cursor(for: handle).set()
         } else if let handle = PinGeometry.handle(at: point, in: bounds) {
@@ -195,12 +179,11 @@ final class PinContentView: NSView {
 
     // MARK: - Floating Buttons
 
-    /// 四个角上浮动按钮（编辑 / 关闭 / 翻译 / 识别文本）的统一显隐入口。
+    /// 四个角上浮动按钮（编辑 / 关闭 / 识别文本）的统一显隐入口。
     private func setFloatingButtonsVisible(_ visible: Bool) {
         editButton?.isHidden = !visible
         closeButton?.isHidden = !visible
         liveTextButton?.isHidden = !visible
-        translateButton?.isHidden = !visible
     }
 
     /// 依鼠标是否落在窗口内刷新浮动按钮；无窗口（构造期 / 测试）时保持原状。
@@ -220,9 +203,6 @@ final class PinContentView: NSView {
         )
         liveTextButton?.setHovering(
             liveTextButton.map { !$0.isHidden && $0.frame.contains(point) } ?? false
-        )
-        translateButton?.setHovering(
-            translateButton.map { !$0.isHidden && $0.frame.contains(point) } ?? false
         )
     }
 
@@ -248,10 +228,6 @@ final class PinContentView: NSView {
         }
         if let liveTextButton, !liveTextButton.isHidden, liveTextButton.frame.contains(point) {
             toggleLiveText()
-            return
-        }
-        if let translateButton, !translateButton.isHidden, translateButton.frame.contains(point) {
-            handleTranslate()
             return
         }
 
@@ -400,14 +376,6 @@ final class PinContentView: NSView {
         liveTextItem.target = self
         menu.addItem(liveTextItem)
 
-        let translateItem = NSMenuItem(
-            title: L10n.pinTranslate,
-            action: #selector(handleTranslate),
-            keyEquivalent: ""
-        )
-        translateItem.target = self
-        menu.addItem(translateItem)
-
         menu.addItem(NSMenuItem.separator())
 
         let closeItem = NSMenuItem(
@@ -490,27 +458,11 @@ final class PinContentView: NSView {
         self.liveTextButton = button
     }
 
-    /// 左下角「翻译」：胶囊 + 图标 + 文字（与浮窗中央那颗「保存」同一套外形）。
-    private func configureTranslateButton() {
-        let button = GlassControlButton(
-            symbol: "translate",
-            labelText: L10n.pinTranslate,
-            diameter: 28,
-            tooltip: L10n.pinTranslateTooltip
-        )
-        button.onClick = { [weak self] in
-            self?.handleTranslate()
-        }
-        button.isHidden = true
-        addSubview(button)
-        self.translateButton = button
-    }
-
     override func layout() {
         super.layout()
         let size: CGFloat = 28
         let padding: CGFloat = 8
-        // 四角各一个：左上编辑、右上关闭、左下翻译、右下识别文本。
+        // 四角各一个：左上编辑、右上关闭、右下识别文本。
         editButton?.frame = CGRect(
             x: bounds.minX + padding,
             y: bounds.maxY - size - padding,
@@ -529,18 +481,7 @@ final class PinContentView: NSView {
             width: size,
             height: size
         )
-        if let translateButton {
-            let translateSize = translateButton.preferredSize
-            translateButton.frame = CGRect(
-                x: bounds.minX + padding,
-                y: bounds.minY + padding,
-                width: translateSize.width,
-                height: translateSize.height
-            )
-        }
         liveTextOverlay?.frame = bounds
-        // 翻译面板从「翻译」按钮那块长出来。
-        translationPresenter.updateAnchor(translateButton?.frame ?? .zero)
     }
 
     override func mouseEntered(with event: NSEvent) {
@@ -557,7 +498,6 @@ final class PinContentView: NSView {
         editButton?.setHovering(false)
         closeButton?.setHovering(false)
         liveTextButton?.setHovering(false)
-        translateButton?.setHovering(false)
     }
 
     /// 点击才进入识别文本；默认拖动是移动窗口。
@@ -615,73 +555,12 @@ final class PinContentView: NSView {
         liveTextButton?.isHidden = true
         closeButton?.isHidden = true
         editButton?.isHidden = true
-        translateButton?.isHidden = true
         // 鼠标还停在钉图上时不会再来一次 mouseEntered，得自己把悬浮按钮请回来。
         refreshFloatingButtons()
     }
 
     @objc private func handleExitLiveText() {
         stopLiveText()
-    }
-
-    // MARK: - 翻译（macOS 自己的翻译）
-
-    /// 点「翻译」：先认出图上的字，再把原文交给 **macOS 自己的翻译面板**
-    /// （`translationPresentation`，弹出来就是系统那个能选语言、能朗读的翻译框）。
-    ///
-    /// 跟 macOS 预览窗口的「翻译」按钮一个路子——它也是先 Live Text 认字再翻译。
-    @objc func handleTranslate() {
-        guard !isTranslating else { return }
-        if let recognizedText {
-            presentSystemTranslation(recognizedText)
-            return
-        }
-
-        setRecognizing(true)
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            let text = await OCRService.recognizeText(in: self.cgImage)
-            self.setRecognizing(false)
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else {
-                self.presentNothingToTranslate()
-                return
-            }
-            self.recognizedText = trimmed
-            self.presentSystemTranslation(trimmed)
-        }
-    }
-
-    /// 识别期间的可见状态：按钮压暗 + 提示语。
-    ///
-    /// 不是装饰：文字识别**首次**要先装模型（这台机器上量到过一次 12 秒以上），
-    /// 没有反馈的话用户只会以为点坏了、接着猛点。
-    private func setRecognizing(_ recognizing: Bool) {
-        isTranslating = recognizing
-        translateButton?.alphaValue = recognizing ? 0.55 : 1
-        translateButton?.toolTip = recognizing ? L10n.pinRecognizing : L10n.pinTranslateTooltip
-    }
-
-    private func presentSystemTranslation(_ text: String) {
-        // 钉图已经收掉了（识别是异步的，用户可能等不及）：图都不在屏幕上，别弹面板。
-        guard window != nil else { return }
-        // 面板是系统弹窗，得让 App 在最前面，弹出来才看得见。
-        NSApp.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
-        if translationHostInstalled == false {
-            translationPresenter.attach(to: self, anchor: translateButton?.frame ?? .zero)
-            translationHostInstalled = true
-        }
-        translationPresenter.updateAnchor(translateButton?.frame ?? .zero)
-        translationPresenter.present(text: text)
-    }
-
-    private func presentNothingToTranslate() {
-        let alert = NSAlert()
-        alert.messageText = L10n.pinNoTextFound
-        alert.informativeText = L10n.pinNoTextFoundDetail
-        alert.addButton(withTitle: L10n.alertOK)
-        alert.runModal()
     }
 
     @objc private func handleCopy() {
@@ -696,28 +575,8 @@ final class PinContentView: NSView {
 
     // MARK: - 测试钩子
 
-    /// 测试用：左下角「翻译」按钮。
-    var translateButtonForTesting: GlassControlButton? { translateButton }
-
     /// 测试用：右下角「识别文本」按钮。
     var liveTextButtonForTesting: GlassControlButton? { liveTextButton }
-
-    /// 测试用：预置「已识别的原文」，免去真跑一次 OCR。
-    func presetRecognizedText(_ text: String) {
-        recognizedText = text
-    }
-
-    /// 测试用：交给系统翻译的原文（没点过「翻译」是空串）。
-    var presentedTranslationText: String { translationPresenter.presentedText }
-
-    /// 测试用：系统翻译面板的宿主是不是挂上了。
-    var isTranslationHostAttached: Bool { translationHostInstalled }
-
-    /// 测试用：识别出来的原文（nil = 还没识别过）。空串说明图里没字。
-    var recognizedTextForTesting: String? { recognizedText }
-
-    /// 测试用：系统翻译面板是不是**我们要求弹出**了（SwiftUI 那边有没有接手另说）。
-    var isSystemTranslationPresented: Bool { translationPresenter.isPresented }
 }
 
 

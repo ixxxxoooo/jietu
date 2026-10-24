@@ -1,6 +1,6 @@
 # Architecture
 
-Jietu (formerly *Jietu*; the Xcode target, Swift module and source root keep the original codename) is a menu-bar (`LSUIElement`) macOS app written in Swift 6 with AppKit and SwiftUI. It targets macOS 27+ and has **no third-party dependencies** — everything is built on system frameworks (ScreenCaptureKit, Vision, AVFoundation, Carbon hot keys, Translation).
+Jietu (formerly *Jietu*; the Xcode target, Swift module and source root keep the original codename) is a menu-bar (`LSUIElement`) macOS app written in Swift 6 with AppKit and SwiftUI. It targets macOS 27+ and has **no third-party dependencies** — everything is built on system frameworks (ScreenCaptureKit, Vision, AVFoundation, Carbon hot keys).
 
 This document explains how the code is organized and why. For build and contribution steps see [CONTRIBUTING.md](../CONTRIBUTING.md).
 

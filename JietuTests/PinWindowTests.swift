@@ -79,37 +79,6 @@ struct PinWindowTests {
         #expect(button.renderedSymbolName == "text.viewfinder")
     }
 
-    @Test("左下角「翻译」按钮：悬停出现、点击把原文交给 macOS 翻译")
-    func translateButtonHandsTextToSystemTranslation() {
-        let view = PinContentView(frame: NSRect(x: 0, y: 0, width: 400, height: 300), image: createTestImage())
-        // 系统翻译面板只从**窗口**里长出来（图都不在屏幕上就别弹面板了），所以这里得挂进窗口。
-        let window = NSWindow(
-            contentRect: NSRect(x: -5000, y: -5000, width: 400, height: 300),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentView = view
-        view.layout()
-        view.mouseEntered(with: enterExit(.mouseEntered, at: NSPoint(x: 200, y: 150)))
-
-        guard let button = view.translateButtonForTesting else {
-            Issue.record("没有左下角「翻译」按钮")
-            return
-        }
-        #expect(!button.isHidden, "悬停后翻译按钮应当出现")
-        #expect(button.renderedLabel == L10n.pinTranslate)
-        #expect(view.hitTest(NSPoint(x: button.frame.midX, y: button.frame.midY)) === button, "点击必须落在按钮上，不是边缘缩放手柄")
-
-        // 预置原文（真跑一次 OCR 要几百毫秒，这里只验接线）。
-        view.presetRecognizedText("System Requirements")
-        button.mouseDown(with: mouseEvent(.leftMouseDown, at: NSPoint(x: button.frame.midX, y: button.frame.midY)))
-        button.mouseUp(with: mouseEvent(.leftMouseUp, at: NSPoint(x: button.frame.midX, y: button.frame.midY)))
-
-        #expect(view.isTranslationHostAttached, "点「翻译」应当把系统翻译面板的宿主挂上")
-        #expect(view.presentedTranslationText == "System Requirements")
-    }
-
     @Test("右下角「识别文本」点亮后换成 macOS 那种蓝底实心，关掉回普通玻璃")
     func liveTextButtonTurnsAccentFilledWhileOn() {
         let view = PinContentView(frame: NSRect(x: 0, y: 0, width: 400, height: 300), image: createTestImage())

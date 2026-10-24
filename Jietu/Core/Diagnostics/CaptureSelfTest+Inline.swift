@@ -314,7 +314,7 @@ extension CaptureSelfTest {
         return image
     }
 
-    /// 自检用的一张**有字**的图：钉图的「翻译」要先认出字才谈得上翻译。
+    /// 自检用的一张**有字**的图：钉图「编辑」自检用。
     static func makeTextTestImage(width: Int, height: Int) throws -> CGImage {
         guard
             let context = CGContext(
